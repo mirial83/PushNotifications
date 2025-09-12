@@ -1,0 +1,70 @@
+{
+  "application": {
+    "name": "PushNotifications Control Panel",
+    "version": "2.1.0",
+    "description": "Desktop notification management system with browser control and website filtering"
+  },
+  "client": {
+    "version": "2.1.0",
+    "updateCheckIntervalMinutes": 60,
+    "autoUpdate": true,
+    "forceUpdate": true,
+    "downloadRetryAttempts": 3,
+    "connectionTimeoutSeconds": 30
+  },
+  "ui": {
+    "refreshIntervalSeconds": 30,
+    "maxNotificationsDisplayed": 50,
+    "autoHideSuccessMessages": true,
+    "autoHideTimeoutSeconds": 5,
+    "showTimestamps": true,
+    "dateTimeFormat": "locale"
+  },
+  "notifications": {
+    "defaultPriority": 1,
+    "maxActivePerClient": 5,
+    "defaultSnoozeMinutes": 15,
+    "priorities": {
+      "1": "Normal",
+      "2": "High", 
+      "3": "Urgent"
+    }
+  },
+  "websiteFiltering": {
+    "defaultAllowBrowserUsage": false,
+    "emergencyExitKey": "Ctrl+Alt+End",
+    "blockVPNsAndProxies": true,
+    "allowSubdomains": true,
+    "caseSensitive": false
+  },
+  "database": {
+    "collections": {
+      "notifications": "notifications",
+      "clients": "clients", 
+      "settings": "settings",
+      "websiteRequests": "website_requests",
+      "uninstallRequests": "uninstall_requests"
+    },
+    "retentionDays": {
+      "completedNotifications": 30,
+      "inactiveClients": 90,
+      "logs": 7
+    }
+  },
+  "security": {
+    "requireApprovalForUninstall": true,
+    "logUnauthorizedDeletion": true,
+    "folderProtectionEnabled": true,
+    "allowManualInstallation": false
+  },
+  "api": {
+    "rateLimit": {
+      "windowMinutes": 15,
+      "maxRequests": 100
+    },
+    "cors": {
+      "enabled": true,
+      "allowAllOrigins": true
+    }
+  }
+}

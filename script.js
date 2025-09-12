@@ -41,10 +41,16 @@ function initializeUserAuth() {
 }
 
 function setupEventListeners() {
-    // Notification form
-    const sendForm = document.getElementById('sendNotificationForm');
-    if (sendForm) {
-        sendForm.addEventListener('submit', handleSendNotification);
+    // Send notification button
+    const sendButton = document.getElementById('sendNotification');
+    if (sendButton) {
+        sendButton.addEventListener('click', handleSendNotification);
+    }
+    
+    // Initialize database button
+    const initDbButton = document.getElementById('initDatabase');
+    if (initDbButton) {
+        initDbButton.addEventListener('click', handleInitializeDatabase);
     }
     
     // Quick message buttons
@@ -99,16 +105,36 @@ function loadInitialData() {
 
 async function initializeDatabase() {
     try {
+        // First check if database is already initialized
+        const checkResponse = await fetch(`${config.API_BASE_URL}/api/index.php?action=isDatabaseInitialized`, {
+            method: 'GET'
+        });
+        
+        const checkResult = await checkResponse.json();
+        
+        if (checkResult.success && checkResult.initialized) {
+            state.dbInitialized = true;
+            hideSetupSection();
+            return;
+        }
+        
+        console.log('Database not initialized, will show setup section');
+    } catch (error) {
+        console.log('Error checking database status, will show setup section');
+    }
+}
+
+async function handleInitializeDatabase() {
+    try {
         showStatus('Initializing database...', 'info');
         
-        const response = await fetch(`${config.API_BASE_URL}/api`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                action: 'initializeDatabase',
-                userEmail: config.USER_EMAIL
+                action: 'initializeDatabase'
             })
         });
         
@@ -119,7 +145,7 @@ async function initializeDatabase() {
             showStatus('Database initialized successfully!', 'success');
             hideSetupSection();
         } else {
-            showStatus(`Database initialization failed: ${result.error}`, 'error');
+            showStatus(`Database initialization failed: ${result.message || 'Unknown error'}`, 'error');
         }
     } catch (error) {
         console.error('Database initialization error:', error);
@@ -131,7 +157,7 @@ async function refreshNotifications() {
     try {
         updateConnectionStatus(true);
         
-        const response = await fetch(`${config.API_BASE_URL}/api`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -342,7 +368,7 @@ async function handleSendNotification(event) {
     try {
         showStatus('Sending notification...', 'info');
         
-        const response = await fetch(`${config.API_BASE_URL}/api`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -369,7 +395,7 @@ async function handleSendNotification(event) {
 
 async function acknowledgeNotification(notificationId) {
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -400,7 +426,7 @@ async function snoozeNotification(notificationId) {
     if (!minutes || isNaN(minutes)) return;
     
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -429,7 +455,7 @@ async function snoozeNotification(notificationId) {
 
 async function approveWebsiteRequest(requestId) {
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -457,7 +483,7 @@ async function approveWebsiteRequest(requestId) {
 
 async function denyWebsiteRequest(requestId) {
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -489,7 +515,7 @@ async function approveUninstallRequest(requestId) {
     }
     
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -520,7 +546,7 @@ async function denyUninstallRequest(requestId) {
     if (!reason) return;
     
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -558,7 +584,7 @@ async function handleUninstallAllClients() {
     try {
         showStatus('Uninstalling all clients...', 'info');
         
-        const response = await fetch(`${config.API_BASE_URL}/api`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -757,17 +783,78 @@ function showStatus(message, type = 'info') {
     }
 }
 
-function loadPresetMessages() {
-    // This would normally load from a configuration file
-    // For now, we'll use hardcoded values that match the quick message buttons
-    const presetMessages = [
-        'Do your schoolwork',
-        'Stop watching YouTube', 
-        'Get to work!'
-    ];
-    
-    // Update quick message buttons if needed
-    // This is handled in the HTML template
+async function loadPresetMessages() {
+    try {
+        const response = await fetch(`${config.API_BASE_URL}/api/config.php?type=preset-messages`);
+        const result = await response.json();
+        
+        if (result.success && result.data && result.data.presetMessages) {
+            const presetMessages = result.data.presetMessages;
+            const presetSelect = document.getElementById('presetSelect');
+            
+            if (presetSelect) {
+                // Clear existing options
+                presetSelect.innerHTML = '<option value="">Select a preset message...</option>';
+                
+                // Add preset message options
+                presetMessages.forEach(preset => {
+                    const option = document.createElement('option');
+                    option.value = JSON.stringify(preset);
+                    option.textContent = preset.text;
+                    option.title = preset.description || '';
+                    presetSelect.appendChild(option);
+                });
+                
+                // Add change event listener
+                presetSelect.addEventListener('change', function() {
+                    if (this.value) {
+                        const preset = JSON.parse(this.value);
+                        
+                        // Set custom message
+                        const customText = document.getElementById('customText');
+                        if (customText) {
+                            customText.value = preset.text;
+                        }
+                        
+                        // Set browser usage
+                        const allowBrowserUsage = document.getElementById('allowBrowserUsage');
+                        if (allowBrowserUsage) {
+                            allowBrowserUsage.checked = preset.allowBrowserUsage || false;
+                            toggleBrowserUsageOptions();
+                        }
+                        
+                        // Set allowed websites
+                        if (preset.allowedWebsites && preset.allowedWebsites.length > 0) {
+                            const allowedWebsites = document.getElementById('allowedWebsites');
+                            if (allowedWebsites) {
+                                allowedWebsites.value = preset.allowedWebsites.join('\n');
+                                updateWebsiteCount();
+                            }
+                        }
+                        
+                        // Switch to custom message mode
+                        const customMessageRadio = document.getElementById('customMessage');
+                        if (customMessageRadio) {
+                            customMessageRadio.checked = true;
+                            toggleMessageType();
+                        }
+                    }
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load preset messages:', error);
+        // Fallback to basic options
+        const presetSelect = document.getElementById('presetSelect');
+        if (presetSelect) {
+            presetSelect.innerHTML = `
+                <option value="">Select a preset message...</option>
+                <option value='{"text":"Do your schoolwork","allowBrowserUsage":true,"allowedWebsites":["drive.google.com","*.aop.com"]}'>Do your schoolwork</option>
+                <option value='{"text":"Clean the kitchen","allowBrowserUsage":false,"allowedWebsites":[]}'>Clean the kitchen</option>
+                <option value='{"text":"Take a shower","allowBrowserUsage":false,"allowedWebsites":[]}'>Take a shower</option>
+            `;
+        }
+    }
 }
 
 // Utility functions
@@ -803,6 +890,35 @@ window.approveUninstallRequest = approveUninstallRequest;
 window.denyUninstallRequest = denyUninstallRequest;
 window.refreshNotifications = refreshNotifications;
 
+// Helper functions for preset message handling
+function toggleMessageType() {
+    const customMessageRadio = document.getElementById('customMessage');
+    const quickMessageRadio = document.getElementById('quickMessage');
+    const customMessageSection = document.querySelector('.custom-message-section');
+    const quickMessageSection = document.querySelector('.quick-message-section');
+    
+    if (customMessageRadio && customMessageRadio.checked) {
+        if (customMessageSection) customMessageSection.style.display = 'block';
+        if (quickMessageSection) quickMessageSection.style.display = 'none';
+    } else if (quickMessageRadio && quickMessageRadio.checked) {
+        if (customMessageSection) customMessageSection.style.display = 'none';
+        if (quickMessageSection) quickMessageSection.style.display = 'block';
+    }
+}
+
+function toggleBrowserUsageOptions() {
+    const allowBrowserUsage = document.getElementById('allowBrowserUsage');
+    const browserOptionsSection = document.querySelector('.browser-options-section');
+    
+    if (browserOptionsSection) {
+        if (allowBrowserUsage && allowBrowserUsage.checked) {
+            browserOptionsSection.style.display = 'block';
+        } else {
+            browserOptionsSection.style.display = 'none';
+        }
+    }
+}
+
 // Add website count listener
 document.addEventListener('DOMContentLoaded', function() {
     const websitesTextarea = document.getElementById('allowedWebsites');
@@ -814,4 +930,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize descriptions
     updateWorkModeDescription();
     updateBrowserUsageDescription();
+    
+    // Add message type toggle listeners
+    const messageTypeRadios = document.querySelectorAll('input[name="messageType"]');
+    messageTypeRadios.forEach(radio => {
+        radio.addEventListener('change', toggleMessageType);
+    });
+    
+    // Add browser usage toggle listener
+    const allowBrowserUsage = document.getElementById('allowBrowserUsage');
+    if (allowBrowserUsage) {
+        allowBrowserUsage.addEventListener('change', toggleBrowserUsageOptions);
+    }
+    
+    // Initialize toggle states
+    toggleMessageType();
+    toggleBrowserUsageOptions();
 });

@@ -69,25 +69,24 @@ class DatabaseOperations {
     
     public function initializeDatabase() {
         try {
+            // Load preset messages from configuration file
+            $presetMessagesFile = '../config/preset-messages.json';
+            $presetMessages = [];
+            
+            if (file_exists($presetMessagesFile)) {
+                $configContent = file_get_contents($presetMessagesFile);
+                $configData = json_decode($configContent, true);
+                if ($configData && isset($configData['presetMessages'])) {
+                    $presetMessages = $configData['presetMessages'];
+                }
+            }
+            
             // Initialize settings with default values
             $settings = [
                 [
                     'setting' => 'preset_messages',
-                    'value' => json_encode([
-                        [
-                            'text' => 'Do your schoolwork',
-                            'allowedWebsites' => 'drive.google.com,*.aop.com,*.yourcloudlibrary.com,*.gutenberg.org,search.google.com,*.codecademy.com',
-                            'allowBrowserUsage' => true
-                        ],
-                        'Clean the kitchen',
-                        'Clean the living room',
-                        'Empty the kitchen trash',
-                        'Bring the trash to the road',
-                        'Bring the trash down from your room',
-                        'Fill the dog food',
-                        'Take a shower'
-                    ]),
-                    'description' => 'Custom household task messages'
+                    'value' => json_encode($presetMessages),
+                    'description' => 'Custom household task messages from configuration file'
                 ],
                 [
                     'setting' => 'default_snooze',
