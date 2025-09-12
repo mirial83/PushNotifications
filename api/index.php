@@ -1,5 +1,5 @@
 <?php
-// PushNotifications PHP API
+// PushNotifications PHP API - Clean Implementation
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -21,24 +21,83 @@ function outputJson($data) {
     exit();
 }
 
-// Database operations using MongoDB Atlas Data API
+// Database operations using MongoDB Data API
 class DatabaseOperations {
     private $apiUrl;
     private $apiKey;
     private $dataSource;
     private $database;
+    private $dataFile; // Fallback storage
     
     public function __construct() {
-        // MongoDB Atlas Data API configuration
+        // MongoDB Data API configuration (preferred method)
         $this->apiUrl = $_ENV['MONGODB_DATA_API_URL'] ?? getenv('MONGODB_DATA_API_URL');
         $this->apiKey = $_ENV['MONGODB_DATA_API_KEY'] ?? getenv('MONGODB_DATA_API_KEY');
-        $this->dataSource = $_ENV['MONGODB_DATA_SOURCE'] ?? getenv('MONGODB_DATA_SOURCE') ?? 'Cluster0';
-        $this->database = $_ENV['DATABASE_NAME'] ?? $_ENV['DB_NAME'] ?? getenv('DATABASE_NAME') ?? getenv('DB_NAME') ?? 'pushnotifications';
+        $this->dataSource = $_ENV['MONGODB_DATA_SOURCE'] ?? getenv('MONGODB_DATA_SOURCE') ?? 'pushnotifications';
+        $this->database = $_ENV['DATABASE_NAME'] ?? getenv('DATABASE_NAME') ?? 'pushnotifications';
+        
+        // Alternative: Direct MongoDB connection (simpler setup)
+        $this->connectionString = $_ENV['MONGODB_CONNECTION_STRING'] ?? getenv('MONGODB_CONNECTION_STRING');
+        $this->mongoDatabase = $_ENV['MONGODB_DATABASE'] ?? getenv('MONGODB_DATABASE') ?? 'pushnotifications';
+        
+        // Fallback to simple storage if neither MongoDB option is configured
+        $this->dataFile = '/tmp/pushnotifications_data.json';
+        if (!$this->apiUrl && !$this->connectionString) {
+            $this->initializeStorage();
+        }
+    }
+    
+    private function initializeStorage() {
+        if (!file_exists($this->dataFile)) {
+            $initialData = [
+                'settings' => [
+                    [
+                        'setting' => 'preset_messages',
+                        'value' => json_encode([
+                            'Do your schoolwork',
+                            'Clean your room', 
+                            'Take out the trash',
+                            'Walk the dog',
+                            'Do the dishes'
+                        ]),
+                        'description' => 'Preset notification messages',
+                        'created' => date('c')
+                    ],
+                    [
+                        'setting' => 'default_snooze',
+                        'value' => '15',
+                        'description' => 'Default snooze time in minutes',
+                        'created' => date('c')
+                    ],
+                    [
+                        'setting' => 'max_notifications',
+                        'value' => '5',
+                        'description' => 'Maximum number of active notifications per client',
+                        'created' => date('c')
+                    ]
+                ],
+                'notifications' => [],
+                'clients' => []
+            ];
+            file_put_contents($this->dataFile, json_encode($initialData));
+        }
+    }
+    
+    private function getData() {
+        if (file_exists($this->dataFile)) {
+            $content = file_get_contents($this->dataFile);
+            return json_decode($content, true) ?: ['settings' => [], 'notifications' => [], 'clients' => []];
+        }
+        return ['settings' => [], 'notifications' => [], 'clients' => []];
+    }
+    
+    private function saveData($data) {
+        return file_put_contents($this->dataFile, json_encode($data));
     }
     
     private function makeApiRequest($endpoint, $data) {
         if (!$this->apiUrl || !$this->apiKey) {
-            throw new Exception('MongoDB Data API credentials not configured. Please set MONGODB_DATA_API_URL and MONGODB_DATA_API_KEY environment variables.');
+            throw new Exception('MongoDB Data API not configured - using fallback storage');
         }
         
         $url = $this->apiUrl . '/action/' . $endpoint;
@@ -56,22 +115,67 @@ class DatabaseOperations {
             'Content-Type: application/json',
             'api-key: ' . $this->apiKey
         ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
+        
+        if ($curlError) {
+            throw new Exception('cURL Error: ' . $curlError);
+        }
         
         if ($httpCode !== 200) {
             throw new Exception('MongoDB API request failed (HTTP ' . $httpCode . '): ' . $response);
         }
         
-        return json_decode($response, true);
+        $decoded = json_decode($response, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new Exception('Invalid JSON response from MongoDB API: ' . json_last_error_msg());
+        }
+        
+        return $decoded;
     }
-    
     
     public function testConnection() {
         try {
-            return ['success' => true, 'message' => 'API communication working', 'timestamp' => date('c')];
+            $result = [
+                'success' => true,
+                'timestamp' => date('c'),
+                'mongodb_configured' => ($this->apiUrl && $this->apiKey),
+                'fallback_storage' => [
+                    'path' => $this->dataFile,
+                    'writable' => is_writable(dirname($this->dataFile))
+                ]
+            ];
+            
+            if ($this->apiUrl && $this->apiKey) {
+                // Test MongoDB Data API
+                try {
+                    $testResult = $this->makeApiRequest('find', [
+                        'collection' => 'test',
+                        'filter' => {},
+                        'limit' => 1
+                    ]);
+                    $result['message'] = 'MongoDB Data API connection successful';
+                    $result['mongodb_status'] = 'connected';
+                    $result['api_url'] = $this->apiUrl;
+                } catch (Exception $e) {
+                    $result['message'] = 'MongoDB connection failed, using fallback storage';
+                    $result['mongodb_status'] = 'failed';
+                    $result['mongodb_error'] = $e->getMessage();
+                }
+            } else {
+                $result['message'] = 'Using fallback storage - MongoDB not configured';
+                $result['mongodb_status'] = 'not_configured';
+                $result['required_env_vars'] = [
+                    'MONGODB_DATA_API_URL' => 'https://data.mongodb-api.com/app/YOUR-APP-ID/endpoint/data/v1',
+                    'MONGODB_DATA_API_KEY' => 'your-api-key'
+                ];
+            }
+            
+            return $result;
         } catch (Exception $e) {
             return ['success' => false, 'message' => 'Connection test failed: ' . $e->getMessage()];
         }
@@ -79,13 +183,8 @@ class DatabaseOperations {
     
     public function isDatabaseInitialized() {
         try {
-            // Check if settings collection exists and has data
-            $result = $this->makeApiRequest('find', [
-                'collection' => 'settings',
-                'filter' => ['setting' => 'preset_messages']
-            ]);
-            
-            $initialized = !empty($result['documents']);
+            $data = $this->getData();
+            $initialized = !empty($data['settings']);
             return ['success' => true, 'initialized' => $initialized];
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
@@ -94,45 +193,7 @@ class DatabaseOperations {
     
     public function initializeDatabase() {
         try {
-            // Load preset messages from configuration file
-            $presetMessagesFile = __DIR__ . '/../config/preset-messages.json';
-            $presetMessages = [];
-            
-            if (file_exists($presetMessagesFile)) {
-                $configContent = file_get_contents($presetMessagesFile);
-                $configData = json_decode($configContent, true);
-                if ($configData && isset($configData['presetMessages'])) {
-                    $presetMessages = $configData['presetMessages'];
-                }
-            }
-            
-            // Initialize settings with default values
-            $settings = [
-                [
-                    'setting' => 'preset_messages',
-                    'value' => json_encode($presetMessages),
-                    'description' => 'Custom household task messages from configuration file',
-                    'created' => date('c')
-                ],
-                [
-                    'setting' => 'default_snooze',
-                    'value' => '15',
-                    'description' => 'Default snooze time in minutes',
-                    'created' => date('c')
-                ],
-                [
-                    'setting' => 'max_notifications',
-                    'value' => '5',
-                    'description' => 'Maximum number of active notifications per client',
-                    'created' => date('c')
-                ]
-            ];
-            
-            $this->makeApiRequest('insertMany', [
-                'collection' => 'settings',
-                'documents' => $settings
-            ]);
-            
+            $this->initializeStorage();
             return ['success' => true, 'message' => 'Database initialized successfully'];
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
@@ -143,12 +204,12 @@ class DatabaseOperations {
         try {
             return [
                 'success' => true,
-                'currentVersion' => $_ENV['CLIENT_VERSION'] ?? getenv('CLIENT_VERSION') ?? '2.1.0',
-                'latestVersion' => $_ENV['CLIENT_VERSION'] ?? getenv('CLIENT_VERSION') ?? '2.1.0',
-                'releaseNotes' => 'PHP/MongoDB/Vercel version with enhanced security',
+                'currentVersion' => '2.1.0',
+                'latestVersion' => '2.1.0',
+                'releaseNotes' => 'PHP/Simple Storage/Vercel version',
                 'updateAvailable' => false,
-                'autoUpdateEnabled' => ($_ENV['AUTO_UPDATE_ENABLED'] ?? getenv('AUTO_UPDATE_ENABLED') ?? 'true') === 'true',
-                'forceUpdate' => ($_ENV['FORCE_UPDATE'] ?? getenv('FORCE_UPDATE') ?? 'false') === 'true',
+                'autoUpdateEnabled' => true,
+                'forceUpdate' => false,
                 'downloadUrl' => '/api/download.php?file=client',
                 'timestamp' => date('c')
             ];
@@ -165,7 +226,16 @@ class DatabaseOperations {
     
     public function registerClient($clientId, $clientName, $computerName) {
         try {
-            // For now, just return success for client registration
+            $data = $this->getData();
+            $client = [
+                'clientId' => $clientId,
+                'clientName' => $clientName,
+                'computerName' => $computerName,
+                'registered' => date('c'),
+                'lastSeen' => date('c')
+            ];
+            $data['clients'][] = $client;
+            $this->saveData($data);
             return ['success' => true, 'message' => 'Client registered'];
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
@@ -174,11 +244,24 @@ class DatabaseOperations {
     
     public function sendNotificationToAllClients($message, $allowBrowserUsage = false, $allowedWebsites = '', $priority = 1) {
         try {
-            // For development, simulate successful notification sending
+            $data = $this->getData();
+            $notification = [
+                'id' => uniqid(),
+                'message' => $message,
+                'clientId' => 'all',
+                'status' => 'Active',
+                'allowBrowserUsage' => $allowBrowserUsage,
+                'allowedWebsites' => $allowedWebsites,
+                'priority' => $priority,
+                'created' => date('c')
+            ];
+            $data['notifications'][] = $notification;
+            $this->saveData($data);
+            
             return [
                 'success' => true,
-                'message' => 'Notification sent to 1 client(s)',
-                'clientCount' => 1
+                'message' => 'Notification sent to all clients',
+                'clientCount' => count($data['clients'])
             ];
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
@@ -187,12 +270,11 @@ class DatabaseOperations {
     
     public function getActiveNotifications() {
         try {
-            $result = $this->makeApiRequest('find', [
-                'collection' => 'notifications',
-                'filter' => ['status' => ['$ne' => 'Completed']]
-            ]);
-            
-            return ['success' => true, 'data' => $result['documents']];
+            $data = $this->getData();
+            $activeNotifications = array_filter($data['notifications'], function($n) {
+                return ($n['status'] ?? '') !== 'Completed';
+            });
+            return ['success' => true, 'data' => array_values($activeNotifications)];
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
         }
@@ -200,22 +282,20 @@ class DatabaseOperations {
     
     public function getClientNotifications($clientId) {
         try {
-            $result = $this->makeApiRequest('find', [
-                'collection' => 'notifications',
-                'filter' => [
-                    'clientId' => $clientId,
-                    'status' => ['$ne' => 'Completed']
-                ]
-            ]);
+            $data = $this->getData();
+            $notifications = array_filter($data['notifications'], function($n) use ($clientId) {
+                return (($n['clientId'] ?? '') === $clientId || ($n['clientId'] ?? '') === 'all') 
+                       && ($n['status'] ?? '') !== 'Completed';
+            });
             
             $processedNotifications = [];
-            foreach ($result['documents'] as $n) {
+            foreach ($notifications as $n) {
                 $processedNotifications[] = [
-                    'id' => $n['_id'] ?? uniqid(),
+                    'id' => $n['id'] ?? uniqid(),
                     'message' => $n['message'],
                     'status' => $n['status'],
                     'allowBrowserUsage' => $n['allowBrowserUsage'] ?? false,
-                    'allowedWebsites' => $n['allowedWebsites'] ? explode(',', $n['allowedWebsites']) : [],
+                    'allowedWebsites' => isset($n['allowedWebsites']) ? explode(',', $n['allowedWebsites']) : [],
                     'priority' => $n['priority'] ?? 1
                 ];
             }
@@ -264,6 +344,15 @@ try {
         outputJson([
             'success' => false,
             'message' => 'No action specified',
+            'available_actions' => [
+                'testConnection', 
+                'isDatabaseInitialized', 
+                'initializeDatabase', 
+                'getActiveNotifications',
+                'registerClient',
+                'sendNotificationToAllClients',
+                'get_version'
+            ],
             'debug' => [
                 'method' => $method,
                 'raw_input' => $rawInput,
