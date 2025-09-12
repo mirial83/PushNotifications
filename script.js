@@ -192,7 +192,7 @@ async function refreshNotifications() {
 }
 
 function updateNotificationsList() {
-    const notificationsList = document.getElementById('notificationsList');
+    const notificationsList = document.getElementById('activeNotificationsList');
     if (!notificationsList) return;
     
     // Clear existing content
@@ -335,7 +335,7 @@ function createUninstallRequestElement(request) {
 }
 
 function displayNotificationsError(errorMessage) {
-    const notificationsList = document.getElementById('notificationsList');
+    const notificationsList = document.getElementById('activeNotificationsList');
     if (!notificationsList) return;
     
     notificationsList.innerHTML = `
@@ -734,12 +734,12 @@ function startCountdown() {
 function updateConnectionStatus(isConnected) {
     state.isConnected = isConnected;
     
-    const statusDot = document.querySelector('.status-dot');
+    const statusDot = document.getElementById('connectionStatus');
     if (statusDot) {
         statusDot.className = `status-dot ${isConnected ? 'online' : 'offline'}`;
     }
     
-    const statusText = document.getElementById('connectionStatus');
+    const statusText = document.getElementById('statusText');
     if (statusText) {
         statusText.textContent = isConnected ? 'Connected' : 'Disconnected';
     }
