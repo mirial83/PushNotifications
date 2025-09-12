@@ -267,25 +267,14 @@ class DatabaseOperations {
 try {
     $method = $_SERVER['REQUEST_METHOD'];
     
-    // Debug info for development
-    if (empty($_GET['action']) && empty($_POST['action'])) {
-        outputJson([
-            'success' => false,
-            'message' => 'No action specified',
-            'debug' => [
-                'method' => $method,
-                'get_params' => $_GET,
-                'post_params' => $_POST,
-                'php_version' => phpversion(),
-                'timestamp' => date('c')
-            ]
-        ]);
-    }
-    
     $input = null;
+    $rawInput = '';
+    
     if ($method === 'POST') {
         $rawInput = file_get_contents('php://input');
-        $input = json_decode($rawInput, true);
+        if (!empty($rawInput)) {
+            $input = json_decode($rawInput, true);
+        }
     }
     
     // Get action from either GET or POST
@@ -293,20 +282,34 @@ try {
         $action = $_GET['action'] ?? '';
         $params = $_GET;
     } else {
-        $action = $input['action'] ?? $_POST['action'] ?? '';
-        $params = $input ?: $_POST;
+        // For POST, prioritize JSON body over form data
+        $action = '';
+        $params = [];
+        
+        if ($input && is_array($input)) {
+            $action = $input['action'] ?? '';
+            $params = $input;
+        } elseif (!empty($_POST)) {
+            $action = $_POST['action'] ?? '';
+            $params = $_POST;
+        }
     }
     
+    // Debug info if no action found
     if (empty($action)) {
         outputJson([
             'success' => false,
             'message' => 'No action specified',
             'debug' => [
                 'method' => $method,
-                'raw_input' => $rawInput ?? 'none',
+                'raw_input' => $rawInput,
                 'parsed_input' => $input,
-                'get' => $_GET,
-                'post' => $_POST
+                'json_error' => json_last_error_msg(),
+                'get_params' => $_GET,
+                'post_params' => $_POST,
+                'content_type' => $_SERVER['CONTENT_TYPE'] ?? 'none',
+                'php_version' => phpversion(),
+                'timestamp' => date('c')
             ]
         ]);
     }
