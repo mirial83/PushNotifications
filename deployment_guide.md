@@ -4,7 +4,8 @@ This guide will walk you through deploying the PushNotifications application to 
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18 or later)
+- [PHP](https://php.net/) (v8.0 or later) with MongoDB extension
+- [Composer](https://getcomposer.org/) for PHP dependency management
 - [Vercel CLI](https://vercel.com/cli) installed globally
 - [MongoDB Atlas](https://www.mongodb.com/atlas) account (or self-hosted MongoDB instance)
 - [Git](https://git-scm.com/) for version control
@@ -76,9 +77,9 @@ If you have your own MongoDB instance, ensure it's accessible from the internet 
 
 ### 3. Local Development Setup
 
-1. **Install Dependencies:**
+1. **Install PHP Dependencies:**
    ```bash
-   npm install
+   composer install
    ```
 
 2. **Test Locally:**
@@ -89,6 +90,7 @@ If you have your own MongoDB instance, ensure it's accessible from the internet 
 
 3. **Verify Database Connection:**
    - Open your browser to `http://localhost:3000`
+   - Test the API endpoint: `http://localhost:3000/api/index.php?action=testConnection`
    - The application should automatically initialize the database
    - Check for any connection errors in the browser console or terminal
 
