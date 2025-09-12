@@ -11,6 +11,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Function to safely output JSON
+function outputJson($data) {
+    echo json_encode($data, JSON_PRETTY_PRINT);
+    exit();
+}
+
 // Simple database operations using MongoDB Atlas Data API
 class DatabaseOperations {
     private $apiUrl;
@@ -256,19 +266,53 @@ class DatabaseOperations {
 // Main API handler
 try {
     $method = $_SERVER['REQUEST_METHOD'];
-    $input = json_decode(file_get_contents('php://input'), true);
+    
+    // Debug info for development
+    if (empty($_GET['action']) && empty($_POST['action'])) {
+        outputJson([
+            'success' => false,
+            'message' => 'No action specified',
+            'debug' => [
+                'method' => $method,
+                'get_params' => $_GET,
+                'post_params' => $_POST,
+                'php_version' => phpversion(),
+                'timestamp' => date('c')
+            ]
+        ]);
+    }
+    
+    $input = null;
+    if ($method === 'POST') {
+        $rawInput = file_get_contents('php://input');
+        $input = json_decode($rawInput, true);
+    }
     
     // Get action from either GET or POST
     if ($method === 'GET') {
         $action = $_GET['action'] ?? '';
         $params = $_GET;
     } else {
-        $action = $input['action'] ?? '';
-        $params = $input;
+        $action = $input['action'] ?? $_POST['action'] ?? '';
+        $params = $input ?: $_POST;
+    }
+    
+    if (empty($action)) {
+        outputJson([
+            'success' => false,
+            'message' => 'No action specified',
+            'debug' => [
+                'method' => $method,
+                'raw_input' => $rawInput ?? 'none',
+                'parsed_input' => $input,
+                'get' => $_GET,
+                'post' => $_POST
+            ]
+        ]);
     }
     
     $db = new DatabaseOperations();
-    $result = ['success' => false, 'message' => 'Unknown action'];
+    $result = ['success' => false, 'message' => 'Unknown action: ' . $action];
     
     switch ($action) {
         case 'testConnection':
@@ -311,7 +355,7 @@ try {
             $result = $db->getActiveNotifications();
             if ($result['success']) {
                 $result['notifications'] = $result['data'];
-                $result['clientCount'] = 0; // Could implement client counting
+                $result['clientCount'] = 0;
             }
             break;
             
@@ -319,19 +363,19 @@ try {
             $clientId = $params['clientId'] ?? '';
             $result = $db->getClientNotifications($clientId);
             break;
-            
-        default:
-            $result = ['success' => false, 'message' => 'Unknown API action: ' . $action];
     }
     
-    echo json_encode($result);
+    outputJson($result);
     
 } catch (Exception $e) {
-    error_log('API Error: ' . $e->getMessage());
-    http_response_code(500);
-    echo json_encode([
+    outputJson([
         'success' => false,
-        'message' => 'API Error: ' . $e->getMessage()
+        'message' => 'API Error: ' . $e->getMessage(),
+        'debug' => [
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString()
+        ]
     ]);
 }
 ?>
