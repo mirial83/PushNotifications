@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PushNotifications Control Panel - Vercel/MongoDB Version</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Completed Notification Headers -->
+    <div id="completedHeaders"></div>
+    
+    <!-- Uninstall Request Headers -->
+    <div id="uninstallRequestHeaders"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>PushNotifications Control Panel</h1>
+            <div class="status-indicator">
+                <span id="connectionStatus" class="status-dot offline"></span>
+                <span id="statusText">Connecting...</span>
+                <div class="refresh-indicator">
+                    <span id="refreshCountdown">Next refresh: 2:00</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Left Sidebar - Active Notifications -->
+            <aside class="sidebar">
+                <h2>Active Notifications</h2>
+                <div id="activeNotificationsList" class="notifications-list">
+                    <div class="loading-notifications">
+                        <div class="loading-spinner"></div>
+                        <div>Loading notifications...</div>
+                    </div>
+                    <div class="no-notifications" style="display: none;">No active notifications</div>
+                </div>
+                
+                <!-- Clear All Notifications Button -->
+                <div class="sidebar-actions">
+                    <button type="button" id="clearAllNotifications" class="btn-warning btn-block">Clear All Notifications</button>
+                </div>
+            </aside>
+
+            <!-- Main Panel - Send Notification -->
+            <main class="main-panel">
+                <div class="main-panel-content">
+                    <!-- Send Notifications Section -->
+                    <div id="notifications-section">
+                    <div class="send-notification-form">
+                        <h2>Send Notification</h2>
+                    
+
+                    <!-- Message Type Selection -->
+                    <div class="form-group">
+                        <label>Message Type:</label>
+                        <div class="radio-group">
+                            <input type="radio" id="presetMessage" name="messageType" value="preset" checked>
+                            <label for="presetMessage">Preset Message</label>
+                            
+                            <input type="radio" id="customMessage" name="messageType" value="custom">
+                            <label for="customMessage">Custom Message</label>
+                        </div>
+                    </div>
+
+                    <!-- Preset Messages -->
+                    <div class="form-group" id="presetGroup">
+                        <label for="presetSelect">Select Message:</label>
+                        <select id="presetSelect">
+                            <option value="">Loading preset messages...</option>
+                        </select>
+                    </div>
+
+                    <!-- Custom Message -->
+                    <div class="form-group hidden" id="customGroup">
+                        <label for="customText">Custom Message:</label>
+                        <textarea id="customText" placeholder="Enter your custom message..." rows="3"></textarea>
+                    </div>
+
+                    <!-- Browser Usage Option -->
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="allowBrowserUsage">
+                            <label for="allowBrowserUsage">🌐 Allow Browser Usage (with website restrictions)</label>
+                            <small class="browser-usage-description">
+                                <strong>Enables web browsers</strong> but restricts internet access to websites specified below.
+                                <br>Also disables VPNs and proxy connections to prevent bypassing restrictions.
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Browser Usage Warning -->
+                    <div class="form-group hidden warning-box" id="browserUsageWarning">
+                        <div class="warning-content">
+                            <h4>⚠️ Browser Usage Enabled - Important Information</h4>
+                            <p><strong>This will allow web browsers but with strict restrictions:</strong></p>
+                            <ul>
+                                <li><strong>Allowed:</strong> Web browsers (Chrome, Firefox, Edge, etc.)</li>
+                                <li><strong>Websites:</strong> Only those you specify below</li>
+                                <li><strong>Blocked:</strong> All VPNs, proxies, and circumvention tools</li>
+                                <li><strong>Still Blocked:</strong> All other applications (games, media players, etc.)</li>
+                            </ul>
+                            <p><strong>Leave websites empty for complete internet restriction.</strong></p>
+                            <p><strong>To disable:</strong> Complete or snooze the notification on the desktop client.</p>
+                            <p><strong>Emergency exit:</strong> Press Ctrl+Alt+End on the target computer.</p>
+                        </div>
+                    </div>
+
+                    <!-- Allowed Websites -->
+                    <div class="form-group hidden" id="websitesGroup">
+                        <label for="allowedWebsites">
+                            🌐 Allowed Websites (Browser Whitelist)
+                            <span class="optional-label">(Required when browser usage is enabled)</span>
+                        </label>
+                        
+                        <!-- Quick Add Buttons -->
+                        <div class="quick-add-websites">
+                            <small>Quick add common work sites:</small><br>
+                            <button type="button" class="btn-small" onclick="addWebsite('github.com')">GitHub</button>
+                            <button type="button" class="btn-small" onclick="addWebsite('stackoverflow.com')">Stack Overflow</button>
+                            <button type="button" class="btn-small" onclick="addWebsite('docs.google.com')">Google Docs</button>
+                            <button type="button" class="btn-small" onclick="addWebsite('wikipedia.org')">Wikipedia</button>
+                            <button type="button" class="btn-small" onclick="addWebsite('w3schools.com')">W3Schools</button>
+                        </div>
+                        
+                        <textarea id="allowedWebsites" 
+                                placeholder="Enter allowed websites, one per line or comma-separated&#10;&#10;Examples:&#10;docs.google.com&#10;github.com&#10;stackoverflow.com&#10;developer.mozilla.org&#10;&#10;Only these websites will be accessible when browsers are enabled.&#10;Leave EMPTY to block all internet access (browsers will open but show no content)." 
+                                rows="6"></textarea>
+                        
+                        <div class="website-help">
+                            <small>
+                                <strong>Tips:</strong>
+                                <ul>
+                                    <li>Enter domains without "http://" or "https://"</li>
+                                    <li>Both "example.com" and "www.example.com" will be allowed automatically</li>
+                                    <li>Use specific subdomains if needed (e.g., "docs.google.com" instead of "google.com")</li>
+                                    <li><strong>Empty = Complete Focus Mode</strong> (no websites allowed)</li>
+                                </ul>
+                            </small>
+                        </div>
+                        
+                        <!-- Website Count Display -->
+                        <div id="websiteCount" class="website-count">
+                            <span class="count-display">0 websites will be allowed</span>
+                        </div>
+                    </div>
+
+                    <!-- Priority -->
+                    <div class="form-group">
+                        <label for="prioritySelect">Priority:</label>
+                        <select id="prioritySelect">
+                            <option value="1">Normal</option>
+                            <option value="2">High</option>
+                            <option value="3">Urgent</option>
+                        </select>
+                    </div>
+
+                    <!-- Send Button -->
+                    <button type="button" id="sendNotification" class="btn-primary">Send Notification</button>
+                </div>
+
+                <!-- Database Setup -->
+                <div class="setup-section">
+                    <h3>MongoDB Database Setup</h3>
+                    <p>Before using the system, you need to:</p>
+                    <ol>
+                        <li>Ensure MongoDB connection is configured in environment variables</li>
+                        <li>Deploy to Vercel with proper environment variables</li>
+                        <li>Click the button below to initialize the MongoDB collections</li>
+                    </ol>
+                    <button type="button" id="initDatabase" class="btn-secondary">Initialize MongoDB Database</button>
+                    <div id="setupStatus" class="status-message"></div>
+                </div>
+                </div>
+
+                <!-- Website access requests are now displayed as banner notifications under relevant notifications in the sidebar -->
+                
+                <!-- Uninstall All Clients Section -->
+                <div class="uninstall-all-section">
+                    <h3>Administrative Actions</h3>
+                    <div class="admin-actions">
+                        <button type="button" id="uninstallAllClients" class="btn-danger btn-block">⚠️ Uninstall All Active Clients</button>
+                        <p class="admin-warning"><strong>Warning:</strong> This will immediately uninstall the client from all computers. No approval required.</p>
+                    </div>
+                </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="scripts.js"></script>
+</body>
+</html>
