@@ -17,6 +17,13 @@ echo json_encode([
     'timestamp' => date('c'),
     'php_version' => phpversion(),
     'request_method' => $_SERVER['REQUEST_METHOD'],
-    'request_uri' => $_SERVER['REQUEST_URI'] ?? 'unknown'
-]);
+    'request_uri' => $_SERVER['REQUEST_URI'] ?? 'unknown',
+    'environment_check' => [
+        'curl_enabled' => extension_loaded('curl'),
+        'json_enabled' => extension_loaded('json'),
+        'mongodb_api_url_set' => !empty($_ENV['MONGODB_DATA_API_URL'] ?? getenv('MONGODB_DATA_API_URL')),
+        'mongodb_api_key_set' => !empty($_ENV['MONGODB_DATA_API_KEY'] ?? getenv('MONGODB_DATA_API_KEY')),
+        'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'Unknown'
+    ]
+], JSON_PRETTY_PRINT);
 ?>

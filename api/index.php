@@ -21,7 +21,7 @@ function outputJson($data) {
     exit();
 }
 
-// Simple database operations using MongoDB Atlas Data API
+// Database operations using MongoDB Atlas Data API
 class DatabaseOperations {
     private $apiUrl;
     private $apiKey;
@@ -34,17 +34,11 @@ class DatabaseOperations {
         $this->apiKey = $_ENV['MONGODB_DATA_API_KEY'] ?? getenv('MONGODB_DATA_API_KEY');
         $this->dataSource = $_ENV['MONGODB_DATA_SOURCE'] ?? getenv('MONGODB_DATA_SOURCE') ?? 'Cluster0';
         $this->database = $_ENV['DATABASE_NAME'] ?? $_ENV['DB_NAME'] ?? getenv('DATABASE_NAME') ?? getenv('DB_NAME') ?? 'pushnotifications';
-        
-        if (!$this->apiUrl || !$this->apiKey) {
-            // Fallback to file-based storage for development
-            error_log('MongoDB Data API not configured, using file-based storage');
-        }
     }
     
     private function makeApiRequest($endpoint, $data) {
         if (!$this->apiUrl || !$this->apiKey) {
-            // Fallback to file-based storage
-            return $this->handleFileStorage($endpoint, $data);
+            throw new Exception('MongoDB Data API credentials not configured. Please set MONGODB_DATA_API_URL and MONGODB_DATA_API_KEY environment variables.');
         }
         
         $url = $this->apiUrl . '/action/' . $endpoint;
@@ -68,42 +62,12 @@ class DatabaseOperations {
         curl_close($ch);
         
         if ($httpCode !== 200) {
-            throw new Exception('MongoDB API request failed: ' . $response);
+            throw new Exception('MongoDB API request failed (HTTP ' . $httpCode . '): ' . $response);
         }
         
         return json_decode($response, true);
     }
     
-    private function handleFileStorage($endpoint, $data) {
-        // Simple file-based storage for development/testing
-        $storageDir = __DIR__ . '/../storage';
-        if (!is_dir($storageDir)) {
-            mkdir($storageDir, 0755, true);
-        }
-        
-        switch ($endpoint) {
-            case 'find':
-                $file = $storageDir . '/' . $data['collection'] . '.json';
-                if (file_exists($file)) {
-                    $content = json_decode(file_get_contents($file), true);
-                    return ['documents' => $content ?: []];
-                }
-                return ['documents' => []];
-                
-            case 'insertMany':
-                $file = $storageDir . '/' . $data['collection'] . '.json';
-                $existing = [];
-                if (file_exists($file)) {
-                    $existing = json_decode(file_get_contents($file), true) ?: [];
-                }
-                $existing = array_merge($existing, $data['documents']);
-                file_put_contents($file, json_encode($existing, JSON_PRETTY_PRINT));
-                return ['insertedIds' => array_keys($data['documents'])];
-                
-            default:
-                return ['success' => true];
-        }
-    }
     
     public function testConnection() {
         try {
