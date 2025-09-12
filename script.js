@@ -163,8 +163,7 @@ async function refreshNotifications() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                action: 'getNotifications',
-                userEmail: config.USER_EMAIL
+                action: 'getActiveNotifications'
             })
         });
         
@@ -172,17 +171,27 @@ async function refreshNotifications() {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        const result = await response.json();
+        const responseText = await response.text();
+        console.log('Raw API response:', responseText);
+        
+        let result;
+        try {
+            result = JSON.parse(responseText);
+        } catch (parseError) {
+            console.error('JSON parse error:', parseError);
+            console.error('Response text:', responseText);
+            throw new Error('Invalid JSON response from API: ' + responseText.substring(0, 100));
+        }
         
         if (result.success) {
-            state.notifications = result.notifications || [];
+            state.notifications = result.notifications || result.data || [];
             state.clientCount = result.clientCount || 0;
             state.lastRefresh = new Date();
             
             updateNotificationsList();
             updateConnectionStatus(true);
         } else {
-            throw new Error(result.error || 'Failed to fetch notifications');
+            throw new Error(result.message || result.error || 'Failed to fetch notifications');
         }
     } catch (error) {
         console.error('Error refreshing notifications:', error);
