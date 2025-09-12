@@ -14,7 +14,7 @@ Usage:
     python3 installer.py
 
 Notes:
-- The Google Apps Script URL is embedded in this installer and does not require user input.
+- The Vercel app URL is embedded in this installer and does not require user input.
 - Run with -h/--help to view this message.
 """
 
@@ -45,7 +45,8 @@ except ImportError:
     GUI_AVAILABLE = False
     print("GUI not available - using text-based interface")
 
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxz_tUH78XlNqLpdQKqy9SrD6dK6Y0azFIXCM0kUpo3kEfAD6jWoMsngxO710KxTrA/exec"
+# Use Vercel app URL for downloads
+SCRIPT_URL = "https://push-notifications-phi.vercel.app"
 
 class PushNotificationsInstaller:
     def __init__(self):
@@ -159,21 +160,13 @@ class PushNotificationsInstaller:
         """Download client files to installation directory"""
         print(f"Downloading client files to {install_dir}...")
         
-        # Files to download - uninstaller is included by default
+        # Only download the client file - everything else is embedded in this installer
         files_to_download = {
             "pushnotifications.py": "client",
-            "requirements.txt": "requirements", 
-            "README.md": "readme",
-            "uninstall.py": "uninstaller",  # Always include uninstaller
-            "uninstall.bat": "uninstall_bat", # Windows batch file
         }
         
-        # Only include Unix shell script for non-Windows systems
-        if self.system != "Windows":
-            files_to_download["uninstall.sh"] = "uninstall_sh"
-        
         for filename, file_type in files_to_download.items():
-            url = f"{self.gas_script_url}?action=download&file={file_type}"
+            url = f"{self.gas_script_url}/api/download.php?file={file_type}"
             file_path = install_dir / filename
             
             try:
@@ -184,7 +177,7 @@ class PushNotificationsInstaller:
                 if response.status_code != 200:
                     print(f"  HTTP Error: {response.status_code}")
                     if response.status_code == 404:
-                        print(f"  File not found. Check if your Google Apps Script is properly deployed.")
+                        print(f"  File not found. Check if the Vercel API is properly deployed.")
                     return False
                 
                 # Check if response looks like an error page
@@ -574,6 +567,257 @@ StartupNotify=false'''
             
         return True
 
+    def create_embedded_files(self, install_dir):
+        """Create embedded files like requirements.txt, uninstaller, etc."""
+        print("Creating embedded files...")
+        
+        # Create requirements.txt
+        requirements_content = '''requests>=2.31.0
+psutil>=5.9.0
+pytz>=2023.3
+pystray>=0.19.4
+pillow>=10.0.0
+tkinter
+'''
+        with open(install_dir / "requirements.txt", 'w') as f:
+            f.write(requirements_content)
+        print("[OK] requirements.txt created")
+        
+        # Create uninstaller script
+        uninstaller_content = f'''#!/usr/bin/env python3
+"""
+PushNotifications Uninstaller
+Requires administrator approval via web form before uninstalling.
+"""
+
+import os
+import sys
+import json
+import shutil
+import requests
+import subprocess
+from pathlib import Path
+from datetime import datetime
+
+class PushNotificationsUninstaller:
+    def __init__(self):
+        self.install_dir = Path(__file__).parent
+        self.server_url = "{SCRIPT_URL}"
+        
+    def check_protection(self):
+        """Check if installation is protected"""
+        protection_file = self.install_dir / ".protection"
+        if protection_file.exists():
+            try:
+                with open(protection_file, 'r') as f:
+                    data = json.load(f)
+                return data.get("protection_enabled", False), data.get("installation_id", "unknown")
+            except:
+                return True, "unknown"
+        return False, None
+        
+    def request_uninstall_approval(self, installation_id):
+        """Request approval from administrator via web form"""
+        try:
+            import getpass
+            import uuid
+            
+            data = {{
+                'action': 'requestUninstall',
+                'installationId': installation_id,
+                'installationPath': str(self.install_dir),
+                'username': getpass.getuser(),
+                'computerName': os.environ.get('COMPUTERNAME', 'Unknown'),
+                'requestId': str(uuid.uuid4()),
+                'timestamp': datetime.now().isoformat()
+            }}
+            
+            response = requests.post(f"{{self.server_url}}/api/index.php", json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    print("Uninstall request submitted successfully.")
+                    print("Please wait for administrator approval.")
+                    return result.get('requestId')
+                else:
+                    print(f"Request failed: {{result.get('message', 'Unknown error')}}")
+            else:
+                print(f"HTTP Error: {{response.status_code}}")
+                
+        except Exception as e:
+            print(f"Failed to submit uninstall request: {{e}}")
+            
+        return None
+        
+    def perform_uninstall(self):
+        """Perform the actual uninstallation after approval"""
+        print("Performing uninstallation...")
+        
+        try:
+            # Stop any running client processes
+            try:
+                import psutil
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if 'pushnotifications.py' in ' '.join(proc.info['cmdline'] or []):
+                            proc.terminate()
+                            print(f"Stopped client process PID {{proc.info['pid']}}")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+            except ImportError:
+                print("psutil not available - cannot stop running processes")
+            
+            # Remove installation directory
+            parent_dir = self.install_dir.parent
+            
+            # First, try to remove file attributes and permissions that might prevent deletion
+            if os.name == 'nt':  # Windows
+                try:
+                    # Remove read-only and system attributes
+                    subprocess.run(["attrib", "-R", "-S", "-H", str(self.install_dir), "/S"], check=False)
+                    # Reset NTFS permissions
+                    subprocess.run(["icacls", str(self.install_dir), "/reset", "/T"], check=False)
+                except Exception as e:
+                    print(f"Warning: Could not reset file attributes: {{e}}")
+            
+            # Remove the directory
+            shutil.rmtree(str(self.install_dir), ignore_errors=True)
+            
+            # Clean up backup directory
+            backup_dir = Path.home() / "AppData" / "Local" / "PushNotifications_Backup"
+            if backup_dir.exists():
+                shutil.rmtree(str(backup_dir), ignore_errors=True)
+                
+            print("Uninstallation completed successfully.")
+            return True
+            
+        except Exception as e:
+            print(f"Uninstallation failed: {{e}}")
+            return False
+    
+    def run(self):
+        """Main uninstaller logic"""
+        print("PushNotifications Uninstaller")
+        print("=" * 40)
+        
+        # Check if installation is protected
+        is_protected, installation_id = self.check_protection()
+        
+        if is_protected:
+            print("This installation is protected and requires administrator approval for removal.")
+            print("Submitting uninstall request...")
+            
+            request_id = self.request_uninstall_approval(installation_id)
+            if request_id:
+                print(f"Request ID: {{request_id}}")
+                print("\nThe administrator has been notified of your uninstall request.")
+                print("You will be contacted when the request is processed.")
+                print("\nDo not attempt to manually delete the installation folder.")
+                print("Unauthorized deletion attempts will be logged and reported.")
+            else:
+                print("Failed to submit uninstall request.")
+                print("Please contact your administrator for manual removal.")
+        else:
+            # Not protected - allow direct uninstall
+            print("Installation is not protected. Proceeding with uninstallation...")
+            if self.perform_uninstall():
+                print("\nPushNotifications has been successfully removed.")
+            else:
+                print("\nUninstallation encountered errors.")
+
+def main():
+    try:
+        uninstaller = PushNotificationsUninstaller()
+        uninstaller.run()
+    except KeyboardInterrupt:
+        print("\nUninstallation cancelled.")
+    except Exception as e:
+        print(f"\nUninstaller error: {{e}}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+'''
+        
+        with open(install_dir / "uninstall.py", 'w') as f:
+            f.write(uninstaller_content)
+        print("[OK] uninstall.py created")
+        
+        # Create Windows batch file for uninstaller
+        if self.system == "Windows":
+            batch_content = f'''@echo off
+echo Starting PushNotifications Uninstaller...
+python "%~dp0uninstall.py"
+pause
+'''
+            with open(install_dir / "uninstall.bat", 'w') as f:
+                f.write(batch_content)
+            print("[OK] uninstall.bat created")
+        
+        # Create shell script for Unix systems
+        else:
+            shell_content = f'''#!/bin/bash
+echo "Starting PushNotifications Uninstaller..."
+python3 "$(dirname "$0")/uninstall.py"
+read -p "Press Enter to continue..."
+'''
+            with open(install_dir / "uninstall.sh", 'w') as f:
+                f.write(shell_content)
+            os.chmod(install_dir / "uninstall.sh", 0o755)
+            print("[OK] uninstall.sh created")
+        
+        # Create README.md
+        readme_content = f'''# PushNotifications Desktop Client
+
+## Installation Directory: {install_dir}
+
+## Features
+
+- Automatic client registration
+- Real-time notification display
+- Browser usage control
+- Website filtering
+- Automatic updates (forced when configured)
+- Snooze functionality
+- Priority-based notifications
+- Folder protection system
+
+## Usage
+
+The client runs automatically in the background and connects to the server at:
+{SCRIPT_URL}
+
+## Uninstallation
+
+**IMPORTANT**: This installation is protected and requires administrator approval for removal.
+
+To uninstall:
+1. Run the uninstaller: `python uninstall.py`
+2. Or use the shortcut: `uninstall.{'bat' if self.system == 'Windows' else 'sh'}`
+3. Wait for administrator approval
+4. Do NOT manually delete the installation folder
+
+## Troubleshooting
+
+- Ensure you have an internet connection
+- Check that Python and required packages are installed
+- Contact your administrator if you encounter persistent issues
+- Unauthorized folder deletion attempts are logged and reported
+
+## Version Information
+
+- Client Version: 2.1.0
+- Installation Date: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+- Server: {SCRIPT_URL}
+'''
+        
+        with open(install_dir / "README.md", 'w') as f:
+            f.write(readme_content)
+        print("[OK] README.md created")
+        
+        return True
+
     def run_installation(self):
         """Run the complete installation process"""
         print("Starting PushNotifications installation...")
@@ -592,6 +836,9 @@ StartupNotify=false'''
         if not self.download_files(install_dir):
             self.show_message("Installation Failed", "Failed to download client files.", "error")
             return False
+        
+        # Create embedded files (requirements, uninstaller, etc.)
+        self.create_embedded_files(install_dir)
         
         # Set up folder protection
         self.setup_folder_protection(install_dir)
