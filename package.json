@@ -1,0 +1,17 @@
+{
+  "name": "push-notifications-api",
+  "version": "2.1.0",
+  "description": "PushNotifications API with MongoDB support",
+  "main": "api/index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build required'",
+    "start": "node api/index.js"
+  },
+  "dependencies": {
+    "mongodb": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
