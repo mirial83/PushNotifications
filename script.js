@@ -15,7 +15,6 @@ const state = {
 const config = {
     API_BASE_URL: window.location.origin,
     REFRESH_COUNTDOWN_UPDATE: 1000, // 1 second
-    USER_EMAIL: null, // Will be set during initialization
 };
 
 // Initialize application
@@ -38,9 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initializeUserAuth() {
-    // In production, this would get the user's email from session/auth
-    // For now, we'll use a default or check environment
-    config.USER_EMAIL = 'admin@example.com'; // This should come from server-side auth
+    // Authentication removed - no user verification needed
 }
 
 function setupEventListeners() {
@@ -333,7 +330,7 @@ async function handleSendNotification(event) {
     
     const notificationData = {
         action: 'sendNotification',
-        userEmail: config.USER_EMAIL,
+        
         message: formData.get('message'),
         priority: formData.get('priority'),
         workMode: formData.get('workMode'),
@@ -379,7 +376,7 @@ async function acknowledgeNotification(notificationId) {
             },
             body: JSON.stringify({
                 action: 'acknowledgeNotification',
-                userEmail: config.USER_EMAIL,
+                
                 notificationId: notificationId
             })
         });
@@ -410,7 +407,7 @@ async function snoozeNotification(notificationId) {
             },
             body: JSON.stringify({
                 action: 'snoozeNotification',
-                userEmail: config.USER_EMAIL,
+                
                 notificationId: notificationId,
                 minutes: parseInt(minutes)
             })
@@ -439,7 +436,7 @@ async function approveWebsiteRequest(requestId) {
             },
             body: JSON.stringify({
                 action: 'approveWebsiteRequest',
-                userEmail: config.USER_EMAIL,
+                
                 requestId: requestId
             })
         });
@@ -467,7 +464,7 @@ async function denyWebsiteRequest(requestId) {
             },
             body: JSON.stringify({
                 action: 'denyWebsiteRequest',
-                userEmail: config.USER_EMAIL,
+                
                 requestId: requestId
             })
         });
@@ -499,7 +496,7 @@ async function approveUninstallRequest(requestId) {
             },
             body: JSON.stringify({
                 action: 'approveUninstallRequest',
-                userEmail: config.USER_EMAIL,
+                
                 requestId: requestId
             })
         });
@@ -530,7 +527,7 @@ async function denyUninstallRequest(requestId) {
             },
             body: JSON.stringify({
                 action: 'denyUninstallRequest',
-                userEmail: config.USER_EMAIL,
+                
                 requestId: requestId,
                 reason: reason
             })
@@ -568,7 +565,7 @@ async function handleUninstallAllClients() {
             },
             body: JSON.stringify({
                 action: 'uninstallAllClients',
-                userEmail: config.USER_EMAIL,
+                
                 reason: reason
             })
         });

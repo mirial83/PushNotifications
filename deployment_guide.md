@@ -55,13 +55,10 @@ If you have your own MongoDB instance, ensure it's accessible from the internet 
    MONGODB_URI=mongodb+srv://doldarina1:Hill26sand@pushnotifications.tkdvxkd.mongodb.net/?retryWrites=true&w=majority&appName=PushNotifications
    DATABASE_NAME=pushnotifications
    
-   # Authentication Configuration
-   AUTHORIZED_USERS=laurenstreich4@gmail.com,pconmobile86521@gmail.com
-   
    # Application Settings
    CLIENT_VERSION=2.1.0
    AUTO_UPDATE_ENABLED=true
-   FORCE_UPDATE=false
+   FORCE_UPDATE=true
    
    # Optional: Custom Settings
    REFRESH_INTERVAL=30
@@ -75,7 +72,6 @@ If you have your own MongoDB instance, ensure it's accessible from the internet 
    - **Database**: `pushnotifications`
    
    You may need to update:
-   - `AUTHORIZED_USERS`: Add or modify admin email addresses
    - `CLIENT_VERSION`: Update to match your Python client version
 
 ### 3. Local Development Setup
@@ -117,9 +113,9 @@ If you have your own MongoDB instance, ensure it's accessible from the internet 
    ```bash
    vercel env add MONGODB_URI
    vercel env add DATABASE_NAME
-   vercel env add AUTHORIZED_USERS
    vercel env add CLIENT_VERSION
    vercel env add AUTO_UPDATE_ENABLED
+   vercel env add FORCE_UPDATE
    ```
    Enter the values for each when prompted.
 
@@ -219,6 +215,8 @@ If you have your own MongoDB instance, ensure it's accessible from the internet 
 3. **Client Version Updates:**
    - Update `CLIENT_VERSION` environment variable
    - Clients will auto-update on next check
+   - **Forced Updates**: With `FORCE_UPDATE=true`, clients MUST update before they can continue using the application
+   - **Optional Updates**: With `FORCE_UPDATE=false`, clients can choose to delay updates
 
 ## Troubleshooting
 

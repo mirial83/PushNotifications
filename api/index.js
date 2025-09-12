@@ -9,15 +9,7 @@ async function getDbOps() {
   return dbOps;
 }
 
-// Simple authentication check
-function isAuthorizedUser(email) {
-  if (!process.env.AUTHORIZED_USERS) {
-    return true; // If no users specified, allow all (for testing)
-  }
-  
-  const authorizedEmails = process.env.AUTHORIZED_USERS.split(',').map(e => e.trim());
-  return authorizedEmails.includes(email);
-}
+// Authentication removed - no user verification needed
 
 // CORS handler
 function setCORSHeaders(res) {
