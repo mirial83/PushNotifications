@@ -153,8 +153,40 @@ class DatabaseOperations {
         }
       ];
 
-      await this.db.collection('settings').insertMany(settings);
-      return { success: true, message: 'MongoDB database initialized successfully' };
+      // Check if settings already exist to avoid duplicates
+      const existingSettings = await this.db.collection('settings').findOne({ setting: 'preset_messages' });
+      if (!existingSettings) {
+        await this.db.collection('settings').insertMany(settings);
+      }
+
+      // Create indexes for security collections
+      try {
+        // Security Keys collection indexes
+        await this.db.collection('securityKeys').createIndex({ clientId: 1, keyType: 1 }, { unique: true });
+        await this.db.collection('securityKeys').createIndex({ hostname: 1 });
+        await this.db.collection('securityKeys').createIndex({ createdAt: -1 });
+        await this.db.collection('securityKeys').createIndex({ lastUsed: -1 });
+
+        // Client Info collection indexes
+        await this.db.collection('clientInfo').createIndex({ clientId: 1 }, { unique: true });
+        await this.db.collection('clientInfo').createIndex({ machineId: 1 });
+        await this.db.collection('clientInfo').createIndex({ hostname: 1 });
+        await this.db.collection('clientInfo').createIndex({ installPath: 1 });
+        await this.db.collection('clientInfo').createIndex({ createdAt: -1 });
+        await this.db.collection('clientInfo').createIndex({ lastCheckin: -1 });
+
+        // Notification collection indexes (if not already created)
+        await this.db.collection('notifications').createIndex({ status: 1 });
+        await this.db.collection('notifications').createIndex({ clientId: 1 });
+        await this.db.collection('notifications').createIndex({ created: -1 });
+
+        console.log('Database indexes created successfully');
+      } catch (indexError) {
+        // Indexes might already exist, which is fine
+        console.log('Some indexes may already exist:', indexError.message);
+      }
+
+      return { success: true, message: 'MongoDB database and security collections initialized successfully' };
     } catch (error) {
       return { success: false, message: error.message };
     }
@@ -283,6 +315,289 @@ class DatabaseOperations {
     }
   }
 
+  // Security Key Management Methods
+  async getSecurityKey(clientId, keyType) {
+    try {
+      if (this.usesFallback) {
+        // In-memory fallback - generate a temporary key
+        const key = 'fallback_key_' + Math.random().toString(36).substr(2, 16);
+        return { success: true, key };
+      }
+
+      await this.connect();
+      const securityKey = await this.db.collection('securityKeys').findOne({
+        clientId,
+        keyType
+      });
+
+      if (securityKey) {
+        // Update last used timestamp
+        await this.db.collection('securityKeys').updateOne(
+          { _id: securityKey._id },
+          { $set: { lastUsed: new Date() } }
+        );
+        
+        return { success: true, key: securityKey.keyValue };
+      } else {
+        return { success: false, message: 'Security key not found' };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async createSecurityKey(clientId, keyType, keyValue, installPath, hostname) {
+    try {
+      if (this.usesFallback) {
+        // In-memory fallback - just acknowledge creation
+        return { success: true, message: 'Security key created in memory' };
+      }
+
+      await this.connect();
+      const securityKeyData = {
+        clientId,
+        keyType,
+        keyValue,
+        installPath,
+        hostname,
+        createdAt: new Date(),
+        lastUsed: new Date()
+      };
+
+      // Check if key already exists
+      const existingKey = await this.db.collection('securityKeys').findOne({
+        clientId,
+        keyType
+      });
+
+      if (existingKey) {
+        // Update existing key
+        await this.db.collection('securityKeys').updateOne(
+          { _id: existingKey._id },
+          { 
+            $set: { 
+              keyValue,
+              lastUsed: new Date(),
+              updatedAt: new Date()
+            }
+          }
+        );
+        return { success: true, message: 'Security key updated' };
+      } else {
+        // Insert new key
+        await this.db.collection('securityKeys').insertOne(securityKeyData);
+        return { success: true, message: 'Security key created' };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async updateKeyLastUsed(clientId, keyType) {
+    try {
+      if (this.usesFallback) {
+        return { success: true, message: 'Key usage updated in memory' };
+      }
+
+      await this.connect();
+      const result = await this.db.collection('securityKeys').updateOne(
+        { clientId, keyType },
+        { $set: { lastUsed: new Date() } }
+      );
+
+      return { 
+        success: true, 
+        message: 'Key last used timestamp updated',
+        updated: result.modifiedCount > 0
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Client Info Management Methods
+  async getClientInfo(machineId, installPath, hostname) {
+    try {
+      if (this.usesFallback) {
+        // In-memory fallback - find by hostname
+        const client = fallbackStorage.clients.find(c => 
+          c.computerName === hostname || c.clientName === hostname
+        );
+        if (client) {
+          return { success: true, clientId: client.clientId };
+        }
+        return { success: false, message: 'Client not found' };
+      }
+
+      await this.connect();
+      const clientInfo = await this.db.collection('clientInfo').findOne({
+        $or: [
+          { machineId },
+          { hostname },
+          { installPath }
+        ]
+      });
+
+      if (clientInfo) {
+        return { success: true, clientId: clientInfo.clientId };
+      } else {
+        return { success: false, message: 'Client info not found' };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async createClientInfo(clientId, machineId, installationId, installPath, hostname, platform, version) {
+    try {
+      if (this.usesFallback) {
+        // In-memory fallback
+        const clientData = {
+          clientId,
+          clientName: hostname,
+          computerName: hostname,
+          registered: new Date().toISOString(),
+          lastSeen: new Date().toISOString()
+        };
+        fallbackStorage.clients.push(clientData);
+        return { success: true, message: 'Client registered in memory' };
+      }
+
+      await this.connect();
+      const clientInfoData = {
+        clientId,
+        machineId,
+        installationId,
+        installPath,
+        hostname,
+        platform,
+        version,
+        createdAt: new Date(),
+        lastCheckin: new Date()
+      };
+
+      // Check if client already exists
+      const existingClient = await this.db.collection('clientInfo').findOne({
+        $or: [
+          { clientId },
+          { machineId },
+          { installPath }
+        ]
+      });
+
+      if (existingClient) {
+        // Update existing client
+        await this.db.collection('clientInfo').updateOne(
+          { _id: existingClient._id },
+          { 
+            $set: { 
+              version,
+              lastCheckin: new Date(),
+              updatedAt: new Date()
+            }
+          }
+        );
+        return { success: true, message: 'Client info updated' };
+      } else {
+        // Insert new client
+        await this.db.collection('clientInfo').insertOne(clientInfoData);
+        return { success: true, message: 'Client info created' };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async updateClientCheckin(clientId, version) {
+    try {
+      if (this.usesFallback) {
+        // Update in-memory client
+        const client = fallbackStorage.clients.find(c => c.clientId === clientId);
+        if (client) {
+          client.lastSeen = new Date().toISOString();
+        }
+        return { success: true, message: 'Client checkin updated in memory' };
+      }
+
+      await this.connect();
+      const result = await this.db.collection('clientInfo').updateOne(
+        { clientId },
+        { 
+          $set: { 
+            lastCheckin: new Date(),
+            version: version || 'unknown'
+          }
+        }
+      );
+
+      return { 
+        success: true, 
+        message: 'Client checkin updated',
+        updated: result.modifiedCount > 0
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getAllSecurityKeys() {
+    try {
+      if (this.usesFallback) {
+        return { success: true, data: [] };
+      }
+
+      await this.connect();
+      const keys = await this.db.collection('securityKeys')
+        .find({})
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      // Don't return actual key values for security
+      const processedKeys = keys.map(key => ({
+        _id: key._id.toString(),
+        clientId: key.clientId,
+        keyType: key.keyType,
+        hostname: key.hostname,
+        installPath: key.installPath,
+        createdAt: key.createdAt,
+        lastUsed: key.lastUsed
+      }));
+
+      return { success: true, data: processedKeys };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getAllClientInfo() {
+    try {
+      if (this.usesFallback) {
+        return { success: true, data: fallbackStorage.clients };
+      }
+
+      await this.connect();
+      const clients = await this.db.collection('clientInfo')
+        .find({})
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      const processedClients = clients.map(client => ({
+        _id: client._id.toString(),
+        clientId: client.clientId,
+        hostname: client.hostname,
+        platform: client.platform,
+        version: client.version,
+        installPath: client.installPath,
+        createdAt: client.createdAt,
+        lastCheckin: client.lastCheckin
+      }));
+
+      return { success: true, data: processedClients };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   async close() {
     if (this.client) {
       await this.client.close();
@@ -391,6 +706,68 @@ export default async function handler(req, res) {
 
       case 'getClientNotifications':
         result = await db.getClientNotifications(params.clientId || '');
+        break;
+
+      // Security Key Management Actions
+      case 'getSecurityKey':
+        result = await db.getSecurityKey(
+          params.clientId || '',
+          params.keyType || 'ENCRYPTION_KEY'
+        );
+        break;
+
+      case 'createSecurityKey':
+        result = await db.createSecurityKey(
+          params.clientId || '',
+          params.keyType || 'ENCRYPTION_KEY',
+          params.keyValue || '',
+          params.installPath || '',
+          params.hostname || ''
+        );
+        break;
+
+      case 'updateKeyLastUsed':
+        result = await db.updateKeyLastUsed(
+          params.clientId || '',
+          params.keyType || 'ENCRYPTION_KEY'
+        );
+        break;
+
+      // Client Info Management Actions
+      case 'getClientInfo':
+        result = await db.getClientInfo(
+          params.machineId || '',
+          params.installPath || '',
+          params.hostname || ''
+        );
+        break;
+
+      case 'createClientInfo':
+        result = await db.createClientInfo(
+          params.clientId || '',
+          params.machineId || '',
+          params.installationId || '',
+          params.installPath || '',
+          params.hostname || '',
+          params.platform || '',
+          params.version || ''
+        );
+        break;
+
+      case 'updateClientCheckin':
+        result = await db.updateClientCheckin(
+          params.clientId || '',
+          params.version || ''
+        );
+        break;
+
+      // Security Management Dashboard Actions
+      case 'getAllSecurityKeys':
+        result = await db.getAllSecurityKeys();
+        break;
+
+      case 'getAllClientInfo':
+        result = await db.getAllClientInfo();
         break;
     }
 

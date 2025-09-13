@@ -53,6 +53,26 @@ function setupEventListeners() {
         initDbButton.addEventListener('click', handleInitializeDatabase);
     }
     
+    // Security management tabs
+    const clientInfoTab = document.getElementById('clientInfoTab');
+    const securityKeysTab = document.getElementById('securityKeysTab');
+    if (clientInfoTab) {
+        clientInfoTab.addEventListener('click', () => switchSecurityTab('clientInfo'));
+    }
+    if (securityKeysTab) {
+        securityKeysTab.addEventListener('click', () => switchSecurityTab('securityKeys'));
+    }
+    
+    // Security management refresh buttons
+    const refreshClientsBtn = document.getElementById('refreshClients');
+    const refreshSecurityKeysBtn = document.getElementById('refreshSecurityKeys');
+    if (refreshClientsBtn) {
+        refreshClientsBtn.addEventListener('click', loadClientInfo);
+    }
+    if (refreshSecurityKeysBtn) {
+        refreshSecurityKeysBtn.addEventListener('click', loadSecurityKeys);
+    }
+    
     // Quick message buttons
     document.querySelectorAll('.btn-small').forEach(button => {
         button.addEventListener('click', function() {
@@ -1395,4 +1415,251 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize toggle states
     toggleMessageType();
     toggleBrowserUsageUI();
+    
+    // Load initial security data
+    loadClientInfo();
+    loadSecurityKeys();
 });
+
+// Security Management Functions
+function switchSecurityTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById(`${tabName}Tab`).classList.add('active');
+    
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById(`${tabName}Content`).classList.add('active');
+    
+    // Load data for the active tab
+    if (tabName === 'clientInfo') {
+        loadClientInfo();
+    } else if (tabName === 'securityKeys') {
+        loadSecurityKeys();
+    }
+}
+
+async function loadClientInfo() {
+    try {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'getAllClientInfo'
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            displayClientInfo(result.data || []);
+            updateLastRefreshed('clientsLastRefreshed');
+        } else {
+            displayClientInfoError(result.message);
+        }
+    } catch (error) {
+        console.error('Error loading client info:', error);
+        displayClientInfoError(error.message);
+    }
+}
+
+async function loadSecurityKeys() {
+    try {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'getAllSecurityKeys'
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            displaySecurityKeys(result.data || []);
+            updateLastRefreshed('keysLastRefreshed');
+        } else {
+            displaySecurityKeysError(result.message);
+        }
+    } catch (error) {
+        console.error('Error loading security keys:', error);
+        displaySecurityKeysError(error.message);
+    }
+}
+
+function displayClientInfo(clients) {
+    const container = document.getElementById('clientInfoList');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (clients.length === 0) {
+        container.innerHTML = '<div class="no-data">No client registrations found</div>';
+        return;
+    }
+    
+    clients.forEach(client => {
+        const clientDiv = document.createElement('div');
+        clientDiv.className = 'data-item client-info-item';
+        
+        const lastCheckinTime = formatTimestamp(client.lastCheckin);
+        const createdTime = formatTimestamp(client.createdAt);
+        const isOnline = isRecentCheckin(client.lastCheckin);
+        
+        clientDiv.innerHTML = `
+            <div class="data-header">
+                <div class="data-title">${escapeHtml(client.clientId)}</div>
+                <div class="data-status ${isOnline ? 'online' : 'offline'}">
+                    ${isOnline ? '🟢 Online' : '⚫ Offline'}
+                </div>
+            </div>
+            <div class="data-details">
+                <div class="detail-row">
+                    <strong>Hostname:</strong> ${escapeHtml(client.hostname || 'Unknown')}
+                </div>
+                <div class="detail-row">
+                    <strong>Platform:</strong> ${escapeHtml(client.platform || 'Unknown')}
+                </div>
+                <div class="detail-row">
+                    <strong>Version:</strong> ${escapeHtml(client.version || 'Unknown')}
+                </div>
+                <div class="detail-row">
+                    <strong>Install Path:</strong> <code>${escapeHtml(client.installPath || 'Unknown')}</code>
+                </div>
+                <div class="detail-row">
+                    <strong>Created:</strong> ${createdTime}
+                </div>
+                <div class="detail-row">
+                    <strong>Last Checkin:</strong> ${lastCheckinTime}
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(clientDiv);
+    });
+}
+
+function displaySecurityKeys(keys) {
+    const container = document.getElementById('securityKeysList');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (keys.length === 0) {
+        container.innerHTML = '<div class="no-data">No security keys found</div>';
+        return;
+    }
+    
+    keys.forEach(key => {
+        const keyDiv = document.createElement('div');
+        keyDiv.className = 'data-item security-key-item';
+        
+        const createdTime = formatTimestamp(key.createdAt);
+        const lastUsedTime = formatTimestamp(key.lastUsed);
+        const isRecentlyUsed = isRecentUsage(key.lastUsed);
+        
+        keyDiv.innerHTML = `
+            <div class="data-header">
+                <div class="data-title">${escapeHtml(key.keyType)}</div>
+                <div class="data-status ${isRecentlyUsed ? 'active' : 'inactive'}">
+                    ${isRecentlyUsed ? '🔄 Active' : '⏸️ Inactive'}
+                </div>
+            </div>
+            <div class="data-details">
+                <div class="detail-row">
+                    <strong>Client ID:</strong> ${escapeHtml(key.clientId)}
+                </div>
+                <div class="detail-row">
+                    <strong>Hostname:</strong> ${escapeHtml(key.hostname || 'Unknown')}
+                </div>
+                <div class="detail-row">
+                    <strong>Install Path:</strong> <code>${escapeHtml(key.installPath || 'Unknown')}</code>
+                </div>
+                <div class="detail-row">
+                    <strong>Created:</strong> ${createdTime}
+                </div>
+                <div class="detail-row">
+                    <strong>Last Used:</strong> ${lastUsedTime}
+                </div>
+                <div class="security-note">
+                    🔐 <em>Key values are never displayed for security reasons</em>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(keyDiv);
+    });
+}
+
+function displayClientInfoError(message) {
+    const container = document.getElementById('clientInfoList');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="error-state">
+            <div class="error-icon">⚠️</div>
+            <div>Failed to load client information</div>
+            <div style="font-size: 14pt; margin-top: 0.5rem;">${escapeHtml(message)}</div>
+            <button class="btn-small" onclick="loadClientInfo()">Retry</button>
+        </div>
+    `;
+}
+
+function displaySecurityKeysError(message) {
+    const container = document.getElementById('securityKeysList');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="error-state">
+            <div class="error-icon">⚠️</div>
+            <div>Failed to load security keys</div>
+            <div style="font-size: 14pt; margin-top: 0.5rem;">${escapeHtml(message)}</div>
+            <button class="btn-small" onclick="loadSecurityKeys()">Retry</button>
+        </div>
+    `;
+}
+
+function updateLastRefreshed(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
+    }
+}
+
+function isRecentCheckin(lastCheckin) {
+    if (!lastCheckin) return false;
+    
+    try {
+        const checkinTime = new Date(lastCheckin);
+        const now = new Date();
+        const diffMinutes = (now - checkinTime) / (1000 * 60);
+        return diffMinutes < 5; // Consider online if checked in within last 5 minutes
+    } catch (error) {
+        return false;
+    }
+}
+
+function isRecentUsage(lastUsed) {
+    if (!lastUsed) return false;
+    
+    try {
+        const usedTime = new Date(lastUsed);
+        const now = new Date();
+        const diffHours = (now - usedTime) / (1000 * 60 * 60);
+        return diffHours < 24; // Consider active if used within last 24 hours
+    } catch (error) {
+        return false;
+    }
+}
+
+// Export security functions for global access
+window.loadClientInfo = loadClientInfo;
+window.loadSecurityKeys = loadSecurityKeys;

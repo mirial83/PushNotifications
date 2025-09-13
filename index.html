@@ -204,6 +204,54 @@
                         <p class="admin-warning"><strong>Warning:</strong> This will immediately uninstall the client from all computers. No approval required.</p>
                     </div>
                 </div>
+
+                <!-- Security Management Section -->
+                <div class="security-section">
+                    <h3>🔐 Security Management</h3>
+                    
+                    <div class="security-tabs">
+                        <button type="button" class="tab-button active" id="clientInfoTab">Client Information</button>
+                        <button type="button" class="tab-button" id="securityKeysTab">Security Keys</button>
+                    </div>
+
+                    <!-- Client Information Tab -->
+                    <div class="tab-content active" id="clientInfoContent">
+                        <div class="section-description">
+                            <p>View and manage all registered client installations with MongoDB backend.</p>
+                        </div>
+                        
+                        <div class="action-buttons">
+                            <button type="button" id="refreshClients" class="btn-secondary">🔄 Refresh Client List</button>
+                            <span id="clientsLastRefreshed" class="last-refreshed">Never refreshed</span>
+                        </div>
+                        
+                        <div id="clientInfoList" class="data-list">
+                            <div class="loading-data">
+                                <div class="loading-spinner"></div>
+                                <div>Loading client information...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Security Keys Tab -->
+                    <div class="tab-content" id="securityKeysContent">
+                        <div class="section-description">
+                            <p>Monitor encryption keys and security data stored in MongoDB. Key values are never displayed for security.</p>
+                        </div>
+                        
+                        <div class="action-buttons">
+                            <button type="button" id="refreshSecurityKeys" class="btn-secondary">🔄 Refresh Security Keys</button>
+                            <span id="keysLastRefreshed" class="last-refreshed">Never refreshed</span>
+                        </div>
+                        
+                        <div id="securityKeysList" class="data-list">
+                            <div class="loading-data">
+                                <div class="loading-spinner"></div>
+                                <div>Loading security keys...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 </div>
             </main>
         </div>
