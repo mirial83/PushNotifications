@@ -1615,6 +1615,9 @@ class DatabaseOperations {
   // Version History Management Methods
   async syncVersionHistory() {
     try {
+      // First check if we need to fix existing version numbers
+      await this.fixExistingVersionNumbers();
+      
       // Get the latest version from database
       const latestDbVersion = await this.db.collection('versionHistory')
         .findOne({}, { sort: { createdAt: -1 } });
@@ -1635,6 +1638,63 @@ class DatabaseOperations {
       }
     } catch (error) {
       console.log('Version sync failed:', error.message);
+    }
+  }
+  
+  async fixExistingVersionNumbers() {
+    try {
+      // Get all versions sorted by original date (newest first)
+      const allVersions = await this.db.collection('versionHistory')
+        .find({})
+        .sort({ date: -1 })
+        .toArray();
+      
+      if (allVersions.length === 0) {
+        return;
+      }
+      
+      console.log('Checking if version numbers need to be fixed...');
+      
+      // Check if the newest version has the highest version number
+      const newestVersion = allVersions[0];
+      const highestVersionNumber = await this.db.collection('versionHistory')
+        .findOne({}, { sort: { versionNumber: -1 } });
+      
+      if (newestVersion._id.equals(highestVersionNumber._id)) {
+        // Version numbers are already correct
+        return;
+      }
+      
+      console.log('Fixing version numbers for existing records...');
+      
+      // Renumber all versions - newest gets highest number
+      const updates = allVersions.map((version, index) => {
+        const newVersionNumber = index + 1;
+        const major = 1;
+        const minor = Math.floor(index / 10);
+        const patch = index % 10;
+        const newSemanticVersion = `${major}.${minor}.${patch}`;
+        
+        return {
+          updateOne: {
+            filter: { _id: version._id },
+            update: {
+              $set: {
+                versionNumber: newVersionNumber,
+                version: newSemanticVersion,
+                isCurrent: index === 0 // Mark newest as current
+              }
+            }
+          }
+        };
+      });
+      
+      if (updates.length > 0) {
+        await this.db.collection('versionHistory').bulkWrite(updates);
+        console.log(`Fixed version numbers for ${updates.length} existing records`);
+      }
+    } catch (error) {
+      console.error('Error fixing existing version numbers:', error);
     }
   }
   
