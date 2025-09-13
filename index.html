@@ -118,8 +118,13 @@
                             <span class="optional-label">(Required when browser usage is enabled)</span>
                         </label>
                         
+                        <!-- Quick Add Website Buttons (Dynamic) -->
+                        <div id="quickAddButtons" class="quick-add-websites" style="display: none;">
+                            <small>Quick add educational websites:</small><br>
+                            <div id="websiteButtonsContainer"></div>
+                        </div>
                         
-                        <textarea id="allowedWebsites" 
+                        <textarea id="allowedWebsites"
                                 placeholder="Enter allowed websites, one per line or comma-separated&#10;&#10;Examples:&#10;docs.google.com&#10;github.com&#10;stackoverflow.com&#10;developer.mozilla.org&#10;&#10;Only these websites will be accessible when browsers are enabled.&#10;Leave EMPTY to block all internet access (browsers will open but show no content)." 
                                 rows="6"></textarea>
                         

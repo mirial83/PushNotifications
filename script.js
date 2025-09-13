@@ -845,6 +845,9 @@ async function loadPresetMessages() {
                         // Update UI visibility based on browser usage
                         toggleBrowserUsageUI();
                         
+                        // Update quick-add buttons
+                        updateQuickAddButtons();
+                        
                         // Switch to custom message mode to show the message
                         const customMessageRadio = document.getElementById('customMessage');
                         if (customMessageRadio) {
@@ -866,6 +869,9 @@ async function loadPresetMessages() {
                         }
                         
                         toggleBrowserUsageUI();
+                        
+                        // Update quick-add buttons
+                        updateQuickAddButtons();
                     }
                 });
             }
@@ -971,6 +977,9 @@ function toggleBrowserUsageUI() {
             websitesGroup.classList.add('hidden');
         }
     }
+    
+    // Update quick-add buttons
+    updateQuickAddButtons();
 }
 
 // Save Custom Message functionality
@@ -1229,6 +1238,88 @@ function getTimeSinceRemoved(removedAt) {
     }
 }
 
+// Update quick-add website buttons visibility and functionality
+async function updateQuickAddButtons() {
+    const quickAddContainer = document.getElementById('quickAddWebsites');
+    const presetSelect = document.getElementById('presetSelect');
+    const allowBrowserUsage = document.getElementById('allowBrowserUsage');
+    
+    if (!quickAddContainer) return;
+    
+    // Check if "Do your schoolwork" preset is selected and browser usage is allowed
+    let showQuickAdd = false;
+    
+    if (presetSelect && presetSelect.value && allowBrowserUsage && allowBrowserUsage.checked) {
+        try {
+            const preset = JSON.parse(presetSelect.value);
+            if (preset.text === 'Do your schoolwork') {
+                showQuickAdd = true;
+            }
+        } catch (error) {
+            console.warn('Error parsing preset value:', error);
+        }
+    }
+    
+    if (showQuickAdd) {
+        quickAddContainer.classList.remove('hidden');
+        
+        // Load website button groups if not already loaded
+        if (!quickAddContainer.hasAttribute('data-loaded')) {
+            await loadQuickAddWebsiteButtons();
+            quickAddContainer.setAttribute('data-loaded', 'true');
+        }
+    } else {
+        quickAddContainer.classList.add('hidden');
+    }
+}
+
+// Load quick-add website buttons from config
+async function loadQuickAddWebsiteButtons() {
+    try {
+        const response = await fetch(`${config.API_BASE_URL}/api/config?type=preset-messages`);
+        const result = await response.json();
+        
+        if (result.success && result.data && result.data.presetMessages) {
+            const schoolworkPreset = result.data.presetMessages.find(p => p.text === 'Do your schoolwork');
+            
+            if (schoolworkPreset && schoolworkPreset.websiteButtons) {
+                const buttonsContainer = document.querySelector('#quickAddWebsites .button-group');
+                if (buttonsContainer) {
+                    buttonsContainer.innerHTML = '';
+                    
+                    schoolworkPreset.websiteButtons.forEach(buttonGroup => {
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'btn-small';
+                        button.textContent = buttonGroup.name;
+                        button.onclick = () => addWebsiteGroup(buttonGroup.websites);
+                        buttonsContainer.appendChild(button);
+                    });
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load quick-add website buttons:', error);
+    }
+}
+
+// Add a group of websites to the allowed websites textarea
+function addWebsiteGroup(websites) {
+    const allowedWebsitesTextarea = document.getElementById('allowedWebsites');
+    if (!allowedWebsitesTextarea || !websites || !Array.isArray(websites)) return;
+    
+    const currentWebsites = allowedWebsitesTextarea.value.trim();
+    const newWebsites = websites.join('\n');
+    
+    if (currentWebsites) {
+        allowedWebsitesTextarea.value = currentWebsites + '\n' + newWebsites;
+    } else {
+        allowedWebsitesTextarea.value = newWebsites;
+    }
+    
+    updateWebsiteCount();
+}
+
 // Export for global access
 window.dismissIncompleteNotification = dismissIncompleteNotification;
 
@@ -1259,7 +1350,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add browser usage toggle listener
     const allowBrowserUsage = document.getElementById('allowBrowserUsage');
     if (allowBrowserUsage) {
-        allowBrowserUsage.addEventListener('change', toggleBrowserUsageUI);
+        allowBrowserUsage.addEventListener('change', function() {
+            toggleBrowserUsageUI();
+            updateQuickAddButtons();
+        });
+    }
+    
+    // Add preset selection listener for quick-add buttons
+    const presetSelect = document.getElementById('presetSelect');
+    if (presetSelect) {
+        // Listen for preset changes to update quick-add buttons
+        const originalListener = presetSelect.onchange;
+        presetSelect.addEventListener('change', function(event) {
+            // Let the original handler run first
+            if (originalListener) originalListener.call(this, event);
+            // Then update quick-add buttons
+            setTimeout(updateQuickAddButtons, 100);
+        });
     }
     
     // Initialize toggle states
