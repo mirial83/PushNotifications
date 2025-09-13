@@ -106,7 +106,7 @@ function loadInitialData() {
 async function initializeDatabase() {
     try {
         // First check if database is already initialized
-        const checkResponse = await fetch(`${config.API_BASE_URL}/api/index.php?action=isDatabaseInitialized`, {
+        const checkResponse = await fetch(`${config.API_BASE_URL}/api/index?action=isDatabaseInitialized`, {
             method: 'GET'
         });
         
@@ -128,7 +128,7 @@ async function handleInitializeDatabase() {
     try {
         showStatus('Initializing database...', 'info');
         
-        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -157,7 +157,7 @@ async function refreshNotifications() {
     try {
         updateConnectionStatus(true);
         
-        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -377,7 +377,7 @@ async function handleSendNotification(event) {
     try {
         showStatus('Sending notification...', 'info');
         
-        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -404,7 +404,7 @@ async function handleSendNotification(event) {
 
 async function acknowledgeNotification(notificationId) {
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -435,7 +435,7 @@ async function snoozeNotification(notificationId) {
     if (!minutes || isNaN(minutes)) return;
     
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -464,7 +464,7 @@ async function snoozeNotification(notificationId) {
 
 async function approveWebsiteRequest(requestId) {
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -492,7 +492,7 @@ async function approveWebsiteRequest(requestId) {
 
 async function denyWebsiteRequest(requestId) {
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -524,7 +524,7 @@ async function approveUninstallRequest(requestId) {
     }
     
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -555,7 +555,7 @@ async function denyUninstallRequest(requestId) {
     if (!reason) return;
     
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -593,7 +593,7 @@ async function handleUninstallAllClients() {
     try {
         showStatus('Uninstalling all clients...', 'info');
         
-        const response = await fetch(`${config.API_BASE_URL}/api/index.php`, {
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -794,7 +794,7 @@ function showStatus(message, type = 'info') {
 
 async function loadPresetMessages() {
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api/config.php?type=preset-messages`);
+        const response = await fetch(`${config.API_BASE_URL}/api/config?type=preset-messages`);
         const result = await response.json();
         
         if (result.success && result.data && result.data.presetMessages) {
