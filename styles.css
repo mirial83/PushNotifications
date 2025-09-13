@@ -1784,6 +1784,119 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     text-align: center;
 }
 
+/* Data Table Styles (for users and clients tables) */
+.data-table {
+    width: 100%;
+    background-color: white;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    border-collapse: collapse;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+}
+
+.data-table th {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    color: white;
+    padding: 1rem;
+    text-align: left;
+    font-weight: bold;
+    font-size: 16pt;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.data-table th:first-child {
+    border-top-left-radius: 5px;
+}
+
+.data-table th:last-child {
+    border-top-right-radius: 5px;
+}
+
+.data-table td {
+    padding: 1rem;
+    border-bottom: 1px solid #dee2e6;
+    font-size: 16pt;
+    color: #495057;
+}
+
+.data-table tr:hover {
+    background-color: #f8f9fa;
+}
+
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tr:last-child td:first-child {
+    border-bottom-left-radius: 5px;
+}
+
+.data-table tr:last-child td:last-child {
+    border-bottom-right-radius: 5px;
+}
+
+.data-table code {
+    background-color: #f8f9fa;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    border: 1px solid #e9ecef;
+    font-family: monospace;
+    font-size: 14pt;
+    color: #495057;
+}
+
+/* Badge Styles */
+.role-badge,
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+    font-size: 14pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.role-badge.role-admin {
+    background-color: #dc3545;
+    color: white;
+}
+
+.role-badge.role-user {
+    background-color: #007bff;
+    color: white;
+}
+
+.status-badge.active,
+.status-badge.online {
+    background-color: #28a745;
+    color: white;
+}
+
+.status-badge.inactive,
+.status-badge.offline {
+    background-color: #6c757d;
+    color: white;
+}
+
+/* Responsive data tables */
+@media (max-width: 768px) {
+    .data-table {
+        font-size: 14pt;
+    }
+    
+    .data-table th,
+    .data-table td {
+        padding: 0.75rem 0.5rem;
+        font-size: 14pt;
+    }
+    
+    .data-table code {
+        font-size: 12pt;
+    }
+}
+
 /* Version History Table Styles */
 .versions-table {
     background-color: white;
