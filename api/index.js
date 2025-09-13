@@ -222,6 +222,239 @@ class DatabaseOperations {
     };
   }
 
+  async getVersionHistory() {
+    // Simulated Vercel deployment data - in production, this would come from Vercel API
+    const deployments = [
+      {
+        id: 'CGzygaJ7p',
+        status: 'Ready',
+        deploymentTime: '12s',
+        age: '9m ago',
+        branch: 'main',
+        commit: 'a0dd263',
+        message: 'styling',
+        author: 'mirial83',
+        isCurrent: true
+      },
+      {
+        id: 'DAyuRwbx8',
+        status: 'Ready',
+        deploymentTime: '11s',
+        age: '26m ago',
+        branch: 'main',
+        commit: '2e5b731',
+        message: 'updating admin page structure',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'DmdJzGeBf',
+        status: 'Ready',
+        deploymentTime: '13s',
+        age: '41m ago',
+        branch: 'main',
+        commit: '779920c',
+        message: 'admin database update',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'G3Z2NTYQK',
+        status: 'Ready',
+        deploymentTime: '13s',
+        age: '44m ago',
+        branch: 'main',
+        commit: '53c740d',
+        message: 'add admin user setup',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'HTKLKHD3g',
+        status: 'Ready',
+        deploymentTime: '11s',
+        age: '47m ago',
+        branch: 'main',
+        commit: '36242cb',
+        message: 'website update for authentication',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: '55uGPdMxu',
+        status: 'Ready',
+        deploymentTime: '11s',
+        age: '1h ago',
+        branch: 'main',
+        commit: '3e6b3b7',
+        message: 'security updates to client and site',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'HLFLDstwt',
+        status: 'Ready',
+        deploymentTime: '11s',
+        age: '4h ago',
+        branch: 'main',
+        commit: '9c98b06',
+        message: 'security features on app and site',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: '97BFTDafT',
+        status: 'Ready',
+        deploymentTime: '11s',
+        age: '19h ago',
+        branch: 'main',
+        commit: '90bcc52',
+        message: 'quick add buttons debugging',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'BFDadMVow',
+        status: 'Ready',
+        deploymentTime: '11s',
+        age: '19h ago',
+        branch: 'main',
+        commit: '6266dd7',
+        message: 'quick add buttons',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'Q2geZQ3dX',
+        status: 'Ready',
+        deploymentTime: '12s',
+        age: '19h ago',
+        branch: 'main',
+        commit: '22cb94e',
+        message: 'more visibility updates',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: '4mGMZ1wjw',
+        status: 'Ready',
+        deploymentTime: '12s',
+        age: '20h ago',
+        branch: 'main',
+        commit: '06a6bfa',
+        message: 'visual updates',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: '5C8GuWDdF',
+        status: 'Ready',
+        deploymentTime: '11s',
+        age: '20h ago',
+        branch: 'main',
+        commit: '506274e',
+        message: 'remove unused files',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: '4KiY7ZjFo',
+        status: 'Ready',
+        deploymentTime: '13s',
+        age: '21h ago',
+        branch: 'main',
+        commit: '8ac9528',
+        message: 'installer updates to remove php',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: '2XyXfDoUu',
+        status: 'Ready',
+        deploymentTime: '11s',
+        age: '21h ago',
+        branch: 'main',
+        commit: '6474943',
+        message: 'revising php files to remove all php access',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'CCoXyS4oL',
+        status: 'Ready',
+        deploymentTime: '11s',
+        age: '21h ago',
+        branch: 'main',
+        commit: '92b416e',
+        message: 'attempt to fix access error',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: '7WX9mTnJD',
+        status: 'Ready',
+        deploymentTime: '13s',
+        age: '21h ago',
+        branch: 'main',
+        commit: '36f78b5',
+        message: 'attempt to fix build error',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'Hf5oEaTXR',
+        status: 'Ready',
+        deploymentTime: '35s',
+        age: '21h ago',
+        branch: 'main',
+        commit: 'JDkv8eAKJ',
+        message: 'Redeploy',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'JDkv8eAKJ',
+        status: 'Ready',
+        deploymentTime: '31s',
+        age: '21h ago',
+        branch: 'main',
+        commit: '462f5b9',
+        message: 'updating for mongodb api',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'FhVMeJ9Nd',
+        status: 'Ready',
+        deploymentTime: '29s',
+        age: '22h ago',
+        branch: 'main',
+        commit: '9a1579e',
+        message: 'removing file creation fallbacks',
+        author: 'mirial83',
+        isCurrent: false
+      },
+      {
+        id: 'GkESF7zYT',
+        status: 'Ready',
+        deploymentTime: '28s',
+        age: '22h ago',
+        branch: 'main',
+        commit: 'a1dc1f2',
+        message: 'updating js functions',
+        author: 'mirial83',
+        isCurrent: false
+      }
+    ];
+
+    return {
+      success: true,
+      data: deployments,
+      totalDeployments: deployments.length,
+      lastRefreshed: new Date().toISOString()
+    };
+  }
+
   async registerClient(clientId, clientName, computerName) {
     try {
       const client = {
@@ -1732,6 +1965,11 @@ export default async function handler(req, res) {
 
       case 'deactivateUser':
         result = await db.deactivateUser(params.userId || '');
+        break;
+
+      // Version History Actions
+      case 'getVersionHistory':
+        result = await db.getVersionHistory();
         break;
     }
 

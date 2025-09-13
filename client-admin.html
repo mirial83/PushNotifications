@@ -34,23 +34,40 @@
         <!-- Admin Navigation Menu -->
         <nav class="admin-nav">
             <div class="nav-tabs">
-                <a href="admin.html" class="nav-link">📱 Notifications</a>
-                <a href="data-management.html" class="nav-link">📁 Data Management</a>
-                <a href="client-admin.html" class="nav-link active">🖥️ Client Administration</a>
-                <a href="account-admin.html" class="nav-link">👥 Account Administration</a>
-                <a href="version-history.html" class="nav-link">📊 Version History</a>
-                <button class="logout-btn nav-logout" onclick="handleLogout()">🔓 Logout</button>
+                <a href="admin.html" class="nav-link">Notifications</a>
+                <a href="data-management.html" class="nav-link">Data Management</a>
+                <a href="client-admin.html" class="nav-link active">Client Administration</a>
+                <a href="account-admin.html" class="nav-link">Account Administration</a>
+                <a href="version-history.html" class="nav-link">Version History</a>
+                <button class="logout-btn nav-logout" onclick="handleLogout()">Logout</button>
             </div>
         </nav>
 
         <div class="main-content">
-            <!-- Left Sidebar - Registered Clients -->
+            <!-- Left Sidebar - Active Notifications -->
             <aside class="sidebar">
-                <h2>Registered Clients</h2>
-                <div id="registeredClientsList" class="clients-list">
-                    <div class="loading-clients">
+                <h2>Active Notifications</h2>
+                <div id="activeNotificationsList" class="notifications-list">
+                    <div class="loading-notifications">
                         <div class="loading-spinner"></div>
-                        <div>Loading clients...</div>
+                        <div>Loading notifications...</div>
+                    </div>
+                    <div class="no-notifications" style="display: none;">No active notifications</div>
+                </div>
+                
+                <!-- Clear All Notifications Button -->
+                <div class="sidebar-actions">
+                    <button type="button" id="clearAllNotifications" class="btn-warning btn-block">Clear All Notifications</button>
+                </div>
+                
+                <!-- Registered Clients List -->
+                <div class="registered-clients-section">
+                    <h3>Registered Clients</h3>
+                    <div id="registeredClientsList" class="clients-list">
+                        <div class="loading-clients">
+                            <div class="loading-spinner"></div>
+                            <div>Loading clients...</div>
+                        </div>
                     </div>
                 </div>
             </aside>

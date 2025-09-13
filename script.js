@@ -6,11 +6,17 @@ const state = {
     isConnected: false,
     lastRefresh: null,
     refreshInterval: null,
+    clientMonitorInterval: null,
+    connectionHealthInterval: null,
     dbInitialized: false,
     clientCount: 0,
+    registeredClients: [],
     refreshIntervalSetting: 60, // 1 minute (changed from 30 seconds)
+    clientMonitorSetting: 30, // 30 seconds for client monitoring
+    connectionHealthSetting: 45, // 45 seconds for connection health
     currentUser: null,
-    currentSection: 'notifications'
+    currentSection: 'notifications',
+    backgroundProcessesActive: false
 };
 
 // Configuration
@@ -154,8 +160,9 @@ function initializeAdmin() {
     // Load initial data
     loadInitialData();
     
-    // Setup refresh timer
+    // Setup refresh timer and background processes
     startRefreshTimer();
+    startBackgroundProcesses();
     
     // Setup admin panel
     setupAdminPanel();
@@ -232,11 +239,18 @@ async function handleLogin(event) {
 // Logout handling
 async function handleLogout() {
     try {
+        // Stop background processes before logging out
+        stopBackgroundProcesses();
+        
         await apiCall('logout');
         clearSessionToken();
         window.location.href = 'index.html';
     } catch (error) {
         console.error('Logout error:', error);
+        
+        // Stop background processes even if logout fails
+        stopBackgroundProcesses();
+        
         clearSessionToken();
         window.location.href = 'index.html';
     }
@@ -319,6 +333,9 @@ function setupEventListeners() {
     
     // Cleanup old data button
     document.getElementById('cleanupOldData')?.addEventListener('click', handleCleanupOldData);
+    
+    // Clear all notifications button
+    document.getElementById('clearAllNotifications')?.addEventListener('click', handleClearAllNotifications);
 }
 
 function loadInitialData() {
@@ -969,6 +986,143 @@ function startCountdown() {
     setInterval(updateCountdown, config.REFRESH_COUNTDOWN_UPDATE);
 }
 
+// Start background processes for continuous monitoring
+function startBackgroundProcesses() {
+    if (state.backgroundProcessesActive) {
+        console.log('Background processes already running');
+        return;
+    }
+    
+    console.log('Starting background processes...');
+    state.backgroundProcessesActive = true;
+    
+    // Start client monitoring
+    startClientMonitoring();
+    
+    // Start connection health monitoring
+    startConnectionHealthMonitoring();
+}
+
+function stopBackgroundProcesses() {
+    console.log('Stopping background processes...');
+    
+    if (state.clientMonitorInterval) {
+        clearInterval(state.clientMonitorInterval);
+        state.clientMonitorInterval = null;
+    }
+    
+    if (state.connectionHealthInterval) {
+        clearInterval(state.connectionHealthInterval);
+        state.connectionHealthInterval = null;
+    }
+    
+    state.backgroundProcessesActive = false;
+}
+
+// Client monitoring - updates sidebar and maintains client status
+function startClientMonitoring() {
+    if (state.clientMonitorInterval) {
+        clearInterval(state.clientMonitorInterval);
+    }
+    
+    state.clientMonitorInterval = setInterval(async () => {
+        try {
+            // Load registered clients for sidebar on all pages
+            await loadRegisteredClientsBackground();
+            
+            // Update client status in global state
+            await updateGlobalClientStatus();
+        } catch (error) {
+            console.error('Error in client monitoring:', error);
+        }
+    }, state.clientMonitorSetting * 1000);
+    
+    console.log(`Client monitoring started (${state.clientMonitorSetting}s interval)`);
+}
+
+// Connection health monitoring - ensures database connectivity
+function startConnectionHealthMonitoring() {
+    if (state.connectionHealthInterval) {
+        clearInterval(state.connectionHealthInterval);
+    }
+    
+    state.connectionHealthInterval = setInterval(async () => {
+        try {
+            await performConnectionHealthCheck();
+        } catch (error) {
+            console.error('Error in connection health monitoring:', error);
+        }
+    }, state.connectionHealthSetting * 1000);
+    
+    console.log(`Connection health monitoring started (${state.connectionHealthSetting}s interval)`);
+}
+
+// Background client loading (silent, no status messages)
+async function loadRegisteredClientsBackground() {
+    try {
+        const result = await apiCall('getAllMacClients');
+        
+        if (result && result.success) {
+            state.registeredClients = result.data || [];
+            displayRegisteredClientsList(state.registeredClients);
+        }
+    } catch (error) {
+        console.error('Background client loading error:', error);
+    }
+}
+
+// Update global client status and count
+async function updateGlobalClientStatus() {
+    try {
+        const result = await apiCall('getActiveNotifications');
+        
+        if (result && result.success) {
+            const newClientCount = result.clientCount || 0;
+            
+            // Update client count if it changed
+            if (state.clientCount !== newClientCount) {
+                state.clientCount = newClientCount;
+                
+                // Update UI elements that show client count
+                const clientCountElement = document.getElementById('clientCount');
+                if (clientCountElement) {
+                    clientCountElement.textContent = `${state.clientCount} client(s)`;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Global client status update error:', error);
+    }
+}
+
+// Perform connection health check
+async function performConnectionHealthCheck() {
+    try {
+        const response = await fetch(`${config.API_BASE_URL}/api/index?action=healthCheck`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${getSessionToken()}`
+            }
+        });
+        
+        const isHealthy = response.ok;
+        
+        // Update connection status if it changed
+        if (state.isConnected !== isHealthy) {
+            updateConnectionStatus(isHealthy);
+            
+            if (!isHealthy) {
+                console.warn('Database connection health check failed');
+            } else {
+                console.log('Database connection restored');
+            }
+        }
+    } catch (error) {
+        console.error('Connection health check error:', error);
+        updateConnectionStatus(false);
+    }
+}
+
 function updateConnectionStatus(isConnected) {
     state.isConnected = isConnected;
     
@@ -1325,6 +1479,31 @@ function getCurrentMessageText() {
 }
 
 // addWebsite function removed - quick add buttons no longer present
+
+// Clear all notifications functionality
+async function handleClearAllNotifications() {
+    if (!confirm('Are you sure you want to clear ALL active notifications? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        showStatus('Clearing all notifications...', 'info');
+        
+        const result = await apiCall('clearAllNotifications');
+        
+        if (result && result.success) {
+            showStatus('All notifications cleared successfully!', 'success');
+            
+            // Refresh notifications to show updated list
+            await refreshNotifications();
+        } else {
+            showStatus(result ? result.message : 'Failed to clear notifications', 'error');
+        }
+    } catch (error) {
+        console.error('Error clearing all notifications:', error);
+        showStatus('Failed to clear notifications. Please try again.', 'error');
+    }
+}
 
 // Cleanup old data functionality
 async function handleCleanupOldData() {
@@ -2282,6 +2461,9 @@ function setupAdminButtonListeners() {
     document.getElementById('cleanupOldData')?.addEventListener('click', handleCleanupOldData);
     document.getElementById('exportNotifications')?.addEventListener('click', exportNotifications);
     
+    // Version history button
+    document.getElementById('refreshVersionHistory')?.addEventListener('click', loadVersionHistory);
+    
     // Logout button
     document.getElementById('adminLogoutButton')?.addEventListener('click', handleLogout);
 }
@@ -2301,6 +2483,10 @@ function switchAdminSection(sectionName) {
     
     // Update state
     state.currentSection = sectionName;
+    
+    // Background processes (refresh timer, client monitoring, connection health) 
+    // continue running seamlessly during section switches - no restart needed
+    console.log(`Switched to ${sectionName} section - background processes continue running`);
     
     // Load section-specific data
     switch (sectionName) {
@@ -2506,25 +2692,80 @@ async function loadVersionHistory() {
     const container = document.getElementById('versionHistoryContainer');
     if (!container) return;
     
+    // Show loading state
+    container.innerHTML = '<div class="loading-state">Loading version history...</div>';
+    
     try {
-        const result = await apiCall('get_version');
+        const result = await apiCall('getVersionHistory');
         
-        if (result && result.success) {
-            container.innerHTML = `
-                <div class="version-info">
-                    <h4>Current Version: ${escapeHtml(result.currentVersion)}</h4>
-                    <p><strong>Release Notes:</strong> ${escapeHtml(result.releaseNotes)}</p>
-                    <p><strong>Auto Update:</strong> ${result.autoUpdateEnabled ? 'Enabled' : 'Disabled'}</p>
-                    <p><strong>Last Updated:</strong> ${formatTimestamp(result.timestamp)}</p>
-                </div>
-            `;
+        if (result && result.success && result.data) {
+            displayVersionHistory(result.data, result.totalDeployments, result.lastRefreshed);
         } else {
-            container.innerHTML = '<div class="error-state">Failed to load version information</div>';
+            container.innerHTML = '<div class="error-state">Failed to load version history</div>';
         }
     } catch (error) {
         console.error('Error loading version history:', error);
-        container.innerHTML = '<div class="error-state">Failed to load version information</div>';
+        container.innerHTML = '<div class="error-state">Failed to load version history</div>';
     }
+}
+
+function displayVersionHistory(deployments, totalDeployments, lastRefreshed) {
+    const container = document.getElementById('versionHistoryContainer');
+    if (!container) return;
+    
+    let html = `
+        <div class="version-history-header">
+            <h4>Deployment History (${totalDeployments} deployments)</h4>
+            <p class="last-refreshed">Last refreshed: ${formatTimestamp(lastRefreshed)}</p>
+        </div>
+        <div class="deployments-list">
+    `;
+    
+    if (deployments.length === 0) {
+        html += '<div class="no-data">No deployment history found</div>';
+    } else {
+        deployments.forEach(deployment => {
+            const statusClass = deployment.status === 'Ready' ? 'ready' : 'failed';
+            const isCurrentBadge = deployment.isCurrent ? '<span class="current-badge">CURRENT</span>' : '';
+            
+            html += `
+                <div class="deployment-item ${deployment.isCurrent ? 'current' : ''}">
+                    <div class="deployment-header">
+                        <div class="deployment-id">
+                            <strong>${escapeHtml(deployment.id)}</strong>
+                            ${isCurrentBadge}
+                        </div>
+                        <div class="deployment-status status-${statusClass}">
+                            ${deployment.status === 'Ready' ? '✅' : '❌'} ${escapeHtml(deployment.status)}
+                        </div>
+                    </div>
+                    <div class="deployment-details">
+                        <div class="detail-row">
+                            <strong>Message:</strong> ${escapeHtml(deployment.message)}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Author:</strong> ${escapeHtml(deployment.author)}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Branch:</strong> ${escapeHtml(deployment.branch)}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Commit:</strong> <code>${escapeHtml(deployment.commit)}</code>
+                        </div>
+                        <div class="detail-row">
+                            <strong>Deployment Time:</strong> ${escapeHtml(deployment.deploymentTime)}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Age:</strong> ${escapeHtml(deployment.age)}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
 }
 
 // Placeholder functions for admin features (to be implemented)
