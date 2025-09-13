@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="styles.css">
     <style>
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #008080;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -121,27 +121,9 @@
             border: 1px solid #cfc;
         }
         
-        .download-link {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: rgba(255, 255, 255, 0.8);
-            text-decoration: none;
-            font-size: 14px;
-            padding: 8px 16px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 4px;
-            transition: all 0.3s ease;
-        }
-        
-        .download-link:hover {
-            color: white;
-            background: rgba(255, 255, 255, 0.1);
-        }
     </style>
 </head>
 <body>
-    <a href="download.html" class="download-link">📥 Download Client</a>
     
     <div class="login-container">
         <div class="login-header">
@@ -171,9 +153,43 @@
     <script>
         // Login page JavaScript
         document.addEventListener('DOMContentLoaded', function() {
+            initializeAdminUser();
             checkExistingAuth();
             document.getElementById('username').focus();
         });
+        
+        // Initialize admin user if it doesn't exist
+        async function initializeAdminUser() {
+            try {
+                console.log('Initializing admin user...');
+                
+                // Try to create the admin user - this will fail silently if user already exists
+                const response = await fetch('/api/index', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'createUser',
+                        username: 'doldarina1',
+                        email: 'admin@pushnotifications.local',
+                        password: 'K@7j@B3l13!',
+                        role: 'admin'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log('✅ Admin user created successfully');
+                } else if (result.message && result.message.includes('already exists')) {
+                    console.log('ℹ️ Admin user already exists');
+                } else {
+                    console.log('⚠️ Admin user creation result:', result.message);
+                }
+            } catch (error) {
+                console.log('⚠️ Admin user initialization error:', error.message);
+                // Don't show error to user - this is a background operation
+            }
+        }
         
         const loginForm = document.getElementById('loginForm');
         const loginButton = document.getElementById('loginButton');
