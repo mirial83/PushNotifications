@@ -1,5 +1,5 @@
 // PushNotifications Node.js API
-const { MongoClient } = require('mongodb');
+import { MongoClient } from 'mongodb';
 
 // Environment variables
 const MONGODB_CONNECTION_STRING = process.env.MONGODB_CONNECTION_STRING;

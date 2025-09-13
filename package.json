@@ -2,6 +2,7 @@
   "name": "push-notifications-api",
   "version": "2.1.0",
   "description": "PushNotifications API with MongoDB support",
+  "type": "module",
   "main": "api/index.js",
   "scripts": {
     "dev": "vercel dev",
