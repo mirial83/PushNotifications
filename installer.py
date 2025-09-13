@@ -52,12 +52,24 @@ class PushNotificationsInstaller:
     def __init__(self):
         self.system = platform.system()
         self.gas_script_url = SCRIPT_URL
+        self.is_update = self.check_if_update()
         
-        print(f"PushNotifications Desktop Client Installer")
+        if self.is_update:
+            print(f"PushNotifications Desktop Client Updater")
+            print(f"Existing installation detected - running in update mode")
+        else:
+            print(f"PushNotifications Desktop Client Installer")
+            print(f"No existing installation detected - running in install mode")
+            
         print(f"Platform: {self.system}")
         print(f"Python: {sys.version}")
         print(f"Script URL: {self.gas_script_url}")
         print()
+
+    def check_if_update(self):
+        """Check if this is an update (existing installation found)"""
+        install_dir = self.get_install_directory()
+        return install_dir.exists() and (install_dir / "pushnotifications.py").exists()
 
 
 
@@ -113,7 +125,7 @@ class PushNotificationsInstaller:
 
     def install_dependencies(self):
         """Install required Python dependencies"""
-        print("Installing Python dependencies...")
+        print("Checking Python dependencies...")
         
         dependencies = [
             "requests>=2.31.0",
@@ -126,8 +138,29 @@ class PushNotificationsInstaller:
             "pillow>=10.0.0"
         ]
         
-        # Install core dependencies
+        def check_package_installed(package_name):
+            """Check if a package is installed in any Python environment"""
+            package_base = package_name.split('>=')[0].split('==')[0].strip()
+            try:
+                # Try to import the package to see if it's installed
+                # Use a subprocess to avoid affecting the current process
+                result = subprocess.run(
+                    [sys.executable, '-c', f"import {package_base}"], 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                return result.returncode == 0
+            except:
+                return False
+        
+        # Install core dependencies only if not already installed
         for dep in dependencies:
+            package_base = dep.split('>=')[0].split('==')[0].strip()
+            if check_package_installed(package_base):
+                print(f"[OK] {dep} is already installed - skipping")
+                continue
+                
             print(f"Installing {dep}...")
             try:
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', dep])
@@ -140,9 +173,14 @@ class PushNotificationsInstaller:
                     print(f"[ERROR] Failed to install {dep}: {e}")
                     return False
         
-        # Install optional dependencies
-        print("\nInstalling optional dependencies...")
+        # Install optional dependencies only if not already installed
+        print("\nChecking optional dependencies...")
         for dep in optional_deps:
+            package_base = dep.split('>=')[0].split('==')[0].strip()
+            if check_package_installed(package_base):
+                print(f"[OK] {dep} is already installed - skipping")
+                continue
+                
             print(f"Installing {dep} (optional)...")
             try:
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', dep])
@@ -819,10 +857,55 @@ To uninstall:
         return True
 
     def run_installation(self):
-        """Run the complete installation process"""
-        print("Starting PushNotifications installation...")
-        print("=" * 50)
+        """Run the complete installation or update process"""
+        if self.is_update:
+            print("Starting PushNotifications update...")
+            print("=" * 50)
+            return self.run_update()
+        else:
+            print("Starting PushNotifications installation...")
+            print("=" * 50)
+            return self.run_fresh_install()
+    
+    def run_update(self):
+        """Run update process for existing installation"""
+        install_dir = self.get_install_directory()
         
+        print(f"Updating existing installation at {install_dir}")
+        
+        # Stop existing client before updating
+        self.stop_existing_client()
+        
+        # Install/check dependencies (may have new ones)
+        if not self.install_dependencies():
+            self.show_message("Update Failed", "Failed to update dependencies.", "error")
+            return False
+        
+        # Download updated client files
+        if not self.download_files(install_dir):
+            self.show_message("Update Failed", "Failed to download updated client files.", "error")
+            return False
+        
+        # Update embedded files (uninstaller, requirements, etc.) - but preserve protection
+        self.update_embedded_files(install_dir)
+        
+        # Success message
+        print(f"\nPushNotifications has been updated successfully!")
+        print(f"Installation directory: {install_dir}")
+        print(f"Restarting client with updated version...")
+        
+        # Restart the client
+        try:
+            subprocess.Popen([sys.executable, str(install_dir / "pushnotifications.py")])
+            print("Client restarted successfully with new version!")
+        except Exception as e:
+            print(f"Could not restart client: {e}")
+            print("Please manually start the client if needed.")
+            
+        return True
+        
+    def run_fresh_install(self):
+        """Run fresh installation process"""
         # Get installation directory
         install_dir = self.get_install_directory()
         install_dir.mkdir(parents=True, exist_ok=True)
@@ -864,6 +947,291 @@ To uninstall:
         except Exception as e:
             print(f"Could not start client: {e}")
             
+        return True
+    
+    def stop_existing_client(self):
+        """Stop any running PushNotifications client processes"""
+        print("Stopping existing client processes...")
+        try:
+            import psutil
+            stopped_count = 0
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    cmdline = proc.info['cmdline'] or []
+                    if any('pushnotifications.py' in arg for arg in cmdline):
+                        proc.terminate()
+                        print(f"  Stopped client process PID {proc.info['pid']}")
+                        stopped_count += 1
+                        # Wait a moment for graceful shutdown
+                        time.sleep(1)
+                        if proc.is_running():
+                            proc.kill()
+                            print(f"  Force-killed process PID {proc.info['pid']}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+            
+            if stopped_count > 0:
+                print(f"[OK] Stopped {stopped_count} client process(es)")
+                time.sleep(2)  # Give processes time to fully exit
+            else:
+                print("[OK] No running client processes found")
+                
+        except ImportError:
+            print("[WARN] psutil not available - cannot stop running processes")
+            print("[INFO] Please manually close the client if it's running")
+        except Exception as e:
+            print(f"[WARN] Error stopping processes: {e}")
+    
+    def update_embedded_files(self, install_dir):
+        """Update embedded files during update (preserve protection settings)"""
+        print("Updating embedded files...")
+        
+        # Update requirements.txt
+        requirements_content = '''requests>=2.31.0
+psutil>=5.9.0
+pytz>=2023.3
+pystray>=0.19.4
+pillow>=10.0.0
+tkinter
+'''
+        with open(install_dir / "requirements.txt", 'w') as f:
+            f.write(requirements_content)
+        print("[OK] requirements.txt updated")
+        
+        # Update uninstaller script (preserve existing protection)
+        uninstaller_content = f'''#!/usr/bin/env python3
+"""
+PushNotifications Uninstaller
+Requires administrator approval via web form before uninstalling.
+"""
+
+import os
+import sys
+import json
+import shutil
+import requests
+import subprocess
+from pathlib import Path
+from datetime import datetime
+
+class PushNotificationsUninstaller:
+    def __init__(self):
+        self.install_dir = Path(__file__).parent
+        self.server_url = "{SCRIPT_URL}"
+        
+    def check_protection(self):
+        """Check if installation is protected"""
+        protection_file = self.install_dir / ".protection"
+        if protection_file.exists():
+            try:
+                with open(protection_file, 'r') as f:
+                    data = json.load(f)
+                return data.get("protection_enabled", False), data.get("installation_id", "unknown")
+            except:
+                return True, "unknown"
+        return False, None
+        
+    def request_uninstall_approval(self, installation_id):
+        """Request approval from administrator via web form"""
+        try:
+            import getpass
+            import uuid
+            
+            data = {{
+                'action': 'requestUninstall',
+                'installationId': installation_id,
+                'installationPath': str(self.install_dir),
+                'username': getpass.getuser(),
+                'computerName': os.environ.get('COMPUTERNAME', 'Unknown'),
+                'requestId': str(uuid.uuid4()),
+                'timestamp': datetime.now().isoformat()
+            }}
+            
+            response = requests.post(f"{self.server_url}/api/index", json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    print("Uninstall request submitted successfully.")
+                    print("Please wait for administrator approval.")
+                    return result.get('requestId')
+                else:
+                    print(f"Request failed: {{result.get('message', 'Unknown error')}}")
+            else:
+                print(f"HTTP Error: {{response.status_code}}")
+                
+        except Exception as e:
+            print(f"Failed to submit uninstall request: {{e}}")
+            
+        return None
+        
+    def perform_uninstall(self):
+        """Perform the actual uninstallation after approval"""
+        print("Performing uninstallation...")
+        
+        try:
+            # Stop any running client processes
+            try:
+                import psutil
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if 'pushnotifications.py' in ' '.join(proc.info['cmdline'] or []):
+                            proc.terminate()
+                            print(f"Stopped client process PID {{proc.info['pid']}}")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+            except ImportError:
+                print("psutil not available - cannot stop running processes")
+            
+            # Remove installation directory
+            parent_dir = self.install_dir.parent
+            
+            # First, try to remove file attributes and permissions that might prevent deletion
+            if os.name == 'nt':  # Windows
+                try:
+                    # Remove read-only and system attributes
+                    subprocess.run(["attrib", "-R", "-S", "-H", str(self.install_dir), "/S"], check=False)
+                    # Reset NTFS permissions
+                    subprocess.run(["icacls", str(self.install_dir), "/reset", "/T"], check=False)
+                except Exception as e:
+                    print(f"Warning: Could not reset file attributes: {{e}}")
+            
+            # Remove the directory
+            shutil.rmtree(str(self.install_dir), ignore_errors=True)
+            
+            # Clean up backup directory
+            backup_dir = Path.home() / "AppData" / "Local" / "PushNotifications_Backup"
+            if backup_dir.exists():
+                shutil.rmtree(str(backup_dir), ignore_errors=True)
+                
+            print("Uninstallation completed successfully.")
+            return True
+            
+        except Exception as e:
+            print(f"Uninstallation failed: {{e}}")
+            return False
+    
+    def run(self):
+        """Main uninstaller logic"""
+        print("PushNotifications Uninstaller")
+        print("=" * 40)
+        
+        # Check if installation is protected
+        is_protected, installation_id = self.check_protection()
+        
+        if is_protected:
+            print("This installation is protected and requires administrator approval for removal.")
+            print("Submitting uninstall request...")
+            
+            request_id = self.request_uninstall_approval(installation_id)
+            if request_id:
+                print(f"Request ID: {{request_id}}")
+                print("\\nThe administrator has been notified of your uninstall request.")
+                print("You will be contacted when the request is processed.")
+                print("\\nDo not attempt to manually delete the installation folder.")
+                print("Unauthorized deletion attempts will be logged and reported.")
+            else:
+                print("Failed to submit uninstall request.")
+                print("Please contact your administrator for manual removal.")
+        else:
+            # Not protected - allow direct uninstall
+            print("Installation is not protected. Proceeding with uninstallation...")
+            if self.perform_uninstall():
+                print("\\nPushNotifications has been successfully removed.")
+            else:
+                print("\\nUninstallation encountered errors.")
+
+def main():
+    try:
+        uninstaller = PushNotificationsUninstaller()
+        uninstaller.run()
+    except KeyboardInterrupt:
+        print("\\nUninstallation cancelled.")
+    except Exception as e:
+        print(f"\\nUninstaller error: {{e}}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+'''
+        
+        with open(install_dir / "uninstall.py", 'w') as f:
+            f.write(uninstaller_content)
+        print("[OK] uninstall.py updated")
+        
+        # Update Windows batch file for uninstaller
+        if self.system == "Windows":
+            batch_content = f'''@echo off
+echo Starting PushNotifications Uninstaller...
+python "%~dp0uninstall.py"
+pause
+'''
+            with open(install_dir / "uninstall.bat", 'w') as f:
+                f.write(batch_content)
+            print("[OK] uninstall.bat updated")
+        
+        # Update shell script for Unix systems
+        else:
+            shell_content = f'''#!/bin/bash
+echo "Starting PushNotifications Uninstaller..."
+python3 "$(dirname "$0")/uninstall.py"
+read -p "Press Enter to continue..."
+'''
+            with open(install_dir / "uninstall.sh", 'w') as f:
+                f.write(shell_content)
+            os.chmod(install_dir / "uninstall.sh", 0o755)
+            print("[OK] uninstall.sh updated")
+        
+        # Update README.md
+        readme_content = f'''# PushNotifications Desktop Client
+
+## Installation Directory: {install_dir}
+
+## Features
+
+- Automatic client registration
+- Real-time notification display
+- Browser usage control
+- Website filtering
+- Automatic updates (forced when configured)
+- Snooze functionality
+- Priority-based notifications
+- Folder protection system
+
+## Usage
+
+The client runs automatically in the background and connects to the server at:
+{SCRIPT_URL}
+
+## Uninstallation
+
+**IMPORTANT**: This installation is protected and requires administrator approval for removal.
+
+To uninstall:
+1. Run the uninstaller: `python uninstall.py`
+2. Or use the shortcut: `uninstall.{'bat' if self.system == 'Windows' else 'sh'}`
+3. Wait for administrator approval
+4. Do NOT manually delete the installation folder
+
+## Troubleshooting
+
+- Ensure you have an internet connection
+- Check that Python and required packages are installed
+- Contact your administrator if you encounter persistent issues
+- Unauthorized folder deletion attempts are logged and reported
+
+## Version Information
+
+- Client Version: 2.1.0
+- Last Updated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+- Server: {SCRIPT_URL}
+'''
+        
+        with open(install_dir / "README.md", 'w') as f:
+            f.write(readme_content)
+        print("[OK] README.md updated")
+        
+        print("[INFO] Protection files preserved during update")
         return True
     
     def setup_monitoring_system(self, install_dir):

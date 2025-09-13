@@ -87,6 +87,9 @@ function setupEventListeners() {
     
     // Uninstall all clients button
     document.getElementById('uninstallAllClients')?.addEventListener('click', handleUninstallAllClients);
+    
+    // Cleanup old data button
+    document.getElementById('cleanupOldData')?.addEventListener('click', handleCleanupOldData);
 }
 
 function loadInitialData() {
@@ -98,6 +101,9 @@ function loadInitialData() {
     
     // Load preset messages
     loadPresetMessages();
+    
+    // Load incomplete notification banners
+    loadIncompleteNotificationBanners();
     
     // Update UI state
     updateConnectionStatus(false);
@@ -690,17 +696,17 @@ function updateBrowserUsageDescription() {
 
 function updateWebsiteCount() {
     const websitesTextarea = document.getElementById('allowedWebsites');
-    const countElement = document.querySelector('.count-display');
+    const countElement = document.querySelector('#websiteCount .count-display');
     
     if (!websitesTextarea || !countElement) return;
     
     const websites = websitesTextarea.value.split('\n').filter(url => url.trim()).length;
     
-    countElement.textContent = `${websites} website(s) listed`;
-    
     if (websites === 0) {
+        countElement.textContent = '0 websites will be allowed';
         countElement.className = 'count-display warning';
     } else {
+        countElement.textContent = `${websites} website(s) will be allowed`;
         countElement.className = 'count-display success';
     }
 }
@@ -825,28 +831,47 @@ async function loadPresetMessages() {
                             customText.value = preset.text;
                         }
                         
-                        // Set browser usage
+                        // Set browser usage checkbox
                         const allowBrowserUsage = document.getElementById('allowBrowserUsage');
                         if (allowBrowserUsage) {
                             allowBrowserUsage.checked = preset.allowBrowserUsage || false;
-                            toggleBrowserUsageOptions();
                         }
                         
-                        // Set allowed websites
-                        if (preset.allowedWebsites && preset.allowedWebsites.length > 0) {
-                            const allowedWebsites = document.getElementById('allowedWebsites');
-                            if (allowedWebsites) {
+                        // Set allowed websites and clear first
+                        const allowedWebsites = document.getElementById('allowedWebsites');
+                        if (allowedWebsites) {
+                            if (preset.allowedWebsites && preset.allowedWebsites.length > 0) {
                                 allowedWebsites.value = preset.allowedWebsites.join('\n');
-                                updateWebsiteCount();
+                            } else {
+                                allowedWebsites.value = '';
                             }
+                            updateWebsiteCount();
                         }
                         
-                        // Switch to custom message mode
+                        // Update UI visibility based on browser usage
+                        toggleBrowserUsageUI();
+                        
+                        // Switch to custom message mode to show the message
                         const customMessageRadio = document.getElementById('customMessage');
                         if (customMessageRadio) {
                             customMessageRadio.checked = true;
                             toggleMessageType();
                         }
+                    } else {
+                        // Reset form when no preset selected
+                        const customText = document.getElementById('customText');
+                        if (customText) customText.value = '';
+                        
+                        const allowBrowserUsage = document.getElementById('allowBrowserUsage');
+                        if (allowBrowserUsage) allowBrowserUsage.checked = false;
+                        
+                        const allowedWebsites = document.getElementById('allowedWebsites');
+                        if (allowedWebsites) {
+                            allowedWebsites.value = '';
+                            updateWebsiteCount();
+                        }
+                        
+                        toggleBrowserUsageUI();
                     }
                 });
             }
@@ -928,12 +953,313 @@ function toggleBrowserUsageOptions() {
     }
 }
 
+function toggleBrowserUsageUI() {
+    const allowBrowserUsage = document.getElementById('allowBrowserUsage');
+    const browserUsageWarning = document.getElementById('browserUsageWarning');
+    const websitesGroup = document.getElementById('websitesGroup');
+    
+    const isChecked = allowBrowserUsage && allowBrowserUsage.checked;
+    
+    // Show/hide browser usage warning
+    if (browserUsageWarning) {
+        if (isChecked) {
+            browserUsageWarning.classList.remove('hidden');
+        } else {
+            browserUsageWarning.classList.add('hidden');
+        }
+    }
+    
+    // Show/hide websites group
+    if (websitesGroup) {
+        if (isChecked) {
+            websitesGroup.classList.remove('hidden');
+        } else {
+            websitesGroup.classList.add('hidden');
+        }
+    }
+}
+
+// Save Custom Message functionality
+async function saveCustomMessage() {
+    // Get current form values
+    const messageText = getCurrentMessageText();
+    const allowBrowserUsage = document.getElementById('allowBrowserUsage')?.checked || false;
+    const allowedWebsites = document.getElementById('allowedWebsites')?.value
+        .split('\n')
+        .map(site => site.trim())
+        .filter(site => site.length > 0) || [];
+    const saveMessageName = document.getElementById('saveMessageName')?.value?.trim();
+    
+    // Validate that there's a message to save
+    if (!messageText) {
+        alert('Please enter a message before saving.');
+        return;
+    }
+    
+    // Use the provided name or generate a simple description
+    const description = saveMessageName || `Custom: ${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}`;
+    
+    // Prepare the data to send
+    const messageData = {
+        action: 'saveCustomMessage',
+        text: messageText,
+        description: description,
+        allowBrowserUsage: allowBrowserUsage,
+        allowedWebsites: allowedWebsites
+    };
+    
+    try {
+        // Disable the save button while saving
+        const saveButton = document.getElementById('saveCustomMessage');
+        if (saveButton) {
+            saveButton.disabled = true;
+            saveButton.textContent = 'Saving...';
+        }
+        
+        // Send request to save custom message
+        const response = await fetch(`${config.API_BASE_URL}/api/config`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(messageData)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showStatus('Custom message saved successfully!', 'success');
+            
+            // Clear the save message name input
+            const saveMessageNameInput = document.getElementById('saveMessageName');
+            if (saveMessageNameInput) {
+                saveMessageNameInput.value = '';
+            }
+            
+            // Reload the preset messages to include the new custom message
+            await loadPresetMessages();
+        } else {
+            showStatus(`Failed to save custom message: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error saving custom message:', error);
+        showStatus('Error saving custom message. Please try again.', 'error');
+    } finally {
+        // Re-enable the save button
+        const saveButton = document.getElementById('saveCustomMessage');
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save Preset';
+        }
+    }
+}
+
+// Helper function to get current message text from active input
+function getCurrentMessageText() {
+    const presetSelect = document.getElementById('presetSelect');
+    const customText = document.getElementById('customText');
+    
+    // If a preset is selected, use its text
+    if (presetSelect?.value) {
+        try {
+            const preset = JSON.parse(presetSelect.value);
+            return preset.text;
+        } catch (e) {
+            console.warn('Failed to parse preset value:', e);
+        }
+    }
+    
+    // Otherwise use custom text
+    return customText?.value?.trim() || '';
+}
+
+// Helper function to add website from quick buttons
+function addWebsite(website) {
+    const websitesTextarea = document.getElementById('allowedWebsites');
+    if (websitesTextarea) {
+        const currentValue = websitesTextarea.value.trim();
+        const newValue = currentValue ? currentValue + '\n' + website : website;
+        websitesTextarea.value = newValue;
+        updateWebsiteCount();
+    }
+}
+
+// Cleanup old data functionality
+async function handleCleanupOldData() {
+    if (!confirm('Are you sure you want to cleanup old data? This will permanently remove old notifications and website requests.')) {
+        return;
+    }
+    
+    try {
+        showStatus('Cleaning up old data...', 'info');
+        
+        const response = await fetch(`${config.API_BASE_URL}/api/config`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'cleanupOldData'
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showStatus(result.message, 'success');
+            
+            // Refresh notifications to show updated list
+            await refreshNotifications();
+            
+            // Reload incomplete notification banners
+            await loadIncompleteNotificationBanners();
+        } else {
+            showStatus(`Cleanup failed: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error during cleanup:', error);
+        showStatus('Cleanup failed. Please try again.', 'error');
+    }
+}
+
+// Load and display incomplete notification banners
+async function loadIncompleteNotificationBanners() {
+    try {
+        const response = await fetch(`${config.API_BASE_URL}/api/config?type=incomplete-notifications`);
+        const result = await response.json();
+        
+        if (result.success && result.data && result.data.incompleteNotifications) {
+            displayIncompleteNotificationBanners(result.data.incompleteNotifications);
+        } else {
+            // Clear banners if no incomplete notifications
+            const bannersContainer = document.getElementById('incompleteNotificationsBanner');
+            if (bannersContainer) {
+                bannersContainer.innerHTML = '';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading incomplete notification banners:', error);
+    }
+}
+
+// Display incomplete notification banners
+function displayIncompleteNotificationBanners(incompleteNotifications) {
+    const bannersContainer = document.getElementById('incompleteNotificationsBanner');
+    if (!bannersContainer) return;
+    
+    // Clear existing banners
+    bannersContainer.innerHTML = '';
+    
+    if (incompleteNotifications.length === 0) {
+        return;
+    }
+    
+    // Create banner for each incomplete notification
+    incompleteNotifications.forEach(notification => {
+        const bannerDiv = document.createElement('div');
+        bannerDiv.className = 'incomplete-notification-banner';
+        bannerDiv.dataset.notificationId = notification._id;
+        
+        const timeSinceRemoved = getTimeSinceRemoved(notification.removedAt);
+        
+        bannerDiv.innerHTML = `
+            <div class="banner-content">
+                <div class="banner-icon">⏰</div>
+                <div class="banner-message">
+                    <strong>Incomplete Task Removed:</strong> "${escapeHtml(notification.message)}"
+                </div>
+                <div class="banner-details">
+                    <span>Client: ${escapeHtml(notification.clientId || 'Unknown')}</span>
+                    <span>Removed: ${timeSinceRemoved}</span>
+                    <span>Reason: ${escapeHtml(notification.reason)}</span>
+                </div>
+            </div>
+            <button class="banner-dismiss" onclick="dismissIncompleteNotification('${notification._id}')">
+                ✕
+            </button>
+        `;
+        
+        bannersContainer.appendChild(bannerDiv);
+    });
+}
+
+// Dismiss an incomplete notification banner
+async function dismissIncompleteNotification(notificationId) {
+    try {
+        const response = await fetch(`${config.API_BASE_URL}/api/config`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'dismissIncompleteNotification',
+                notificationId: notificationId
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Remove the banner from the UI
+            const banner = document.querySelector(`[data-notification-id="${notificationId}"]`);
+            if (banner) {
+                banner.remove();
+            }
+            
+            // Check if there are no more banners
+            const bannersContainer = document.getElementById('incompleteNotificationsBanner');
+            if (bannersContainer && bannersContainer.children.length === 0) {
+                bannersContainer.innerHTML = '';
+            }
+        } else {
+            showStatus(`Failed to dismiss banner: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error dismissing incomplete notification:', error);
+        showStatus('Failed to dismiss banner.', 'error');
+    }
+}
+
+// Helper function to get time since removed
+function getTimeSinceRemoved(removedAt) {
+    if (!removedAt) return 'Unknown';
+    
+    try {
+        const now = new Date();
+        const removed = new Date(removedAt);
+        const diffMs = now - removed;
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        
+        if (diffHours > 24) {
+            const diffDays = Math.floor(diffHours / 24);
+            return `${diffDays} day(s) ago`;
+        } else if (diffHours > 0) {
+            return `${diffHours} hour(s) ago`;
+        } else {
+            return `${diffMins} minute(s) ago`;
+        }
+    } catch (error) {
+        return 'Unknown';
+    }
+}
+
+// Export for global access
+window.addWebsite = addWebsite;
+window.dismissIncompleteNotification = dismissIncompleteNotification;
+
 // Add website count listener
 document.addEventListener('DOMContentLoaded', function() {
     const websitesTextarea = document.getElementById('allowedWebsites');
     if (websitesTextarea) {
         websitesTextarea.addEventListener('input', updateWebsiteCount);
         updateWebsiteCount(); // Initial count
+    }
+    
+    // Add save custom message listener
+    const saveCustomMessageBtn = document.getElementById('saveCustomMessage');
+    if (saveCustomMessageBtn) {
+        saveCustomMessageBtn.addEventListener('click', saveCustomMessage);
     }
     
     // Initialize descriptions
@@ -949,10 +1275,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add browser usage toggle listener
     const allowBrowserUsage = document.getElementById('allowBrowserUsage');
     if (allowBrowserUsage) {
-        allowBrowserUsage.addEventListener('change', toggleBrowserUsageOptions);
+        allowBrowserUsage.addEventListener('change', toggleBrowserUsageUI);
     }
     
     // Initialize toggle states
     toggleMessageType();
-    toggleBrowserUsageOptions();
+    toggleBrowserUsageUI();
 });

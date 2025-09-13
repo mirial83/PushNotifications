@@ -7,6 +7,9 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Incomplete Notifications Banner -->
+    <div id="incompleteNotificationsBanner"></div>
+    
     <!-- Completed Notification Headers -->
     <div id="completedHeaders"></div>
     
@@ -157,6 +160,18 @@
                         </select>
                     </div>
 
+                    <!-- Save Custom Message Section -->
+                    <div class="form-group save-custom-message">
+                        <label for="saveMessageName">💾 Save this message as a preset (optional):</label>
+                        <div class="save-message-input-group">
+                            <input type="text" id="saveMessageName" placeholder="Enter preset message name (e.g., 'Study Time', 'Work Break')" class="save-message-input">
+                            <button type="button" id="saveCustomMessage" class="btn-small btn-secondary">Save Preset</button>
+                        </div>
+                        <small class="save-message-help">
+                            Save the current message text, browser settings, and website list as a reusable preset.
+                        </small>
+                    </div>
+
                     <!-- Send Button -->
                     <button type="button" id="sendNotification" class="btn-primary">Send Notification</button>
                 </div>
@@ -177,6 +192,23 @@
 
                 <!-- Website access requests are now displayed as banner notifications under relevant notifications in the sidebar -->
                 
+                <!-- Data Cleanup Section -->
+                <div class="cleanup-section">
+                    <h3>🧹 Data Management</h3>
+                    <div class="cleanup-actions">
+                        <button type="button" id="cleanupOldData" class="btn-warning btn-block">🗑️ Cleanup Old Data</button>
+                        <p class="cleanup-description">
+                            <strong>This will remove:</strong>
+                            <ul>
+                                <li>Active notifications older than 48 hours</li>
+                                <li>Regular notifications older than 7 days</li>
+                                <li>Website requests older than 7 days</li>
+                            </ul>
+                            <strong>Preserved:</strong> Encryption keys, app deletion requests, custom messages, completed notifications
+                        </p>
+                    </div>
+                </div>
+
                 <!-- Uninstall All Clients Section -->
                 <div class="uninstall-all-section">
                     <h3>Administrative Actions</h3>
