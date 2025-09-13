@@ -1,6 +1,6 @@
 {
   "name": "push-notifications-api",
-  "version": "2.1.0",
+  "version": "1.1.9",
   "description": "PushNotifications API with MongoDB support",
   "type": "module",
   "main": "api/index.js",

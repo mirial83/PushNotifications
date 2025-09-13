@@ -223,55 +223,140 @@ class DatabaseOperations {
   }
 
   async getVersionHistory() {
-    // Deployment history with version numbering (oldest = 1.0.0, newest gets highest version)
-    const deployments = [
-      { message: 'updating js functions', isCurrent: false },
-      { message: 'removing file creation fallbacks', isCurrent: false },
-      { message: 'updating for mongodb api', isCurrent: false },
-      { message: 'Redeploy', isCurrent: false },
-      { message: 'attempt to fix build error', isCurrent: false },
-      { message: 'attempt to fix access error', isCurrent: false },
-      { message: 'revising php files to remove all php access', isCurrent: false },
-      { message: 'installer updates to remove php', isCurrent: false },
-      { message: 'remove unused files', isCurrent: false },
-      { message: 'visual updates', isCurrent: false },
-      { message: 'more visibility updates', isCurrent: false },
-      { message: 'quick add buttons', isCurrent: false },
-      { message: 'quick add buttons debugging', isCurrent: false },
-      { message: 'security features on app and site', isCurrent: false },
-      { message: 'security updates to client and site', isCurrent: false },
-      { message: 'website update for authentication', isCurrent: false },
-      { message: 'add admin user setup', isCurrent: false },
-      { message: 'admin database update', isCurrent: false },
-      { message: 'updating admin page structure', isCurrent: false },
-      { message: 'styling', isCurrent: true }
-    ];
-
-    // Assign version numbers starting from 1.0.0 for the oldest and making the last one 1.1.9
-    const versionsWithNumbers = deployments.map((deployment, index) => {
-      let version;
-      if (index === deployments.length - 1) {
-        // Make the last deployment (current) version 1.1.9
-        version = '1.1.9';
-      } else {
-        // Assign incremental versions starting from 1.0.0
-        version = `1.${Math.floor(index / 10)}.${index % 10}`;
+    try {
+      // Try to fetch from GitHub API first, then fall back to Vercel API if available
+      let deploymentData = await this.fetchGitHubReleases();
+      
+      if (!deploymentData || deploymentData.length === 0) {
+        // Fall back to commit history if no releases
+        deploymentData = await this.fetchGitHubCommits();
+      }
+      
+      // If still no data, fall back to hardcoded version
+      if (!deploymentData || deploymentData.length === 0) {
+        deploymentData = await this.getFallbackVersionHistory();
+      }
+      
+      // Get current version from package.json or default
+      const currentVersion = process.env.npm_package_version || '1.1.9';
+      
+      // Mark the most recent as current
+      if (deploymentData.length > 0) {
+        deploymentData[0].isCurrent = true;
+        deploymentData[0].version = currentVersion;
       }
       
       return {
-        version: version,
-        message: deployment.message,
-        isCurrent: deployment.isCurrent
+        success: true,
+        data: deploymentData,
+        totalDeployments: deploymentData.length,
+        currentVersion: currentVersion,
+        source: deploymentData.length > 1 ? (deploymentData[0].source || 'github') : 'fallback',
+        lastRefreshed: new Date().toISOString()
       };
-    });
+    } catch (error) {
+      console.error('Error fetching version history:', error);
+      
+      // Return fallback data on error
+      const fallbackData = await this.getFallbackVersionHistory();
+      return {
+        success: true,
+        data: fallbackData,
+        totalDeployments: fallbackData.length,
+        currentVersion: '1.1.9',
+        source: 'fallback',
+        lastRefreshed: new Date().toISOString(),
+        error: 'Failed to fetch from external sources'
+      };
+    }
+  }
 
-    return {
-      success: true,
-      data: versionsWithNumbers,
-      totalDeployments: versionsWithNumbers.length,
-      currentVersion: versionsWithNumbers.find(v => v.isCurrent)?.version || '1.1.9',
-      lastRefreshed: new Date().toISOString()
-    };
+  async fetchGitHubReleases() {
+    try {
+      const response = await fetch('https://api.github.com/repos/mirial83/PushNotifications/releases?per_page=20');
+      if (!response.ok) {
+        throw new Error(`GitHub API error: ${response.status}`);
+      }
+      
+      const releases = await response.json();
+      return releases.map((release, index) => ({
+        version: release.tag_name,
+        message: release.name || release.tag_name,
+        description: release.body || '',
+        date: release.published_at,
+        isCurrent: index === 0,
+        source: 'github-releases'
+      }));
+    } catch (error) {
+      console.log('GitHub releases fetch failed:', error.message);
+      return null;
+    }
+  }
+
+  async fetchGitHubCommits() {
+    try {
+      const response = await fetch('https://api.github.com/repos/mirial83/PushNotifications/commits?per_page=20');
+      if (!response.ok) {
+        throw new Error(`GitHub API error: ${response.status}`);
+      }
+      
+      const commits = await response.json();
+      return commits.map((commit, index) => ({
+        version: `1.${Math.floor(index / 10) + 1}.${index % 10}`,
+        message: commit.commit.message.split('\n')[0], // First line only
+        description: commit.commit.message,
+        date: commit.commit.committer.date,
+        sha: commit.sha.substring(0, 8),
+        author: commit.commit.author.name,
+        isCurrent: index === 0,
+        source: 'github-commits'
+      }));
+    } catch (error) {
+      console.log('GitHub commits fetch failed:', error.message);
+      return null;
+    }
+  }
+
+  async fetchVercelDeployments() {
+    // This would require Vercel API token and team/project IDs
+    // For now, we'll focus on GitHub data
+    try {
+      if (!process.env.VERCEL_TOKEN) {
+        return null;
+      }
+      
+      // Vercel API implementation would go here
+      // const response = await fetch('https://api.vercel.com/v6/deployments', {
+      //   headers: { 'Authorization': `Bearer ${process.env.VERCEL_TOKEN}` }
+      // });
+      
+      return null;
+    } catch (error) {
+      console.log('Vercel deployments fetch failed:', error.message);
+      return null;
+    }
+  }
+
+  async getFallbackVersionHistory() {
+    // Fallback static version history
+    const deployments = [
+      { message: 'Current version - Node.js/MongoDB/Vercel implementation', isCurrent: true },
+      { message: 'Website authentication and user management', isCurrent: false },
+      { message: 'Security features and MAC address client tracking', isCurrent: false },
+      { message: 'Database migration from PHP to Node.js/MongoDB', isCurrent: false },
+      { message: 'Client installer improvements', isCurrent: false },
+      { message: 'Visual updates and UI improvements', isCurrent: false },
+      { message: 'Quick action buttons and notifications', isCurrent: false },
+      { message: 'Initial Node.js API development', isCurrent: false }
+    ];
+
+    return deployments.map((deployment, index) => ({
+      version: index === 0 ? '1.1.9' : `1.${Math.floor((deployments.length - index - 1) / 10)}.${(deployments.length - index - 1) % 10}`,
+      message: deployment.message,
+      isCurrent: deployment.isCurrent,
+      source: 'fallback',
+      date: new Date(Date.now() - (index * 24 * 60 * 60 * 1000)).toISOString() // Simulate dates
+    }));
   }
 
   async registerClient(clientId, clientName, computerName) {
