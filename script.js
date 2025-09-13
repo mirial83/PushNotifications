@@ -2716,93 +2716,42 @@ function displayVersionHistory(deployments, totalDeployments, lastRefreshed, sou
     const container = document.getElementById('versionHistoryContainer');
     if (!container) return;
     
-    // Get source information from the API response
-    const dataSource = deployments.length > 0 && deployments[0].source ? deployments[0].source : source;
-    const sourceIcon = getSourceIcon(dataSource);
-    const sourceLabel = getSourceLabel(dataSource);
-    
     let html = `
         <div class="version-history-header">
             <h4>Version History (${totalDeployments} versions)</h4>
-            <div class="version-metadata">
-                <p class="data-source">${sourceIcon} Source: ${sourceLabel}</p>
-                <p class="last-refreshed">Last refreshed: ${formatTimestamp(lastRefreshed)}</p>
-            </div>
+            <p class="last-refreshed">Last refreshed: ${formatTimestamp(lastRefreshed)}</p>
         </div>
-        <div class="versions-list">
+        <div class="versions-table">
+            <div class="version-table-header">
+                <div class="column-date">Date/Time</div>
+                <div class="column-version">Version</div>
+                <div class="column-message">Message</div>
+            </div>
     `;
     
     if (deployments.length === 0) {
         html += '<div class="no-data">No version history found</div>';
     } else {
         deployments.forEach(version => {
-            const isCurrentBadge = version.isCurrent ? '<span class="current-badge">CURRENT</span>' : '';
-            
-            // Format additional metadata based on source
-            let metadataHtml = '';
-            if (version.date) {
-                metadataHtml += `<div class="version-date">📅 ${formatTimestamp(version.date)}</div>`;
-            }
-            if (version.author) {
-                metadataHtml += `<div class="version-author">👤 ${escapeHtml(version.author)}</div>`;
-            }
-            if (version.sha) {
-                metadataHtml += `<div class="version-sha">🔗 ${escapeHtml(version.sha)}</div>`;
-            }
+            const isCurrentBadge = version.isCurrent ? ' <span class="current-badge">CURRENT</span>' : '';
+            const versionDate = version.date ? formatTimestamp(version.date) : 'Unknown';
+            const versionNumber = `v${escapeHtml(version.version)}${isCurrentBadge}`;
+            const versionMessage = escapeHtml(version.message);
             
             html += `
-                <div class="version-item ${version.isCurrent ? 'current' : ''}">
-                    <div class="version-header">
-                        <div class="version-number">
-                            <strong>v${escapeHtml(version.version)}</strong>
-                            ${isCurrentBadge}
-                        </div>
-                        ${metadataHtml ? `<div class="version-metadata-inline">${metadataHtml}</div>` : ''}
-                    </div>
-                    <div class="version-message">
-                        ${escapeHtml(version.message)}
-                    </div>
-                    ${version.description && version.description !== version.message ? 
-                        `<div class="version-description">${escapeHtml(version.description).replace(/\n/g, '<br>')}</div>` : 
-                        ''
-                    }
+                <div class="version-row ${version.isCurrent ? 'current' : ''}">
+                    <div class="column-date">${versionDate}</div>
+                    <div class="column-version">${versionNumber}</div>
+                    <div class="column-message">${versionMessage}</div>
                 </div>
             `;
         });
     }
     
-    html += '</div>';
+    html += '</div></div>';
     container.innerHTML = html;
 }
 
-function getSourceIcon(source) {
-    switch (source) {
-        case 'github-releases':
-            return '🏷️';
-        case 'github-commits':
-            return '📝';
-        case 'vercel':
-            return '▲';
-        case 'fallback':
-        default:
-            return '📦';
-    }
-}
-
-function getSourceLabel(source) {
-    switch (source) {
-        case 'github-releases':
-            return 'GitHub Releases';
-        case 'github-commits':
-            return 'GitHub Commits';
-        case 'vercel':
-            return 'Vercel Deployments';
-        case 'fallback':
-            return 'Static Fallback';
-        default:
-            return 'Unknown';
-    }
-}
 
 // Placeholder functions for admin features (to be implemented)
 function showCreateUserModal() {
