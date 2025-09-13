@@ -211,8 +211,8 @@ class DatabaseOperations {
   async getVersionInfo() {
     return {
       success: true,
-      currentVersion: '2.1.0',
-      latestVersion: '2.1.0',
+      currentVersion: '1.1.9',
+      latestVersion: '1.1.9',
       releaseNotes: 'Node.js/MongoDB/Vercel version with enhanced reliability',
       updateAvailable: false,
       autoUpdateEnabled: true,
@@ -247,9 +247,17 @@ class DatabaseOperations {
       { message: 'styling', isCurrent: true }
     ];
 
-    // Assign version numbers starting from 1.0.0 for the oldest (first in array)
+    // Assign version numbers starting from 1.0.0 for the oldest and making the last one 1.1.9
     const versionsWithNumbers = deployments.map((deployment, index) => {
-      const version = `${Math.floor(index / 100) + 1}.${Math.floor((index % 100) / 10)}.${index % 10}`;
+      let version;
+      if (index === deployments.length - 1) {
+        // Make the last deployment (current) version 1.1.9
+        version = '1.1.9';
+      } else {
+        // Assign incremental versions starting from 1.0.0
+        version = `1.${Math.floor(index / 10)}.${index % 10}`;
+      }
+      
       return {
         version: version,
         message: deployment.message,
@@ -261,7 +269,7 @@ class DatabaseOperations {
       success: true,
       data: versionsWithNumbers,
       totalDeployments: versionsWithNumbers.length,
-      currentVersion: versionsWithNumbers.find(v => v.isCurrent)?.version || versionsWithNumbers[versionsWithNumbers.length - 1]?.version,
+      currentVersion: versionsWithNumbers.find(v => v.isCurrent)?.version || '1.1.9',
       lastRefreshed: new Date().toISOString()
     };
   }
