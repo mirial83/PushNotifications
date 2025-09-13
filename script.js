@@ -1242,12 +1242,10 @@ function getTimeSinceRemoved(removedAt) {
 async function updateQuickAddButtons() {
     console.log('updateQuickAddButtons called');
     const quickAddContainer = document.getElementById('quickAddWebsites');
-    const presetSelect = document.getElementById('presetSelect');
     const allowBrowserUsage = document.getElementById('allowBrowserUsage');
     
     console.log('Elements found:', {
         quickAddContainer: !!quickAddContainer,
-        presetSelect: !!presetSelect,
         allowBrowserUsage: !!allowBrowserUsage
     });
     
@@ -1256,28 +1254,13 @@ async function updateQuickAddButtons() {
         return;
     }
     
-    // Check if "Do your schoolwork" preset is selected and browser usage is allowed
-    let showQuickAdd = false;
+    // Show quick-add buttons when browser usage is enabled
+    const showQuickAdd = allowBrowserUsage && allowBrowserUsage.checked;
     
     console.log('Current state:', {
-        presetValue: presetSelect?.value,
-        browserUsageChecked: allowBrowserUsage?.checked
+        browserUsageChecked: allowBrowserUsage?.checked,
+        showQuickAdd: showQuickAdd
     });
-    
-    if (presetSelect && presetSelect.value && allowBrowserUsage && allowBrowserUsage.checked) {
-        try {
-            const preset = JSON.parse(presetSelect.value);
-            console.log('Parsed preset:', preset);
-            if (preset.text === 'Do your schoolwork') {
-                showQuickAdd = true;
-                console.log('Should show quick-add buttons');
-            }
-        } catch (error) {
-            console.warn('Error parsing preset value:', error);
-        }
-    }
-    
-    console.log('showQuickAdd:', showQuickAdd);
     
     if (showQuickAdd) {
         quickAddContainer.classList.remove('hidden');
