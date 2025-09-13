@@ -120,8 +120,11 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
     
-    // Check if we're on the admin panel
-    if (window.location.pathname.endsWith('admin.html')) {
+    // Check if we're on any admin page
+    const adminPages = ['admin.html', 'data-management.html', 'client-admin.html', 'account-admin.html', 'version-history.html'];
+    const isAdminPage = adminPages.some(page => window.location.pathname.endsWith(page));
+    
+    if (isAdminPage) {
         initializeAdmin();
         return;
     }
