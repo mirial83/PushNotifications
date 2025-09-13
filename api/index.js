@@ -1,9 +1,12 @@
 // PushNotifications Node.js API
 import { MongoClient } from 'mongodb';
+import crypto from 'crypto';
 
 // Environment variables
 const MONGODB_CONNECTION_STRING = process.env.MONGODB_CONNECTION_STRING;
 const MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'pushnotifications';
+const JWT_SECRET = process.env.JWT_SECRET || 'pushnotifications-secret-key';
+const SESSION_TIMEOUT = 8 * 60 * 60 * 1000; // 8 hours
 
 // In-memory fallback storage
 let fallbackStorage = {
@@ -163,11 +166,24 @@ class DatabaseOperations {
       try {
         // Security Keys collection indexes
         await this.db.collection('securityKeys').createIndex({ clientId: 1, keyType: 1 }, { unique: true });
+        await this.db.collection('securityKeys').createIndex({ macAddress: 1 });
         await this.db.collection('securityKeys').createIndex({ hostname: 1 });
         await this.db.collection('securityKeys').createIndex({ createdAt: -1 });
         await this.db.collection('securityKeys').createIndex({ lastUsed: -1 });
 
-        // Client Info collection indexes
+        // MAC-based Client Management collection indexes
+        await this.db.collection('macClients').createIndex({ macAddress: 1 }, { unique: true });
+        await this.db.collection('macClients').createIndex({ activeClientId: 1 });
+        await this.db.collection('macClients').createIndex({ createdAt: -1 });
+        await this.db.collection('macClients').createIndex({ lastCheckin: -1 });
+
+        // Client Installation History collection indexes
+        await this.db.collection('clientHistory').createIndex({ macAddress: 1 });
+        await this.db.collection('clientHistory').createIndex({ clientId: 1 });
+        await this.db.collection('clientHistory').createIndex({ isActive: 1 });
+        await this.db.collection('clientHistory').createIndex({ createdAt: -1 });
+
+        // Legacy Client Info collection indexes (for backward compatibility)
         await this.db.collection('clientInfo').createIndex({ clientId: 1 }, { unique: true });
         await this.db.collection('clientInfo').createIndex({ machineId: 1 });
         await this.db.collection('clientInfo').createIndex({ hostname: 1 });
@@ -598,6 +614,432 @@ class DatabaseOperations {
     }
   }
 
+  // MAC Address-based Client Management Methods
+  async authenticateClientByMac(macAddress, username, hostname, installPath, platform, version) {
+    try {
+      if (this.usesFallback) {
+        // In-memory fallback - create a temporary client
+        const clientId = `${username}_${macAddress.replace(/:/g, '').substr(-6)}`;
+        const clientData = {
+          clientId,
+          clientName: `${username}1`,
+          computerName: hostname,
+          macAddress,
+          registered: new Date().toISOString(),
+          lastSeen: new Date().toISOString()
+        };
+        fallbackStorage.clients.push(clientData);
+        return { success: true, clientId, clientName: `${username}1`, isNewInstallation: true };
+      }
+
+      await this.connect();
+      const now = new Date();
+
+      // Check if MAC address already exists
+      let macClient = await this.db.collection('macClients').findOne({ macAddress });
+      let clientName, clientId, isNewInstallation = false;
+
+      if (!macClient) {
+        // First installation on this MAC address
+        clientName = `${username}1`;
+        clientId = `${username}_${macAddress.replace(/:/g, '').substr(-6)}_1`;
+        isNewInstallation = true;
+
+        // Create new MAC client record
+        macClient = {
+          macAddress,
+          username,
+          clientName,
+          activeClientId: clientId,
+          installationCount: 1,
+          createdAt: now,
+          lastCheckin: now,
+          hostname,
+          platform
+        };
+        await this.db.collection('macClients').insertOne(macClient);
+
+        // Create client history record
+        const historyRecord = {
+          macAddress,
+          clientId,
+          clientName,
+          username,
+          hostname,
+          installPath,
+          platform,
+          version,
+          isActive: true,
+          createdAt: now,
+          lastCheckin: now
+        };
+        await this.db.collection('clientHistory').insertOne(historyRecord);
+
+      } else {
+        // Existing MAC address - deactivate previous installation and create new one
+        if (macClient.activeClientId) {
+          // Deactivate previous client
+          await this.db.collection('clientHistory').updateOne(
+            { clientId: macClient.activeClientId },
+            { 
+              $set: { 
+                isActive: false, 
+                deactivatedAt: now,
+                deactivationReason: 'New installation on same MAC address'
+              }
+            }
+          );
+        }
+
+        // Create new installation
+        const newInstallationNumber = macClient.installationCount + 1;
+        clientName = `${username}${newInstallationNumber}`;
+        clientId = `${username}_${macAddress.replace(/:/g, '').substr(-6)}_${newInstallationNumber}`;
+        isNewInstallation = true;
+
+        // Update MAC client record
+        await this.db.collection('macClients').updateOne(
+          { _id: macClient._id },
+          {
+            $set: {
+              activeClientId: clientId,
+              clientName,
+              installationCount: newInstallationNumber,
+              lastCheckin: now,
+              hostname,
+              platform
+            }
+          }
+        );
+
+        // Create new client history record
+        const historyRecord = {
+          macAddress,
+          clientId,
+          clientName,
+          username,
+          hostname,
+          installPath,
+          platform,
+          version,
+          isActive: true,
+          createdAt: now,
+          lastCheckin: now
+        };
+        await this.db.collection('clientHistory').insertOne(historyRecord);
+      }
+
+      return {
+        success: true,
+        clientId,
+        clientName,
+        isNewInstallation,
+        macAddress,
+        message: isNewInstallation ? 'New client installation registered' : 'Client authentication successful'
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async updateClientMacCheckin(clientId, version) {
+    try {
+      if (this.usesFallback) {
+        const client = fallbackStorage.clients.find(c => c.clientId === clientId);
+        if (client) {
+          client.lastSeen = new Date().toISOString();
+        }
+        return { success: true, message: 'Client checkin updated in memory' };
+      }
+
+      await this.connect();
+      const now = new Date();
+
+      // Update client history record
+      const historyResult = await this.db.collection('clientHistory').updateOne(
+        { clientId, isActive: true },
+        { 
+          $set: { 
+            lastCheckin: now,
+            version: version || 'unknown'
+          }
+        }
+      );
+
+      if (historyResult.modifiedCount > 0) {
+        // Update MAC client record
+        const clientHistory = await this.db.collection('clientHistory').findOne({ clientId, isActive: true });
+        if (clientHistory) {
+          await this.db.collection('macClients').updateOne(
+            { macAddress: clientHistory.macAddress },
+            { $set: { lastCheckin: now } }
+          );
+        }
+      }
+
+      return { 
+        success: true, 
+        message: 'Client checkin updated',
+        updated: historyResult.modifiedCount > 0
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getClientByMac(macAddress) {
+    try {
+      if (this.usesFallback) {
+        const client = fallbackStorage.clients.find(c => c.macAddress === macAddress);
+        return client ? { success: true, client } : { success: false, message: 'Client not found' };
+      }
+
+      await this.connect();
+      const macClient = await this.db.collection('macClients').findOne({ macAddress });
+      
+      if (!macClient) {
+        return { success: false, message: 'No client found for this MAC address' };
+      }
+
+      const activeClient = await this.db.collection('clientHistory').findOne({
+        clientId: macClient.activeClientId,
+        isActive: true
+      });
+
+      return {
+        success: true,
+        macClient,
+        activeClient
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getAllMacClients() {
+    try {
+      if (this.usesFallback) {
+        return { success: true, data: fallbackStorage.clients };
+      }
+
+      await this.connect();
+      
+      // Get all MAC clients with their active client details
+      const macClients = await this.db.collection('macClients')
+        .find({})
+        .sort({ lastCheckin: -1 })
+        .toArray();
+
+      const processedClients = [];
+      
+      for (const macClient of macClients) {
+        const activeClient = macClient.activeClientId ? 
+          await this.db.collection('clientHistory').findOne({
+            clientId: macClient.activeClientId,
+            isActive: true
+          }) : null;
+
+        processedClients.push({
+          _id: macClient._id.toString(),
+          macAddress: macClient.macAddress,
+          username: macClient.username,
+          clientName: macClient.clientName,
+          activeClientId: macClient.activeClientId,
+          installationCount: macClient.installationCount,
+          hostname: macClient.hostname,
+          platform: macClient.platform,
+          createdAt: macClient.createdAt,
+          lastCheckin: macClient.lastCheckin,
+          activeClient: activeClient ? {
+            installPath: activeClient.installPath,
+            version: activeClient.version,
+            createdAt: activeClient.createdAt,
+            lastCheckin: activeClient.lastCheckin
+          } : null
+        });
+      }
+
+      return { success: true, data: processedClients };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getClientHistory(macAddress = null) {
+    try {
+      if (this.usesFallback) {
+        return { success: true, data: [] };
+      }
+
+      await this.connect();
+      
+      const query = macAddress ? { macAddress } : {};
+      const history = await this.db.collection('clientHistory')
+        .find(query)
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      const processedHistory = history.map(record => ({
+        _id: record._id.toString(),
+        macAddress: record.macAddress,
+        clientId: record.clientId,
+        clientName: record.clientName,
+        username: record.username,
+        hostname: record.hostname,
+        installPath: record.installPath,
+        platform: record.platform,
+        version: record.version,
+        isActive: record.isActive,
+        createdAt: record.createdAt,
+        lastCheckin: record.lastCheckin,
+        deactivatedAt: record.deactivatedAt,
+        deactivationReason: record.deactivationReason
+      }));
+
+      return { success: true, data: processedHistory };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async deactivateClient(clientId, reason = 'Manual deactivation') {
+    try {
+      if (this.usesFallback) {
+        const clientIndex = fallbackStorage.clients.findIndex(c => c.clientId === clientId);
+        if (clientIndex >= 0) {
+          fallbackStorage.clients.splice(clientIndex, 1);
+        }
+        return { success: true, message: 'Client deactivated in memory' };
+      }
+
+      await this.connect();
+      const now = new Date();
+
+      // Deactivate the client in history
+      const result = await this.db.collection('clientHistory').updateOne(
+        { clientId, isActive: true },
+        {
+          $set: {
+            isActive: false,
+            deactivatedAt: now,
+            deactivationReason: reason
+          }
+        }
+      );
+
+      if (result.modifiedCount > 0) {
+        // Clear the active client ID from MAC client record
+        const clientHistory = await this.db.collection('clientHistory').findOne({ clientId });
+        if (clientHistory) {
+          await this.db.collection('macClients').updateOne(
+            { macAddress: clientHistory.macAddress },
+            { $set: { activeClientId: null } }
+          );
+        }
+      }
+
+      return {
+        success: true,
+        message: 'Client deactivated successfully',
+        deactivated: result.modifiedCount > 0
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Update security key management to work with MAC addresses
+  async createSecurityKeyForMac(macAddress, keyType, keyValue, installPath, hostname) {
+    try {
+      if (this.usesFallback) {
+        return { success: true, message: 'Security key created in memory' };
+      }
+
+      await this.connect();
+      
+      // Get the active client for this MAC address
+      const macClient = await this.db.collection('macClients').findOne({ macAddress });
+      if (!macClient || !macClient.activeClientId) {
+        return { success: false, message: 'No active client found for this MAC address' };
+      }
+
+      const securityKeyData = {
+        clientId: macClient.activeClientId,
+        macAddress,
+        keyType,
+        keyValue,
+        installPath,
+        hostname,
+        createdAt: new Date(),
+        lastUsed: new Date()
+      };
+
+      // Check if key already exists for this client
+      const existingKey = await this.db.collection('securityKeys').findOne({
+        clientId: macClient.activeClientId,
+        keyType
+      });
+
+      if (existingKey) {
+        // Update existing key
+        await this.db.collection('securityKeys').updateOne(
+          { _id: existingKey._id },
+          { 
+            $set: { 
+              keyValue,
+              macAddress,
+              lastUsed: new Date(),
+              updatedAt: new Date()
+            }
+          }
+        );
+        return { success: true, message: 'Security key updated' };
+      } else {
+        // Insert new key
+        await this.db.collection('securityKeys').insertOne(securityKeyData);
+        return { success: true, message: 'Security key created' };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getSecurityKeyByMac(macAddress, keyType) {
+    try {
+      if (this.usesFallback) {
+        const key = 'fallback_key_' + Math.random().toString(36).substr(2, 16);
+        return { success: true, key };
+      }
+
+      await this.connect();
+      
+      // Get the active client for this MAC address
+      const macClient = await this.db.collection('macClients').findOne({ macAddress });
+      if (!macClient || !macClient.activeClientId) {
+        return { success: false, message: 'No active client found for this MAC address' };
+      }
+
+      const securityKey = await this.db.collection('securityKeys').findOne({
+        clientId: macClient.activeClientId,
+        keyType
+      });
+
+      if (securityKey) {
+        // Update last used timestamp
+        await this.db.collection('securityKeys').updateOne(
+          { _id: securityKey._id },
+          { $set: { lastUsed: new Date() } }
+        );
+        
+        return { success: true, key: securityKey.keyValue };
+      } else {
+        return { success: false, message: 'Security key not found' };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   async close() {
     if (this.client) {
       await this.client.close();
@@ -768,6 +1210,62 @@ export default async function handler(req, res) {
 
       case 'getAllClientInfo':
         result = await db.getAllClientInfo();
+        break;
+
+      // MAC Address-based Client Management Actions
+      case 'authenticateClientByMac':
+        result = await db.authenticateClientByMac(
+          params.macAddress || '',
+          params.username || '',
+          params.hostname || '',
+          params.installPath || '',
+          params.platform || '',
+          params.version || ''
+        );
+        break;
+
+      case 'updateClientMacCheckin':
+        result = await db.updateClientMacCheckin(
+          params.clientId || '',
+          params.version || ''
+        );
+        break;
+
+      case 'getClientByMac':
+        result = await db.getClientByMac(params.macAddress || '');
+        break;
+
+      case 'getAllMacClients':
+        result = await db.getAllMacClients();
+        break;
+
+      case 'getClientHistory':
+        result = await db.getClientHistory(params.macAddress || null);
+        break;
+
+      case 'deactivateClient':
+        result = await db.deactivateClient(
+          params.clientId || '',
+          params.reason || 'Manual deactivation'
+        );
+        break;
+
+      // MAC Address-based Security Key Management Actions
+      case 'createSecurityKeyForMac':
+        result = await db.createSecurityKeyForMac(
+          params.macAddress || '',
+          params.keyType || 'ENCRYPTION_KEY',
+          params.keyValue || '',
+          params.installPath || '',
+          params.hostname || ''
+        );
+        break;
+
+      case 'getSecurityKeyByMac':
+        result = await db.getSecurityKeyByMac(
+          params.macAddress || '',
+          params.keyType || 'ENCRYPTION_KEY'
+        );
         break;
     }
 

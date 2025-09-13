@@ -1451,20 +1451,20 @@ async function loadClientInfo() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                action: 'getAllClientInfo'
+                action: 'getAllMacClients'
             })
         });
         
         const result = await response.json();
         
         if (result.success) {
-            displayClientInfo(result.data || []);
+            displayMacClientInfo(result.data || []);
             updateLastRefreshed('clientsLastRefreshed');
         } else {
             displayClientInfoError(result.message);
         }
     } catch (error) {
-        console.error('Error loading client info:', error);
+        console.error('Error loading MAC client info:', error);
         displayClientInfoError(error.message);
     }
 }
@@ -1495,56 +1495,98 @@ async function loadSecurityKeys() {
     }
 }
 
-function displayClientInfo(clients) {
+function displayMacClientInfo(macClients) {
     const container = document.getElementById('clientInfoList');
     if (!container) return;
     
     container.innerHTML = '';
     
-    if (clients.length === 0) {
-        container.innerHTML = '<div class="no-data">No client registrations found</div>';
+    if (macClients.length === 0) {
+        container.innerHTML = '<div class="no-data">No MAC client registrations found</div>';
         return;
     }
     
-    clients.forEach(client => {
+    macClients.forEach(macClient => {
         const clientDiv = document.createElement('div');
-        clientDiv.className = 'data-item client-info-item';
+        clientDiv.className = 'data-item mac-client-info-item';
         
-        const lastCheckinTime = formatTimestamp(client.lastCheckin);
-        const createdTime = formatTimestamp(client.createdAt);
-        const isOnline = isRecentCheckin(client.lastCheckin);
+        const lastCheckinTime = formatTimestamp(macClient.lastCheckin);
+        const createdTime = formatTimestamp(macClient.createdAt);
+        const isOnline = isRecentCheckin(macClient.lastCheckin);
+        const hasActiveClient = macClient.activeClientId && macClient.activeClient;
+        
+        // Client management buttons
+        const clientActions = hasActiveClient ? `
+            <div class="client-actions">
+                <button class="btn-small btn-warning" onclick="deactivateMacClient('${macClient.activeClientId}')" title="Deactivate current installation">
+                    Deactivate
+                </button>
+                <button class="btn-small" onclick="viewClientHistory('${macClient.macAddress}')" title="View installation history">
+                    History
+                </button>
+            </div>
+        ` : '';
         
         clientDiv.innerHTML = `
             <div class="data-header">
-                <div class="data-title">${escapeHtml(client.clientId)}</div>
-                <div class="data-status ${isOnline ? 'online' : 'offline'}">
-                    ${isOnline ? '🟢 Online' : '⚫ Offline'}
+                <div class="data-title">
+                    <div class="mac-address">📱 ${escapeHtml(macClient.macAddress)}</div>
+                    <div class="client-name">${escapeHtml(macClient.clientName)} (${escapeHtml(macClient.username)})</div>
+                </div>
+                <div class="data-status ${isOnline && hasActiveClient ? 'online' : 'offline'}">
+                    ${isOnline && hasActiveClient ? '🟢 Online' : '⚫ Offline'}
                 </div>
             </div>
             <div class="data-details">
                 <div class="detail-row">
-                    <strong>Hostname:</strong> ${escapeHtml(client.hostname || 'Unknown')}
+                    <strong>Username:</strong> ${escapeHtml(macClient.username)}
                 </div>
                 <div class="detail-row">
-                    <strong>Platform:</strong> ${escapeHtml(client.platform || 'Unknown')}
+                    <strong>Client Name:</strong> ${escapeHtml(macClient.clientName)}
                 </div>
                 <div class="detail-row">
-                    <strong>Version:</strong> ${escapeHtml(client.version || 'Unknown')}
+                    <strong>Installation Count:</strong> ${macClient.installationCount}
                 </div>
                 <div class="detail-row">
-                    <strong>Install Path:</strong> <code>${escapeHtml(client.installPath || 'Unknown')}</code>
+                    <strong>Active Client ID:</strong> ${escapeHtml(macClient.activeClientId || 'None')}
                 </div>
                 <div class="detail-row">
-                    <strong>Created:</strong> ${createdTime}
+                    <strong>Hostname:</strong> ${escapeHtml(macClient.hostname || 'Unknown')}
                 </div>
                 <div class="detail-row">
-                    <strong>Last Checkin:</strong> ${lastCheckinTime}
+                    <strong>Platform:</strong> ${escapeHtml(macClient.platform || 'Unknown')}
+                </div>
+                ${hasActiveClient ? `
+                    <div class="detail-row">
+                        <strong>Version:</strong> ${escapeHtml(macClient.activeClient.version || 'Unknown')}
+                    </div>
+                    <div class="detail-row">
+                        <strong>Install Path:</strong> <code>${escapeHtml(macClient.activeClient.installPath || 'Unknown')}</code>
+                    </div>
+                    <div class="detail-row">
+                        <strong>Client Created:</strong> ${formatTimestamp(macClient.activeClient.createdAt)}
+                    </div>
+                    <div class="detail-row">
+                        <strong>Client Last Checkin:</strong> ${formatTimestamp(macClient.activeClient.lastCheckin)}
+                    </div>
+                ` : '<div class="detail-row"><em>No active client installation</em></div>'}
+                <div class="detail-row">
+                    <strong>MAC First Registered:</strong> ${createdTime}
+                </div>
+                <div class="detail-row">
+                    <strong>MAC Last Activity:</strong> ${lastCheckinTime}
                 </div>
             </div>
+            ${clientActions}
         `;
         
         container.appendChild(clientDiv);
     });
+}
+
+// Legacy function for backward compatibility
+function displayClientInfo(clients) {
+    return displayMacClientInfo(clients);
 }
 
 function displaySecurityKeys(keys) {
@@ -1660,6 +1702,190 @@ function isRecentUsage(lastUsed) {
     }
 }
 
-// Export security functions for global access
+// MAC Client Management Functions
+async function deactivateMacClient(clientId) {
+    if (!confirm('Are you sure you want to deactivate this client installation? The user will need to restart the client to continue receiving notifications.')) {
+        return;
+    }
+    
+    const reason = prompt('Reason for deactivation:', 'Manual deactivation by administrator');
+    if (!reason) return;
+    
+    try {
+        showStatus('Deactivating client...', 'info');
+        
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'deactivateClient',
+                clientId: clientId,
+                reason: reason
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showStatus('Client deactivated successfully!', 'success');
+            loadClientInfo(); // Refresh the client list
+        } else {
+            showStatus(`Failed to deactivate client: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error deactivating client:', error);
+        showStatus('Failed to deactivate client.', 'error');
+    }
+}
+
+async function viewClientHistory(macAddress) {
+    try {
+        showStatus('Loading client history...', 'info');
+        
+        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'getClientHistory',
+                macAddress: macAddress
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            displayClientHistoryModal(result.data || [], macAddress);
+        } else {
+            showStatus(`Failed to load client history: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error loading client history:', error);
+        showStatus('Failed to load client history.', 'error');
+    }
+}
+
+function displayClientHistoryModal(history, macAddress) {
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    `;
+    
+    // Create modal content
+    const modal = document.createElement('div');
+    modal.className = 'client-history-modal';
+    modal.style.cssText = `
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        max-width: 800px;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    `;
+    
+    let historyHTML = `
+        <div class="modal-header">
+            <h3>Client Installation History</h3>
+            <div class="mac-address">📱 ${escapeHtml(macAddress)}</div>
+        </div>
+    `;
+    
+    if (history.length === 0) {
+        historyHTML += '<div class="no-data">No installation history found</div>';
+    } else {
+        historyHTML += '<div class="history-list">';
+        
+        history.forEach(record => {
+            const isActive = record.isActive;
+            const createdTime = formatTimestamp(record.createdAt);
+            const lastCheckinTime = formatTimestamp(record.lastCheckin);
+            const deactivatedTime = record.deactivatedAt ? formatTimestamp(record.deactivatedAt) : null;
+            
+            historyHTML += `
+                <div class="history-item ${isActive ? 'active' : 'inactive'}">
+                    <div class="history-header">
+                        <div class="history-title">${escapeHtml(record.clientName)} (${escapeHtml(record.username)})</div>
+                        <div class="history-status ${isActive ? 'online' : 'offline'}">
+                            ${isActive ? '🟢 Active' : '⚫ Inactive'}
+                        </div>
+                    </div>
+                    <div class="history-details">
+                        <div class="detail-row">
+                            <strong>Client ID:</strong> ${escapeHtml(record.clientId)}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Hostname:</strong> ${escapeHtml(record.hostname || 'Unknown')}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Platform:</strong> ${escapeHtml(record.platform || 'Unknown')}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Version:</strong> ${escapeHtml(record.version || 'Unknown')}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Install Path:</strong> <code>${escapeHtml(record.installPath || 'Unknown')}</code>
+                        </div>
+                        <div class="detail-row">
+                            <strong>Created:</strong> ${createdTime}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Last Checkin:</strong> ${lastCheckinTime}
+                        </div>
+                        ${!isActive && deactivatedTime ? `
+                            <div class="detail-row">
+                                <strong>Deactivated:</strong> ${deactivatedTime}
+                            </div>
+                            <div class="detail-row">
+                                <strong>Deactivation Reason:</strong> ${escapeHtml(record.deactivationReason || 'Unknown')}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        });
+        
+        historyHTML += '</div>';
+    }
+    
+    historyHTML += `
+        <div class="modal-footer">
+            <button class="btn-small" onclick="this.closest('.modal-overlay').remove()">Close</button>
+        </div>
+    `;
+    
+    modal.innerHTML = historyHTML;
+    overlay.appendChild(modal);
+    
+    // Close on overlay click
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+    
+    // Add to page
+    document.body.appendChild(overlay);
+    
+    showStatus('Client history loaded', 'success');
+}
+
+// Export security and client management functions for global access
 window.loadClientInfo = loadClientInfo;
 window.loadSecurityKeys = loadSecurityKeys;
+window.deactivateMacClient = deactivateMacClient;
+window.viewClientHistory = viewClientHistory;
