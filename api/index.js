@@ -196,10 +196,26 @@ class DatabaseOperations {
         await this.db.collection('notifications').createIndex({ clientId: 1 });
         await this.db.collection('notifications').createIndex({ created: -1 });
 
+        // Version History collection indexes
+        await this.db.collection('versionHistory').createIndex({ versionNumber: 1 }, { unique: true });
+        await this.db.collection('versionHistory').createIndex({ versionNumber: -1 });
+        await this.db.collection('versionHistory').createIndex({ createdAt: -1 });
+        await this.db.collection('versionHistory').createIndex({ date: -1 });
+        await this.db.collection('versionHistory').createIndex({ isCurrent: 1 });
+        await this.db.collection('versionHistory').createIndex({ sha: 1 }, { sparse: true });
+        await this.db.collection('versionHistory').createIndex({ deploymentId: 1 }, { sparse: true });
+
         console.log('Database indexes created successfully');
       } catch (indexError) {
         // Indexes might already exist, which is fine
         console.log('Some indexes may already exist:', indexError.message);
+      }
+
+      // Perform initial version history sync if collection is empty
+      const versionCount = await this.db.collection('versionHistory').countDocuments();
+      if (versionCount === 0) {
+        console.log('Version history collection is empty, performing initial sync...');
+        await this.performInitialVersionSync();
       }
 
       return { success: true, message: 'MongoDB database and security collections initialized successfully' };
@@ -224,41 +240,33 @@ class DatabaseOperations {
 
   async getVersionHistory() {
     try {
-      // Priority order: Vercel deployments > GitHub releases > GitHub commits
-      let deploymentData = await this.fetchVercelDeployments();
+      if (this.usesFallback) {
+        return this.getFallbackVersionHistory();
+      }
+
+      await this.connect();
       
-      if (!deploymentData || deploymentData.length === 0) {
-        // Try GitHub releases
-        deploymentData = await this.fetchGitHubReleases();
+      // First, try to sync new versions from external sources
+      await this.syncVersionHistory();
+      
+      // Then fetch from database
+      const versions = await this.db.collection('versionHistory')
+        .find({})
+        .sort({ versionNumber: -1 }) // Sort by version number descending (newest first)
+        .toArray();
+      
+      if (versions.length === 0) {
+        // If no versions in database, perform initial sync
+        await this.performInitialVersionSync();
+        const syncedVersions = await this.db.collection('versionHistory')
+          .find({})
+          .sort({ versionNumber: -1 })
+          .toArray();
+        
+        return this.formatVersionHistoryResponse(syncedVersions);
       }
       
-      if (!deploymentData || deploymentData.length === 0) {
-        // Fall back to commit history
-        deploymentData = await this.fetchGitHubCommits();
-      }
-      
-      // If we have deployment data, apply proper version numbering
-      if (deploymentData && deploymentData.length > 0) {
-        deploymentData = this.applyVersionNumbering(deploymentData);
-      }
-      
-      // Get current version from package.json or default
-      const currentVersion = process.env.npm_package_version || '1.1.9';
-      
-      // Mark the most recent as current
-      if (deploymentData && deploymentData.length > 0) {
-        deploymentData[0].isCurrent = true;
-        deploymentData[0].version = currentVersion;
-      }
-      
-      return {
-        success: true,
-        data: deploymentData || [],
-        totalDeployments: deploymentData ? deploymentData.length : 0,
-        currentVersion: currentVersion,
-        source: deploymentData && deploymentData.length > 0 ? (deploymentData[0].source || 'unknown') : 'no-data',
-        lastRefreshed: new Date().toISOString()
-      };
+      return this.formatVersionHistoryResponse(versions);
     } catch (error) {
       console.error('Error fetching version history:', error);
       
@@ -276,7 +284,7 @@ class DatabaseOperations {
 
   async fetchGitHubReleases() {
     try {
-      const response = await fetch('https://api.github.com/repos/mirial83/PushNotifications/releases?per_page=20');
+      const response = await fetch('https://api.github.com/repos/mirial83/PushNotifications/releases?per_page=100');
       if (!response.ok) {
         throw new Error(`GitHub API error: ${response.status}`);
       }
@@ -298,7 +306,7 @@ class DatabaseOperations {
 
   async fetchGitHubCommits() {
     try {
-      const response = await fetch('https://api.github.com/repos/mirial83/PushNotifications/commits?per_page=20');
+      const response = await fetch('https://api.github.com/repos/mirial83/PushNotifications/commits?per_page=100');
       if (!response.ok) {
         throw new Error(`GitHub API error: ${response.status}`);
       }
@@ -345,7 +353,7 @@ class DatabaseOperations {
       }
       
       // Build API URL
-      let apiUrl = 'https://api.vercel.com/v6/deployments?limit=20';
+      let apiUrl = 'https://api.vercel.com/v6/deployments?limit=100';
       
       if (vercelTeamId) {
         apiUrl += `&teamId=${vercelTeamId}`;
@@ -1604,6 +1612,225 @@ class DatabaseOperations {
     }
   }
 
+  // Version History Management Methods
+  async syncVersionHistory() {
+    try {
+      // Get the latest version from database
+      const latestDbVersion = await this.db.collection('versionHistory')
+        .findOne({}, { sort: { createdAt: -1 } });
+      
+      // Fetch latest versions from external sources
+      const externalVersions = await this.fetchLatestExternalVersions();
+      
+      if (!externalVersions || externalVersions.length === 0) {
+        return;
+      }
+      
+      // Get the newest external version
+      const newestExternal = externalVersions[0];
+      
+      // Check if we need to add new versions
+      if (!latestDbVersion || this.isNewerVersion(newestExternal, latestDbVersion)) {
+        await this.addNewVersionsToDatabase(externalVersions, latestDbVersion);
+      }
+    } catch (error) {
+      console.log('Version sync failed:', error.message);
+    }
+  }
+  
+  async fetchLatestExternalVersions() {
+    // Priority order: Vercel deployments > GitHub releases > GitHub commits
+    let externalData = await this.fetchVercelDeployments();
+    
+    if (!externalData || externalData.length === 0) {
+      externalData = await this.fetchGitHubReleases();
+    }
+    
+    if (!externalData || externalData.length === 0) {
+      externalData = await this.fetchGitHubCommits();
+    }
+    
+    return externalData;
+  }
+  
+  isNewerVersion(externalVersion, dbVersion) {
+    // Compare by date and unique identifiers
+    const externalDate = new Date(externalVersion.date);
+    const dbDate = new Date(dbVersion.createdAt);
+    
+    if (externalDate > dbDate) {
+      return true;
+    }
+    
+    // Also check for unique identifiers like commit SHA or deployment ID
+    if (externalVersion.sha && dbVersion.sha && externalVersion.sha !== dbVersion.sha) {
+      return true;
+    }
+    
+    if (externalVersion.deploymentId && dbVersion.deploymentId && externalVersion.deploymentId !== dbVersion.deploymentId) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  async addNewVersionsToDatabase(externalVersions, latestDbVersion) {
+    try {
+      // Get the current highest version number
+      const highestVersion = await this.db.collection('versionHistory')
+        .findOne({}, { sort: { versionNumber: -1 } });
+      
+      let nextVersionNumber = highestVersion ? highestVersion.versionNumber + 1 : 1;
+      
+      // Filter external versions to only include new ones
+      const newVersions = [];
+      
+      for (const extVersion of externalVersions) {
+        const exists = await this.db.collection('versionHistory').findOne({
+          $or: [
+            extVersion.sha ? { sha: extVersion.sha } : {},
+            extVersion.deploymentId ? { deploymentId: extVersion.deploymentId } : {},
+            { message: extVersion.message, date: extVersion.date }
+          ].filter(obj => Object.keys(obj).length > 0)
+        });
+        
+        if (!exists) {
+          // Calculate semantic version from version number
+          const major = 1;
+          const minor = Math.floor((nextVersionNumber - 1) / 10);
+          const patch = (nextVersionNumber - 1) % 10;
+          const semanticVersion = `${major}.${minor}.${patch}`;
+          
+          const versionRecord = {
+            versionNumber: nextVersionNumber,
+            version: semanticVersion,
+            message: extVersion.message || 'No message',
+            description: extVersion.description || '',
+            date: extVersion.date,
+            sha: extVersion.sha || null,
+            deploymentId: extVersion.deploymentId || null,
+            author: extVersion.author || 'Unknown',
+            source: extVersion.source || 'unknown',
+            isCurrent: nextVersionNumber === 1, // Will be updated later
+            createdAt: new Date(),
+            url: extVersion.url || null
+          };
+          
+          newVersions.push(versionRecord);
+          nextVersionNumber++;
+        }
+      }
+      
+      if (newVersions.length > 0) {
+        // Insert new versions
+        await this.db.collection('versionHistory').insertMany(newVersions.reverse()); // Insert oldest first
+        
+        // Update current version flag
+        await this.updateCurrentVersionFlag();
+        
+        console.log(`Added ${newVersions.length} new versions to database`);
+      }
+    } catch (error) {
+      console.error('Error adding new versions to database:', error);
+    }
+  }
+  
+  async updateCurrentVersionFlag() {
+    try {
+      // Remove current flag from all versions
+      await this.db.collection('versionHistory').updateMany(
+        {},
+        { $set: { isCurrent: false } }
+      );
+      
+      // Set the highest version number as current
+      const latestVersion = await this.db.collection('versionHistory')
+        .findOne({}, { sort: { versionNumber: -1 } });
+      
+      if (latestVersion) {
+        await this.db.collection('versionHistory').updateOne(
+          { _id: latestVersion._id },
+          { $set: { isCurrent: true } }
+        );
+      }
+    } catch (error) {
+      console.error('Error updating current version flag:', error);
+    }
+  }
+  
+  async performInitialVersionSync() {
+    try {
+      console.log('Performing initial version history sync...');
+      
+      const externalVersions = await this.fetchLatestExternalVersions();
+      
+      if (!externalVersions || externalVersions.length === 0) {
+        console.log('No external versions found for initial sync');
+        return;
+      }
+      
+      // Sort by date (oldest first) for proper version numbering
+      const sortedVersions = [...externalVersions].sort((a, b) => new Date(a.date) - new Date(b.date));
+      
+      const versionRecords = sortedVersions.map((version, index) => {
+        const versionNumber = index + 1;
+        const major = 1;
+        const minor = Math.floor(index / 10);
+        const patch = index % 10;
+        const semanticVersion = `${major}.${minor}.${patch}`;
+        
+        return {
+          versionNumber,
+          version: semanticVersion,
+          message: version.message || 'No message',
+          description: version.description || '',
+          date: version.date,
+          sha: version.sha || null,
+          deploymentId: version.deploymentId || null,
+          author: version.author || 'Unknown',
+          source: version.source || 'unknown',
+          isCurrent: index === sortedVersions.length - 1, // Mark the newest as current
+          createdAt: new Date(),
+          url: version.url || null
+        };
+      });
+      
+      if (versionRecords.length > 0) {
+        await this.db.collection('versionHistory').insertMany(versionRecords);
+        console.log(`Initial sync completed: ${versionRecords.length} versions added`);
+      }
+    } catch (error) {
+      console.error('Error performing initial version sync:', error);
+    }
+  }
+  
+  formatVersionHistoryResponse(versions) {
+    const currentVersion = process.env.npm_package_version || '1.1.9';
+    
+    // Format versions for response
+    const formattedVersions = versions.map(v => ({
+      version: v.version,
+      message: v.message,
+      description: v.description,
+      date: v.date,
+      isCurrent: v.isCurrent,
+      source: v.source,
+      author: v.author,
+      sha: v.sha,
+      deploymentId: v.deploymentId,
+      url: v.url
+    }));
+    
+    return {
+      success: true,
+      data: formattedVersions,
+      totalDeployments: versions.length,
+      currentVersion: currentVersion,
+      source: versions.length > 0 ? 'database' : 'no-data',
+      lastRefreshed: new Date().toISOString()
+    };
+  }
+  
   // Helper methods
   applyVersionNumbering(deploymentData) {
     if (!deploymentData || deploymentData.length === 0) {
