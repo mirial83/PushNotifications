@@ -1682,10 +1682,13 @@ class DatabaseOperations {
       
       let nextVersionNumber = highestVersion ? highestVersion.versionNumber + 1 : 1;
       
+      // Sort external versions by date (newest first) to assign highest numbers to newest
+      const sortedExternalVersions = [...externalVersions].sort((a, b) => new Date(b.date) - new Date(a.date));
+      
       // Filter external versions to only include new ones
       const newVersions = [];
       
-      for (const extVersion of externalVersions) {
+      for (const extVersion of sortedExternalVersions) {
         const exists = await this.db.collection('versionHistory').findOne({
           $or: [
             extVersion.sha ? { sha: extVersion.sha } : {},
@@ -1711,7 +1714,7 @@ class DatabaseOperations {
             deploymentId: extVersion.deploymentId || null,
             author: extVersion.author || 'Unknown',
             source: extVersion.source || 'unknown',
-            isCurrent: nextVersionNumber === 1, // Will be updated later
+            isCurrent: false, // Will be updated later
             createdAt: new Date(),
             url: extVersion.url || null
           };
@@ -1722,8 +1725,8 @@ class DatabaseOperations {
       }
       
       if (newVersions.length > 0) {
-        // Insert new versions
-        await this.db.collection('versionHistory').insertMany(newVersions.reverse()); // Insert oldest first
+        // Insert new versions (no need to reverse since we want newest to have highest numbers)
+        await this.db.collection('versionHistory').insertMany(newVersions);
         
         // Update current version flag
         await this.updateCurrentVersionFlag();
@@ -1769,11 +1772,11 @@ class DatabaseOperations {
         return;
       }
       
-      // Sort by date (oldest first) for proper version numbering
-      const sortedVersions = [...externalVersions].sort((a, b) => new Date(a.date) - new Date(b.date));
+      // Sort by date (newest first) so newest versions get highest numbers
+      const sortedVersions = [...externalVersions].sort((a, b) => new Date(b.date) - new Date(a.date));
       
       const versionRecords = sortedVersions.map((version, index) => {
-        const versionNumber = index + 1;
+        const versionNumber = index + 1; // Newest gets number 1, then 2, 3, etc.
         const major = 1;
         const minor = Math.floor(index / 10);
         const patch = index % 10;
@@ -1789,7 +1792,7 @@ class DatabaseOperations {
           deploymentId: version.deploymentId || null,
           author: version.author || 'Unknown',
           source: version.source || 'unknown',
-          isCurrent: index === sortedVersions.length - 1, // Mark the newest as current
+          isCurrent: index === 0, // Mark the newest (first in sorted array) as current
           createdAt: new Date(),
           url: version.url || null
         };
