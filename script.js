@@ -1240,54 +1240,86 @@ function getTimeSinceRemoved(removedAt) {
 
 // Update quick-add website buttons visibility and functionality
 async function updateQuickAddButtons() {
+    console.log('updateQuickAddButtons called');
     const quickAddContainer = document.getElementById('quickAddWebsites');
     const presetSelect = document.getElementById('presetSelect');
     const allowBrowserUsage = document.getElementById('allowBrowserUsage');
     
-    if (!quickAddContainer) return;
+    console.log('Elements found:', {
+        quickAddContainer: !!quickAddContainer,
+        presetSelect: !!presetSelect,
+        allowBrowserUsage: !!allowBrowserUsage
+    });
+    
+    if (!quickAddContainer) {
+        console.warn('quickAddWebsites container not found');
+        return;
+    }
     
     // Check if "Do your schoolwork" preset is selected and browser usage is allowed
     let showQuickAdd = false;
     
+    console.log('Current state:', {
+        presetValue: presetSelect?.value,
+        browserUsageChecked: allowBrowserUsage?.checked
+    });
+    
     if (presetSelect && presetSelect.value && allowBrowserUsage && allowBrowserUsage.checked) {
         try {
             const preset = JSON.parse(presetSelect.value);
+            console.log('Parsed preset:', preset);
             if (preset.text === 'Do your schoolwork') {
                 showQuickAdd = true;
+                console.log('Should show quick-add buttons');
             }
         } catch (error) {
             console.warn('Error parsing preset value:', error);
         }
     }
     
+    console.log('showQuickAdd:', showQuickAdd);
+    
     if (showQuickAdd) {
         quickAddContainer.classList.remove('hidden');
+        console.log('Removed hidden class from quick-add container');
         
         // Load website button groups if not already loaded
         if (!quickAddContainer.hasAttribute('data-loaded')) {
+            console.log('Loading quick-add website buttons');
             await loadQuickAddWebsiteButtons();
             quickAddContainer.setAttribute('data-loaded', 'true');
+        } else {
+            console.log('Quick-add buttons already loaded');
         }
     } else {
         quickAddContainer.classList.add('hidden');
+        console.log('Added hidden class to quick-add container');
     }
 }
 
 // Load quick-add website buttons from config
 async function loadQuickAddWebsiteButtons() {
+    console.log('loadQuickAddWebsiteButtons called');
     try {
         const response = await fetch(`${config.API_BASE_URL}/api/config?type=preset-messages`);
         const result = await response.json();
         
+        console.log('API response:', result);
+        
         if (result.success && result.data && result.data.presetMessages) {
             const schoolworkPreset = result.data.presetMessages.find(p => p.text === 'Do your schoolwork');
+            console.log('Schoolwork preset found:', schoolworkPreset);
             
             if (schoolworkPreset && schoolworkPreset.websiteButtons) {
+                console.log('Website buttons found:', schoolworkPreset.websiteButtons);
                 const buttonsContainer = document.querySelector('#quickAddWebsites .button-group');
+                console.log('Buttons container found:', !!buttonsContainer);
+                
                 if (buttonsContainer) {
                     buttonsContainer.innerHTML = '';
                     
                     schoolworkPreset.websiteButtons.forEach(buttonGroup => {
+                        console.log('Creating button for:', buttonGroup.name);
                         const button = document.createElement('button');
                         button.type = 'button';
                         button.className = 'btn-small';
@@ -1295,8 +1327,16 @@ async function loadQuickAddWebsiteButtons() {
                         button.onclick = () => addWebsiteGroup(buttonGroup.websites);
                         buttonsContainer.appendChild(button);
                     });
+                    
+                    console.log('Added', schoolworkPreset.websiteButtons.length, 'buttons to container');
+                } else {
+                    console.warn('Buttons container not found: #quickAddWebsites .button-group');
                 }
+            } else {
+                console.log('No websiteButtons found in schoolwork preset');
             }
+        } else {
+            console.log('Invalid API response structure');
         }
     } catch (error) {
         console.error('Failed to load quick-add website buttons:', error);
