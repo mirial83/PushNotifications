@@ -118,15 +118,6 @@
                             <span class="optional-label">(Required when browser usage is enabled)</span>
                         </label>
                         
-                        <!-- Quick Add Buttons -->
-                        <div class="quick-add-websites">
-                            <small>Quick add common work sites:</small><br>
-                            <button type="button" class="btn-small" onclick="addWebsite('github.com')">GitHub</button>
-                            <button type="button" class="btn-small" onclick="addWebsite('stackoverflow.com')">Stack Overflow</button>
-                            <button type="button" class="btn-small" onclick="addWebsite('docs.google.com')">Google Docs</button>
-                            <button type="button" class="btn-small" onclick="addWebsite('wikipedia.org')">Wikipedia</button>
-                            <button type="button" class="btn-small" onclick="addWebsite('w3schools.com')">W3Schools</button>
-                        </div>
                         
                         <textarea id="allowedWebsites" 
                                 placeholder="Enter allowed websites, one per line or comma-separated&#10;&#10;Examples:&#10;docs.google.com&#10;github.com&#10;stackoverflow.com&#10;developer.mozilla.org&#10;&#10;Only these websites will be accessible when browsers are enabled.&#10;Leave EMPTY to block all internet access (browsers will open but show no content)." 
@@ -150,15 +141,6 @@
                         </div>
                     </div>
 
-                    <!-- Priority -->
-                    <div class="form-group">
-                        <label for="prioritySelect">Priority:</label>
-                        <select id="prioritySelect">
-                            <option value="1">Normal</option>
-                            <option value="2">High</option>
-                            <option value="3">Urgent</option>
-                        </select>
-                    </div>
 
                     <!-- Save Custom Message Section -->
                     <div class="form-group save-custom-message">

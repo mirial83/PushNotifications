@@ -330,40 +330,90 @@ export default async function handler(req, res) {
           'sheets.google.com',
           'slides.google.com',
           'forms.google.com',
-          'sites.google.com',
           'calendar.google.com',
           'mail.google.com',
-          'gmail.com',
           'classroom.google.com',
           'scholar.google.com',
           'books.google.com',
           'translate.google.com',
           'search.google.com',
           'accounts.google.com',
-          '*.googleusercontent.com',
           
           // Educational Resources
           '*.aop.com', 
           '*.yourcloudlibrary.com',
           '*.gutenberg.org',
           '*.codecademy.com',
-          '*.khan*.org',
-          '*.khanacademy.org',
-          'coursera.org',
-          'edx.org',
           '*.wikipedia.org',
-          '*.wikimedia.org',
           
           // Communication & Collaboration
           '*.discord.com',
-          'teams.microsoft.com',
-          '*.zoom.us',
           
           // Reference & Research
           'britannica.com',
           'merriam-webster.com',
           'dictionary.com',
           'thesaurus.com'
+        ],
+        websiteButtons: [
+          {
+            name: 'Google Suite',
+            websites: [
+              'drive.google.com',
+              'docs.google.com',
+              'sheets.google.com',
+              'slides.google.com',
+              'forms.google.com',
+              'calendar.google.com',
+              'mail.google.com',
+              'classroom.google.com',
+              'scholar.google.com',
+              'books.google.com',
+              'translate.google.com',
+              'search.google.com',
+              'accounts.google.com'
+            ]
+          },
+          {
+            name: 'Monarch',
+            websites: ['*.aop.com']
+          },
+          {
+            name: 'Cambria Library',
+            websites: ['*.yourcloudlibrary.com']
+          },
+          {
+            name: 'Gutenberg Library',
+            websites: ['*.gutenberg.org']
+          },
+          {
+            name: 'CodeCademy',
+            websites: ['*.codecademy.com']
+          },
+          {
+            name: 'Wikipedia',
+            websites: ['*.wikipedia.org']
+          },
+          {
+            name: 'Discord',
+            websites: ['*.discord.com']
+          },
+          {
+            name: 'Encyclopedia Britannica',
+            websites: ['britannica.com']
+          },
+          {
+            name: 'Mirriam-Webster Dictionary',
+            websites: ['merriam-webster.com']
+          },
+          {
+            name: 'Dictionary',
+            websites: ['dictionary.com']
+          },
+          {
+            name: 'Thesaurus',
+            websites: ['thesaurus.com']
+          }
         ]
       },
       {

@@ -223,7 +223,7 @@ function updateNotificationsList() {
     const websiteRequests = state.notifications.filter(n => n.type === 'website_request');
     const uninstallRequests = state.notifications.filter(n => n.type === 'uninstall_request');
     
-    // Render uninstall requests first (highest priority)
+    // Render uninstall requests first
     uninstallRequests.forEach(notification => {
         notificationsList.appendChild(createUninstallRequestElement(notification));
     });
@@ -241,15 +241,12 @@ function updateNotificationsList() {
 
 function createNotificationElement(notification, index) {
     const div = document.createElement('div');
-    div.className = `notification-item ${notification.priority ? `priority-${notification.priority}` : ''}`;
+    div.className = 'notification-item';
     div.dataset.notificationId = notification._id || notification.id;
-    
-    const priorityText = notification.priority ? notification.priority.toUpperCase() : 'NORMAL';
     
     div.innerHTML = `
         <div class="notification-header">
             <div class="notification-number">#${index}</div>
-            <div class="notification-priority">${priorityText}</div>
         </div>
         <div class="notification-message">${escapeHtml(notification.message)}</div>
         <div class="notification-meta">
@@ -285,7 +282,6 @@ function createWebsiteRequestElement(request) {
     div.innerHTML = `
         <div class="notification-header">
             <div class="notification-number">WEBSITE REQUEST</div>
-            <div class="notification-priority">HIGH</div>
         </div>
         <div class="notification-message">Website Access Request</div>
         <div class="website-request-details">
@@ -321,7 +317,6 @@ function createUninstallRequestElement(request) {
     div.innerHTML = `
         <div class="notification-header">
             <div class="notification-number">UNINSTALL REQUEST</div>
-            <div class="notification-priority">URGENT</div>
         </div>
         <div class="notification-message">Client Uninstall Request</div>
         <div class="uninstall-request-details">
@@ -373,7 +368,6 @@ async function handleSendNotification(event) {
         action: 'sendNotification',
         
         message: formData.get('message'),
-        priority: formData.get('priority'),
         workMode: formData.get('workMode'),
         browserUsage: formData.get('browserUsage'),
         allowedWebsites: formData.get('allowedWebsites')?.split('\n').filter(url => url.trim()),
@@ -1073,16 +1067,7 @@ function getCurrentMessageText() {
     return customText?.value?.trim() || '';
 }
 
-// Helper function to add website from quick buttons
-function addWebsite(website) {
-    const websitesTextarea = document.getElementById('allowedWebsites');
-    if (websitesTextarea) {
-        const currentValue = websitesTextarea.value.trim();
-        const newValue = currentValue ? currentValue + '\n' + website : website;
-        websitesTextarea.value = newValue;
-        updateWebsiteCount();
-    }
-}
+// addWebsite function removed - quick add buttons no longer present
 
 // Cleanup old data functionality
 async function handleCleanupOldData() {
@@ -1245,7 +1230,6 @@ function getTimeSinceRemoved(removedAt) {
 }
 
 // Export for global access
-window.addWebsite = addWebsite;
 window.dismissIncompleteNotification = dismissIncompleteNotification;
 
 // Add website count listener

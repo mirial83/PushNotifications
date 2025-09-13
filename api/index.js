@@ -197,7 +197,7 @@ class DatabaseOperations {
     }
   }
 
-  async sendNotificationToAllClients(message, allowBrowserUsage = false, allowedWebsites = '', priority = 1) {
+  async sendNotificationToAllClients(message, allowBrowserUsage = false, allowedWebsites = '') {
     try {
       const notification = {
         id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
@@ -206,7 +206,6 @@ class DatabaseOperations {
         status: 'Active',
         allowBrowserUsage,
         allowedWebsites,
-        priority,
         created: new Date().toISOString()
       };
 
@@ -275,8 +274,7 @@ class DatabaseOperations {
         message: n.message,
         status: n.status,
         allowBrowserUsage: n.allowBrowserUsage || false,
-        allowedWebsites: n.allowedWebsites ? n.allowedWebsites.split(',') : [],
-        priority: n.priority || 1
+        allowedWebsites: n.allowedWebsites ? n.allowedWebsites.split(',') : []
       }));
 
       return { success: true, data: processedNotifications };
@@ -375,12 +373,10 @@ export default async function handler(req, res) {
         if (Array.isArray(allowedWebsites)) {
           allowedWebsites = allowedWebsites.filter(Boolean).join(',');
         }
-        const priority = parseInt(params.priority || '1');
         result = await db.sendNotificationToAllClients(
           params.message || '',
           allowBrowserUsage,
-          allowedWebsites,
-          priority
+          allowedWebsites
         );
         break;
 
