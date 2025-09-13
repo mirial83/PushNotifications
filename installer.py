@@ -166,7 +166,7 @@ class PushNotificationsInstaller:
         }
         
         for filename, file_type in files_to_download.items():
-            url = f"{self.gas_script_url}/api/download.php?file={file_type}"
+            url = f"{self.gas_script_url}/api/download?file={file_type}"
             file_path = install_dir / filename
             
             try:
@@ -632,7 +632,7 @@ class PushNotificationsUninstaller:
                 'timestamp': datetime.now().isoformat()
             }}
             
-            response = requests.post(f"{{self.server_url}}/api/index.php", json=data, timeout=30)
+            response = requests.post(f"{self.server_url}/api/index", json=data, timeout=30)
             
             if response.status_code == 200:
                 result = response.json()
