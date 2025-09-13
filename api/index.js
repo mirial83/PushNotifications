@@ -224,49 +224,52 @@ class DatabaseOperations {
 
   async getVersionHistory() {
     try {
-      // Try to fetch from GitHub API first, then fall back to Vercel API if available
-      let deploymentData = await this.fetchGitHubReleases();
+      // Priority order: Vercel deployments > GitHub releases > GitHub commits
+      let deploymentData = await this.fetchVercelDeployments();
       
       if (!deploymentData || deploymentData.length === 0) {
-        // Fall back to commit history if no releases
+        // Try GitHub releases
+        deploymentData = await this.fetchGitHubReleases();
+      }
+      
+      if (!deploymentData || deploymentData.length === 0) {
+        // Fall back to commit history
         deploymentData = await this.fetchGitHubCommits();
       }
       
-      // If still no data, fall back to hardcoded version
-      if (!deploymentData || deploymentData.length === 0) {
-        deploymentData = await this.getFallbackVersionHistory();
+      // If we have deployment data, apply proper version numbering
+      if (deploymentData && deploymentData.length > 0) {
+        deploymentData = this.applyVersionNumbering(deploymentData);
       }
       
       // Get current version from package.json or default
       const currentVersion = process.env.npm_package_version || '1.1.9';
       
       // Mark the most recent as current
-      if (deploymentData.length > 0) {
+      if (deploymentData && deploymentData.length > 0) {
         deploymentData[0].isCurrent = true;
         deploymentData[0].version = currentVersion;
       }
       
       return {
         success: true,
-        data: deploymentData,
-        totalDeployments: deploymentData.length,
+        data: deploymentData || [],
+        totalDeployments: deploymentData ? deploymentData.length : 0,
         currentVersion: currentVersion,
-        source: deploymentData.length > 1 ? (deploymentData[0].source || 'github') : 'fallback',
+        source: deploymentData && deploymentData.length > 0 ? (deploymentData[0].source || 'unknown') : 'no-data',
         lastRefreshed: new Date().toISOString()
       };
     } catch (error) {
       console.error('Error fetching version history:', error);
       
-      // Return fallback data on error
-      const fallbackData = await this.getFallbackVersionHistory();
       return {
-        success: true,
-        data: fallbackData,
-        totalDeployments: fallbackData.length,
+        success: false,
+        data: [],
+        totalDeployments: 0,
         currentVersion: '1.1.9',
-        source: 'fallback',
+        source: 'error',
         lastRefreshed: new Date().toISOString(),
-        error: 'Failed to fetch from external sources'
+        error: 'Failed to fetch deployment data: ' + error.message
       };
     }
   }
@@ -301,16 +304,28 @@ class DatabaseOperations {
       }
       
       const commits = await response.json();
-      return commits.map((commit, index) => ({
-        version: `1.${Math.floor(index / 10) + 1}.${index % 10}`,
-        message: commit.commit.message.split('\n')[0], // First line only
-        description: commit.commit.message,
-        date: commit.commit.committer.date,
-        sha: commit.sha.substring(0, 8),
-        author: commit.commit.author.name,
-        isCurrent: index === 0,
-        source: 'github-commits'
-      }));
+      
+      // Reverse the commits array so oldest is first, then map with proper versioning
+      const reversedCommits = commits.reverse();
+      
+      return reversedCommits.map((commit, index) => {
+        // Calculate version number: start at 1.0.0 and increment
+        const major = 1;
+        const minor = Math.floor(index / 10);
+        const patch = index % 10;
+        const version = `${major}.${minor}.${patch}`;
+        
+        return {
+          version: version,
+          message: commit.commit.message.split('\n')[0], // First line only
+          description: commit.commit.message,
+          date: commit.commit.committer.date,
+          sha: commit.sha.substring(0, 8),
+          author: commit.commit.author.name,
+          isCurrent: false, // Will be set later in getVersionHistory
+          source: 'github-commits'
+        };
+      }).reverse(); // Reverse back so newest is first for display
     } catch (error) {
       console.log('GitHub commits fetch failed:', error.message);
       return null;
@@ -318,19 +333,69 @@ class DatabaseOperations {
   }
 
   async fetchVercelDeployments() {
-    // This would require Vercel API token and team/project IDs
-    // For now, we'll focus on GitHub data
     try {
-      if (!process.env.VERCEL_TOKEN) {
+      // Check for required environment variables
+      const vercelToken = process.env.VERCEL_TOKEN;
+      const vercelTeamId = process.env.VERCEL_TEAM_ID;
+      const vercelProjectId = process.env.VERCEL_PROJECT_ID;
+      
+      if (!vercelToken) {
+        console.log('VERCEL_TOKEN not configured, skipping Vercel API');
         return null;
       }
       
-      // Vercel API implementation would go here
-      // const response = await fetch('https://api.vercel.com/v6/deployments', {
-      //   headers: { 'Authorization': `Bearer ${process.env.VERCEL_TOKEN}` }
-      // });
+      // Build API URL
+      let apiUrl = 'https://api.vercel.com/v6/deployments?limit=20';
       
-      return null;
+      if (vercelTeamId) {
+        apiUrl += `&teamId=${vercelTeamId}`;
+      }
+      
+      if (vercelProjectId) {
+        apiUrl += `&projectId=${vercelProjectId}`;
+      }
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${vercelToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Vercel API error: ${response.status} - ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.deployments || data.deployments.length === 0) {
+        console.log('No Vercel deployments found');
+        return null;
+      }
+      
+      // Filter for successful deployments only
+      const successfulDeployments = data.deployments.filter(deployment => 
+        deployment.state === 'READY' && deployment.readyState === 'READY'
+      );
+      
+      if (successfulDeployments.length === 0) {
+        console.log('No successful Vercel deployments found');
+        return null;
+      }
+      
+      // Convert to our format
+      return successfulDeployments.map((deployment, index) => ({
+        version: null, // Will be set by applyVersionNumbering
+        message: deployment.meta?.githubCommitMessage || deployment.name || `Deployment ${deployment.uid}`,
+        description: deployment.meta?.githubCommitMessage || '',
+        date: new Date(deployment.createdAt).toISOString(),
+        deploymentId: deployment.uid,
+        url: deployment.url,
+        source: 'vercel-deployments',
+        isCurrent: index === 0,
+        author: deployment.creator?.username || 'Unknown'
+      }));
+      
     } catch (error) {
       console.log('Vercel deployments fetch failed:', error.message);
       return null;
@@ -1540,6 +1605,31 @@ class DatabaseOperations {
   }
 
   // Helper methods
+  applyVersionNumbering(deploymentData) {
+    if (!deploymentData || deploymentData.length === 0) {
+      return deploymentData;
+    }
+
+    // Sort deployments by date (oldest first) to apply proper numbering
+    const sortedDeployments = [...deploymentData].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // Apply version numbers starting from 1.0.0
+    const numberedDeployments = sortedDeployments.map((deployment, index) => {
+      const major = 1;
+      const minor = Math.floor(index / 10);
+      const patch = index % 10;
+      const version = `${major}.${minor}.${patch}`;
+      
+      return {
+        ...deployment,
+        version: version
+      };
+    });
+    
+    // Return sorted by date (newest first) for display
+    return numberedDeployments.reverse();
+  }
+
   generateInstallationKey() {
     return 'PNK_' + Math.random().toString(36).substr(2, 16).toUpperCase() + '_' + Date.now().toString(36).toUpperCase();
   }
