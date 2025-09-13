@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PushNotifications - Data Management</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Incomplete Notifications Banner -->
+    <div id="incompleteNotificationsBanner"></div>
+    
+    <!-- Completed Notification Headers -->
+    <div id="completedHeaders"></div>
+    
+    <!-- Uninstall Request Headers -->
+    <div id="uninstallRequestHeaders"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>PushNotifications Data Management</h1>
+            <div class="admin-header-info">
+                <div class="status-indicator">
+                    <span id="connectionStatus" class="status-dot offline"></span>
+                    <span id="statusText">Database: Connecting...</span>
+                    <div class="refresh-indicator">
+                        <span id="refreshCountdown">Next refresh: 1:00</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Admin Navigation Menu -->
+        <nav class="admin-nav">
+            <div class="nav-tabs">
+                <a href="admin.html" class="nav-link">📱 Notifications</a>
+                <a href="data-management.html" class="nav-link active">📁 Data Management</a>
+                <a href="client-admin.html" class="nav-link">🖥️ Client Administration</a>
+                <a href="account-admin.html" class="nav-link">👥 Account Administration</a>
+                <a href="version-history.html" class="nav-link">📊 Version History</a>
+                <button class="logout-btn nav-logout" onclick="handleLogout()">🔓 Logout</button>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <!-- Left Sidebar - Active Notifications -->
+            <aside class="sidebar">
+                <h2>Registered Clients</h2>
+                <div id="registeredClientsList" class="clients-list">
+                    <div class="loading-clients">
+                        <div class="loading-spinner"></div>
+                        <div>Loading clients...</div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Panel - Data Management -->
+            <main class="main-panel">
+                <div class="main-panel-content">
+                    <div class="admin-section active">
+                        <h2>📁 Data Management</h2>
+                        
+                        <div class="data-management-actions">
+                            <div class="action-card">
+                                <h3>🧹 Cleanup Old Data</h3>
+                                <p>Remove old data from multiple categories at once</p>
+                                <div class="cleanup-description">
+                                    <strong>This will remove:</strong>
+                                    <ul>
+                                        <li>Active notifications older than 48 hours</li>
+                                        <li>Regular notifications older than 7 days</li>
+                                        <li>Website requests older than 7 days</li>
+                                    </ul>
+                                    <strong>Preserved:</strong> Encryption keys, app deletion requests, custom messages, completed notifications
+                                </div>
+                                <button type="button" id="cleanupOldData" class="btn-warning btn-block">🗑️ Cleanup Old Data</button>
+                            </div>
+                            
+                            <div class="action-card">
+                                <h3>Remove Old Active Notifications</h3>
+                                <p>Remove notifications older than 48 hours from active notifications list</p>
+                                <button type="button" id="removeOldActiveNotifications" class="btn-warning">🗑️ Remove Old Active Notifications</button>
+                            </div>
+                            
+                            <div class="action-card">
+                                <h3>Clean Old Notifications from Database</h3>
+                                <p>Permanently delete notifications older than 7 days (all statuses)</p>
+                                <button type="button" id="cleanOldNotifications" class="btn-danger">🧹 Clean Old Notifications</button>
+                            </div>
+                            
+                            <div class="action-card">
+                                <h3>Clear Old Website Requests</h3>
+                                <p>Remove website access requests older than 7 days</p>
+                                <button type="button" id="clearOldWebsiteRequests" class="btn-warning">🌐 Clear Old Website Requests</button>
+                            </div>
+
+                            <div class="action-card">
+                                <h3>Clear All Active Notifications</h3>
+                                <p>Remove all currently active notifications immediately</p>
+                                <button type="button" id="clearAllNotifications" class="btn-danger">⚠️ Clear All Active Notifications</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

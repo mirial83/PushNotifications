@@ -1139,3 +1139,93 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     display: block;
     text-align: center;
 }
+
+/* Admin Navigation Styles */
+.admin-nav {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.nav-tabs {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0;
+    padding: 0 2rem;
+    flex-wrap: wrap;
+}
+
+.nav-link {
+    display: inline-block;
+    padding: 1rem 1.5rem;
+    color: rgba(255, 255, 255, 0.8) !important;
+    text-decoration: none !important;
+    font-family: Arial, sans-serif !important;
+    font-size: 16pt !important;
+    font-weight: 500 !important;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease !important;
+    background: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+    white-space: nowrap;
+}
+
+.nav-link:hover {
+    color: white !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-bottom-color: rgba(255, 255, 255, 0.3) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.nav-link.active {
+    color: white !important;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-bottom-color: white !important;
+    font-weight: bold !important;
+}
+
+.nav-logout {
+    margin-left: auto !important;
+    padding: 0.5rem 1rem !important;
+    font-size: 14pt !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: white !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 5px !important;
+    font-weight: normal !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.15s ease-in-out !important;
+}
+
+.nav-logout:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Responsive navigation */
+@media (max-width: 768px) {
+    .nav-tabs {
+        padding: 0 1rem;
+        justify-content: center;
+    }
+    
+    .nav-link {
+        padding: 0.75rem 1rem;
+        font-size: 14pt !important;
+    }
+    
+    .nav-logout {
+        margin-left: 0 !important;
+        margin-top: 0.5rem;
+        order: 999;
+        flex-basis: 100%;
+        text-align: center;
+    }
+}

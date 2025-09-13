@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PushNotifications - Account Administration</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Incomplete Notifications Banner -->
+    <div id="incompleteNotificationsBanner"></div>
+    
+    <!-- Completed Notification Headers -->
+    <div id="completedHeaders"></div>
+    
+    <!-- Uninstall Request Headers -->
+    <div id="uninstallRequestHeaders"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>PushNotifications Account Administration</h1>
+            <div class="admin-header-info">
+                <div class="status-indicator">
+                    <span id="connectionStatus" class="status-dot offline"></span>
+                    <span id="statusText">Database: Connecting...</span>
+                    <div class="refresh-indicator">
+                        <span id="refreshCountdown">Next refresh: 1:00</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Admin Navigation Menu -->
+        <nav class="admin-nav">
+            <div class="nav-tabs">
+                <a href="admin.html" class="nav-link">📱 Notifications</a>
+                <a href="data-management.html" class="nav-link">📁 Data Management</a>
+                <a href="client-admin.html" class="nav-link">🖥️ Client Administration</a>
+                <a href="account-admin.html" class="nav-link active">👥 Account Administration</a>
+                <a href="version-history.html" class="nav-link">📊 Version History</a>
+                <button class="logout-btn nav-logout" onclick="handleLogout()">🔓 Logout</button>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <!-- Left Sidebar - Registered Clients -->
+            <aside class="sidebar">
+                <h2>Registered Clients</h2>
+                <div id="registeredClientsList" class="clients-list">
+                    <div class="loading-clients">
+                        <div class="loading-spinner"></div>
+                        <div>Loading clients...</div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Panel - Account Administration -->
+            <main class="main-panel">
+                <div class="main-panel-content">
+                    <div class="admin-section active">
+                        <h2>👥 Account Administration</h2>
+                        
+                        <div class="account-admin-actions">
+                            <div class="action-card">
+                                <h3>Reset Client Password</h3>
+                                <p>Generate a new password for an existing user</p>
+                                <div class="form-group">
+                                    <label for="resetPasswordUser">Select User:</label>
+                                    <select id="resetPasswordUser">
+                                        <option value="">Loading users...</option>
+                                    </select>
+                                </div>
+                                <button type="button" id="resetUserPassword" class="btn-warning">🔄 Reset Password</button>
+                                <div id="resetPasswordResult" class="password-result"></div>
+                            </div>
+                            
+                            <div class="action-card">
+                                <h3>Create New User</h3>
+                                <p>Add a new user account with generated password</p>
+                                <div class="form-group">
+                                    <label for="newUsername">Username:</label>
+                                    <input type="text" id="newUsername" placeholder="Enter new username">
+                                </div>
+                                <button type="button" id="createNewUser" class="btn-success">➕ Create User</button>
+                                <div id="createUserResult" class="password-result"></div>
+                            </div>
+                            
+                            <div class="action-card">
+                                <h3>Remove User</h3>
+                                <p>Delete a user account and associated data</p>
+                                <div class="form-group">
+                                    <label for="removeUser">Select User:</label>
+                                    <select id="removeUser">
+                                        <option value="">Loading users...</option>
+                                    </select>
+                                </div>
+                                <button type="button" id="removeUserAccount" class="btn-danger">🗑️ Remove User</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -21,10 +21,6 @@
         <header class="app-header">
             <h1>PushNotifications Admin Panel</h1>
             <div class="admin-header-info">
-                <div class="user-info" id="adminUserInfo">
-                    <span id="adminUsername">Loading...</span>
-                    <button class="logout-btn" onclick="handleLogout()">🔓 Logout</button>
-                </div>
                 <div class="status-indicator">
                     <span id="connectionStatus" class="status-dot offline"></span>
                     <span id="statusText">Database: Connecting...</span>
@@ -38,11 +34,12 @@
         <!-- Admin Navigation Menu -->
         <nav class="admin-nav">
             <div class="nav-tabs">
-                <button class="nav-tab active" onclick="showSection('notifications')">📱 Notifications</button>
-                <button class="nav-tab" onclick="showSection('data-management')">📁 Data Management</button>
-                <button class="nav-tab" onclick="showSection('client-admin')">🖥️ Client Administration</button>
-                <button class="nav-tab" onclick="showSection('account-admin')">👥 Account Administration</button>
-                <button class="nav-tab" onclick="showSection('version-history')">📊 Version History</button>
+                <a href="admin.html" class="nav-link active">📱 Notifications</a>
+                <a href="data-management.html" class="nav-link">📁 Data Management</a>
+                <a href="client-admin.html" class="nav-link">🖥️ Client Administration</a>
+                <a href="account-admin.html" class="nav-link">👥 Account Administration</a>
+                <a href="version-history.html" class="nav-link">📊 Version History</a>
+                <button class="logout-btn nav-logout" onclick="handleLogout()">🔓 Logout</button>
             </div>
         </nav>
 
@@ -212,198 +209,6 @@
                     <button type="button" id="initDatabase" class="btn-secondary">Initialize Database</button>
                     <div id="setupStatus" class="status-message"></div>
                 </div>
-                </div>
-
-                <!-- Website access requests are now displayed as banner notifications under relevant notifications in the sidebar -->
-                
-                <!-- Data Cleanup Section -->
-                <div class="cleanup-section">
-                    <h3>🧹 Data Management</h3>
-                    <div class="cleanup-actions">
-                        <button type="button" id="cleanupOldData" class="btn-warning btn-block">🗑️ Cleanup Old Data</button>
-                        <p class="cleanup-description">
-                            <strong>This will remove:</strong>
-                            <ul>
-                                <li>Active notifications older than 48 hours</li>
-                                <li>Regular notifications older than 7 days</li>
-                                <li>Website requests older than 7 days</li>
-                            </ul>
-                            <strong>Preserved:</strong> Encryption keys, app deletion requests, custom messages, completed notifications
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Uninstall All Clients Section -->
-                <div class="uninstall-all-section">
-                    <h3>Administrative Actions</h3>
-                    <div class="admin-actions">
-                        <button type="button" id="uninstallAllClients" class="btn-danger btn-block">⚠️ Uninstall All Active Clients</button>
-                        <p class="admin-warning"><strong>Warning:</strong> This will immediately uninstall the client from all computers. No approval required.</p>
-                    </div>
-                </div>
-
-                <!-- Security Management Section -->
-                <div class="security-section">
-                    <h3>🔐 Security Management</h3>
-                    
-                    <div class="security-tabs">
-                        <button type="button" class="tab-button active" id="clientInfoTab">Client Information</button>
-                        <button type="button" class="tab-button" id="securityKeysTab">Security Keys</button>
-                    </div>
-
-                    <!-- Client Information Tab -->
-                    <div class="tab-content active" id="clientInfoContent">
-                        <div class="section-description">
-                            <p>View and manage all registered client installations with MongoDB backend.</p>
-                        </div>
-                        
-                        <div class="action-buttons">
-                            <button type="button" id="refreshClients" class="btn-secondary">🔄 Refresh Client List</button>
-                            <span id="clientsLastRefreshed" class="last-refreshed">Never refreshed</span>
-                        </div>
-                        
-                        <div id="clientInfoList" class="data-list">
-                            <div class="loading-data">
-                                <div class="loading-spinner"></div>
-                                <div>Loading client information...</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Security Keys Tab -->
-                    <div class="tab-content" id="securityKeysContent">
-                        <div class="section-description">
-                            <p>Monitor encryption keys and security data stored in MongoDB. Key values are never displayed for security.</p>
-                        </div>
-                        
-                        <div class="action-buttons">
-                            <button type="button" id="refreshSecurityKeys" class="btn-secondary">🔄 Refresh Security Keys</button>
-                            <span id="keysLastRefreshed" class="last-refreshed">Never refreshed</span>
-                        </div>
-                        
-                        <div id="securityKeysList" class="data-list">
-                            <div class="loading-data">
-                                <div class="loading-spinner"></div>
-                                <div>Loading security keys...</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Data Management Section -->
-                <div id="data-management-section" class="admin-section">
-                    <h2>📁 Data Management</h2>
-                    
-                    <div class="data-management-actions">
-                        <div class="action-card">
-                            <h3>Remove Old Active Notifications</h3>
-                            <p>Remove notifications older than 48 hours from active notifications list</p>
-                            <button type="button" id="removeOldActiveNotifications" class="btn-warning">🗑️ Remove Old Active Notifications</button>
-                        </div>
-                        
-                        <div class="action-card">
-                            <h3>Clean Old Notifications from Database</h3>
-                            <p>Permanently delete notifications older than 7 days (all statuses)</p>
-                            <button type="button" id="cleanOldNotifications" class="btn-danger">🧹 Clean Old Notifications</button>
-                        </div>
-                        
-                        <div class="action-card">
-                            <h3>Clear Old Website Requests</h3>
-                            <p>Remove website access requests older than 7 days</p>
-                            <button type="button" id="clearOldWebsiteRequests" class="btn-warning">🌐 Clear Old Website Requests</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Client Administration Section -->
-                <div id="client-admin-section" class="admin-section">
-                    <h2>🖥️ Client Administration</h2>
-                    
-                    <div class="client-admin-actions">
-                        <div class="action-card">
-                            <h3>Uninstall All Active Clients</h3>
-                            <p>Send uninstall command to all currently active clients</p>
-                            <button type="button" id="uninstallAllActiveClients" class="btn-danger">⚠️ Uninstall All Active Clients</button>
-                        </div>
-                        
-                        <div class="action-card">
-                            <h3>Uninstall Specific Client</h3>
-                            <p>Select and uninstall a specific client installation</p>
-                            <button type="button" id="uninstallSpecificClient" class="btn-warning">📱 Uninstall Client</button>
-                        </div>
-                        
-                        <div class="action-card">
-                            <h3>Retrieve Security Key</h3>
-                            <p>View the security key for a specific client</p>
-                            <button type="button" id="retrieveSecurityKey" class="btn-secondary">🔑 Retrieve Security Key</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Account Administration Section -->
-                <div id="account-admin-section" class="admin-section">
-                    <h2>👥 Account Administration</h2>
-                    
-                    <div class="account-admin-actions">
-                        <div class="action-card">
-                            <h3>Reset Client Password</h3>
-                            <p>Generate a new password for an existing user</p>
-                            <div class="form-group">
-                                <label for="resetPasswordUser">Select User:</label>
-                                <select id="resetPasswordUser">
-                                    <option value="">Loading users...</option>
-                                </select>
-                            </div>
-                            <button type="button" id="resetUserPassword" class="btn-warning">🔄 Reset Password</button>
-                            <div id="resetPasswordResult" class="password-result"></div>
-                        </div>
-                        
-                        <div class="action-card">
-                            <h3>Create New User</h3>
-                            <p>Add a new user account with generated password</p>
-                            <div class="form-group">
-                                <label for="newUsername">Username:</label>
-                                <input type="text" id="newUsername" placeholder="Enter new username">
-                            </div>
-                            <button type="button" id="createNewUser" class="btn-success">➕ Create User</button>
-                            <div id="createUserResult" class="password-result"></div>
-                        </div>
-                        
-                        <div class="action-card">
-                            <h3>Remove User</h3>
-                            <p>Delete a user account and associated data</p>
-                            <div class="form-group">
-                                <label for="removeUser">Select User:</label>
-                                <select id="removeUser">
-                                    <option value="">Loading users...</option>
-                                </select>
-                            </div>
-                            <button type="button" id="removeUserAccount" class="btn-danger">🗑️ Remove User</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Version History Section -->
-                <div id="version-history-section" class="admin-section">
-                    <h2>📊 Version History</h2>
-                    
-                    <div class="version-history-content">
-                        <div class="section-description">
-                            <p>Track all deployments and version releases of the PushNotifications system</p>
-                        </div>
-                        
-                        <div class="action-buttons">
-                            <button type="button" id="refreshVersionHistory" class="btn-secondary">🔄 Refresh Version History</button>
-                            <span id="versionLastRefreshed" class="last-refreshed">Never refreshed</span>
-                        </div>
-                        
-                        <div id="versionHistoryList" class="version-list">
-                            <div class="loading-data">
-                                <div class="loading-spinner"></div>
-                                <div>Loading version history...</div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
                 
                 </div>
