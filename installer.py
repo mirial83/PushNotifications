@@ -69,7 +69,7 @@ class PushNotificationsInstaller:
     def check_if_update(self):
         """Check if this is an update (existing installation found)"""
         install_dir = self.get_install_directory()
-        return install_dir.exists() and (install_dir / "pushnotifications.py").exists()
+        return install_dir.exists() and (install_dir / "installer.py").exists()
 
 
 
@@ -200,7 +200,7 @@ class PushNotificationsInstaller:
         
         # Only download the client file - everything else is embedded in this installer
         files_to_download = {
-            "pushnotifications.py": "client",
+            "installer.py": "client",
         }
         
         for filename, file_type in files_to_download.items():
@@ -544,7 +544,7 @@ if __name__ == "__main__":
                 key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
                 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
                 winreg.SetValueEx(key, "PushNotifications", 0, winreg.REG_SZ, 
-                                f'pythonw.exe "{install_dir / "pushnotifications.py"}"')
+                f'pythonw.exe "{install_dir / "installer.py"}"')
                 winreg.CloseKey(key)
                 print("[OK] Windows startup entry created")
                 
@@ -563,7 +563,7 @@ if __name__ == "__main__":
     <key>ProgramArguments</key>
     <array>
         <string>python3</string>
-        <string>{install_dir}/pushnotifications.py</string>
+        <string>{install_dir}/installer.py</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -588,7 +588,7 @@ if __name__ == "__main__":
 Type=Application
 Name=PushNotifications Client
 Comment=Desktop notification client
-Exec=python3 {install_dir}/pushnotifications.py
+Exec=python3 {install_dir}/installer.py
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
@@ -698,7 +698,7 @@ class PushNotificationsUninstaller:
                 import psutil
                 for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                     try:
-                        if 'pushnotifications.py' in ' '.join(proc.info['cmdline'] or []):
+                        if 'installer.py' in ' '.join(proc.info['cmdline'] or []):
                             proc.terminate()
                             print(f"Stopped client process PID {{proc.info['pid']}}")
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -896,7 +896,7 @@ To uninstall:
         
         # Restart the client
         try:
-            subprocess.Popen([sys.executable, str(install_dir / "pushnotifications.py")])
+            subprocess.Popen([sys.executable, str(install_dir / "installer.py")])
             print("Client restarted successfully with new version!")
         except Exception as e:
             print(f"Could not restart client: {e}")
@@ -942,7 +942,7 @@ To uninstall:
         # Automatically start the client without asking
         print("\nStarting client automatically...")
         try:
-            subprocess.Popen([sys.executable, str(install_dir / "pushnotifications.py")])
+            subprocess.Popen([sys.executable, str(install_dir / "installer.py")])
             print("Client started successfully!")
         except Exception as e:
             print(f"Could not start client: {e}")
@@ -958,7 +958,7 @@ To uninstall:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 try:
                     cmdline = proc.info['cmdline'] or []
-                    if any('pushnotifications.py' in arg for arg in cmdline):
+                    if any('installer.py' in arg for arg in cmdline):
                         proc.terminate()
                         print(f"  Stopped client process PID {proc.info['pid']}")
                         stopped_count += 1
@@ -1075,7 +1075,7 @@ class PushNotificationsUninstaller:
                 import psutil
                 for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                     try:
-                        if 'pushnotifications.py' in ' '.join(proc.info['cmdline'] or []):
+                        if 'installer.py' in ' '.join(proc.info['cmdline'] or []):
                             proc.terminate()
                             print(f"Stopped client process PID {{proc.info['pid']}}")
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -1247,7 +1247,7 @@ To uninstall:
             critical_files = [
                 ".protection",
                 ".protection_key",
-                "pushnotifications.py",
+                "installer.py",
                 "uninstall.py"
             ]
             
@@ -1293,7 +1293,7 @@ class FolderMonitor:
             return False
             
         # Check critical files
-        critical_files = [".protection", ".protection_key", "pushnotifications.py"]
+        critical_files = [".protection", ".protection_key", "installer.py"]
         for filename in critical_files:
             if not (self.install_dir / filename).exists():
                 print(f"WARNING: Critical file {filename} is missing!")
