@@ -1641,7 +1641,7 @@ class DatabaseOperations {
     }
   }
   
-  async fixExistingVersionNumbers() {
+  async fixExistingVersionNumbers(forceReassign = false) {
     try {
       // Get all versions sorted by original date (newest first)
       const allVersions = await this.db.collection('versionHistory')
@@ -1650,22 +1650,25 @@ class DatabaseOperations {
         .toArray();
       
       if (allVersions.length === 0) {
-        return;
+        console.log('No versions found in database');
+        return { success: true, message: 'No versions found' };
       }
       
-      console.log('Checking if version numbers need to be fixed...');
+      console.log(`Checking ${allVersions.length} versions for proper numbering...`);
       
-      // Check if the newest version has the highest version number
-      const newestVersion = allVersions[0];
-      const highestVersionNumber = await this.db.collection('versionHistory')
-        .findOne({}, { sort: { versionNumber: -1 } });
-      
-      if (newestVersion._id.equals(highestVersionNumber._id)) {
-        // Version numbers are already correct
-        return;
+      if (!forceReassign) {
+        // Check if the newest version has the highest version number
+        const newestVersion = allVersions[0];
+        const highestVersionNumber = await this.db.collection('versionHistory')
+          .findOne({}, { sort: { versionNumber: -1 } });
+        
+        if (newestVersion._id.equals(highestVersionNumber._id)) {
+          console.log('Version numbers are already correct');
+          return { success: true, message: 'Version numbers are already correct' };
+        }
       }
       
-      console.log('Fixing version numbers for existing records...');
+      console.log('Reassigning version numbers for all records...');
       
       // Renumber all versions - newest gets highest number
       const updates = allVersions.map((version, index) => {
@@ -1674,6 +1677,8 @@ class DatabaseOperations {
         const minor = Math.floor(index / 10);
         const patch = index % 10;
         const newSemanticVersion = `${major}.${minor}.${patch}`;
+        
+        console.log(`Version ${version.message?.substring(0, 50)}... -> v${newVersionNumber} (${newSemanticVersion})`);
         
         return {
           updateOne: {
@@ -1690,11 +1695,21 @@ class DatabaseOperations {
       });
       
       if (updates.length > 0) {
-        await this.db.collection('versionHistory').bulkWrite(updates);
-        console.log(`Fixed version numbers for ${updates.length} existing records`);
+        const result = await this.db.collection('versionHistory').bulkWrite(updates);
+        console.log(`Successfully reassigned version numbers for ${updates.length} records`);
+        console.log(`Modified: ${result.modifiedCount}, Matched: ${result.matchedCount}`);
+        return { 
+          success: true, 
+          message: `Successfully reassigned ${updates.length} version numbers`,
+          modifiedCount: result.modifiedCount,
+          matchedCount: result.matchedCount
+        };
       }
+      
+      return { success: false, message: 'No updates to perform' };
     } catch (error) {
       console.error('Error fixing existing version numbers:', error);
+      return { success: false, message: error.message };
     }
   }
   
@@ -2254,6 +2269,11 @@ export default async function handler(req, res) {
       // Version History Actions
       case 'getVersionHistory':
         result = await db.getVersionHistory();
+        break;
+        
+      case 'fixVersionNumbers':
+        await db.connect();
+        result = await db.fixExistingVersionNumbers(true); // Force reassignment
         break;
     }
 
