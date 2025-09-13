@@ -8,7 +8,9 @@ const state = {
     refreshInterval: null,
     dbInitialized: false,
     clientCount: 0,
-    refreshIntervalSetting: 30 // Default to 30 seconds
+    refreshIntervalSetting: 60, // 1 minute (changed from 30 seconds)
+    currentUser: null,
+    currentSection: 'notifications'
 };
 
 // Configuration
@@ -17,12 +19,134 @@ const config = {
     REFRESH_COUNTDOWN_UPDATE: 1000, // 1 second
 };
 
+// Authentication helper functions
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
+
+function setCookie(name, value, options = {}) {
+    let cookieString = `${name}=${value}`;
+    
+    if (options.path) {
+        cookieString += `; path=${options.path}`;
+    }
+    
+    if (options.expires) {
+        cookieString += `; expires=${options.expires.toUTCString()}`;
+    }
+    
+    if (options.sameSite) {
+        cookieString += `; SameSite=${options.sameSite}`;
+    }
+    
+    document.cookie = cookieString;
+}
+
+function getSessionToken() {
+    // Try cookie first, then localStorage as fallback
+    return getCookie('sessionToken') || localStorage.getItem('sessionToken');
+}
+
+function setSessionToken(token) {
+    // Set as session cookie (expires when browser closes)
+    setCookie('sessionToken', token, { path: '/', sameSite: 'Strict' });
+    // Also store in localStorage as backup
+    localStorage.setItem('sessionToken', token);
+}
+
+function clearSessionToken() {
+    // Clear cookie
+    document.cookie = 'sessionToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    // Clear localStorage
+    localStorage.removeItem('sessionToken');
+    localStorage.removeItem('authToken');
+    sessionStorage.removeItem('sessionId');
+}
+
+function isLoggedIn() {
+    return !!getSessionToken();
+}
+
+// API helper function with authentication
+async function apiCall(action, data = {}, useAuth = true) {
+    const headers = { 'Content-Type': 'application/json' };
+    
+    if (useAuth && isLoggedIn()) {
+        headers['Authorization'] = `Bearer ${getSessionToken()}`;
+    }
+    
+    const response = await fetch(`${config.API_BASE_URL}/api/index`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action, ...data })
+    });
+    
+    const result = await response.json();
+    
+    // Handle session expiration
+    if (!result.success && result.message && 
+        (result.message.includes('session') || result.message.includes('expired'))) {
+        clearSessionToken();
+        window.location.href = 'index.html';
+        return null;
+    }
+    
+    return result;
+}
+
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing PushNotifications interface...');
     
-    // Initialize user authentication
-    initializeUserAuth();
+    // Check if we're on the login page
+    if (window.location.pathname.endsWith('index.html') || 
+        window.location.pathname.endsWith('/')) {
+        initializeLogin();
+        return;
+    }
+    
+    // Check if we're on the user download page
+    if (window.location.pathname.endsWith('user-download.html')) {
+        initializeUserDownload();
+        return;
+    }
+    
+    // Check if we're on the admin panel
+    if (window.location.pathname.endsWith('admin.html')) {
+        initializeAdmin();
+        return;
+    }
+    
+    console.log('PushNotifications interface initialized');
+});
+
+// Login page initialization
+function initializeLogin() {
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleLogin);
+    }
+}
+
+// User download page initialization
+function initializeUserDownload() {
+    // Validate user session
+    validateUserSession();
+    
+    // Setup event listeners for user download page
+    setupUserDownloadEventListeners();
+    
+    // Load user installation key
+    loadUserInstallationKey();
+}
+
+// Admin panel initialization
+function initializeAdmin() {
+    // Validate admin session
+    validateAdminSession();
     
     // Setup event listeners
     setupEventListeners();
@@ -33,11 +157,96 @@ document.addEventListener('DOMContentLoaded', function() {
     // Setup refresh timer
     startRefreshTimer();
     
-    console.log('PushNotifications interface initialized');
-});
+    // Setup admin panel
+    setupAdminPanel();
+}
 
-function initializeUserAuth() {
-    // Authentication removed - no user verification needed
+// Session validation
+async function validateUserSession() {
+    try {
+        const result = await apiCall('validateSession');
+        
+        if (!result || !result.success) {
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        state.currentUser = result.user;
+        updateUserInfo(result.user);
+        
+    } catch (error) {
+        console.error('Session validation error:', error);
+        window.location.href = 'index.html';
+    }
+}
+
+async function validateAdminSession() {
+    try {
+        const result = await apiCall('validateSession');
+        
+        if (!result || !result.success || result.user.role !== 'admin') {
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        state.currentUser = result.user;
+        updateAdminUserInfo(result.user);
+        
+    } catch (error) {
+        console.error('Admin session validation error:', error);
+        window.location.href = 'index.html';
+    }
+}
+
+// Login handling
+async function handleLogin(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const username = formData.get('username');
+    const password = formData.get('password');
+    
+    try {
+        showStatus('Logging in...', 'info');
+        
+        const result = await apiCall('login', { username, password }, false);
+        
+        if (result && result.success) {
+            setSessionToken(result.sessionToken);
+            
+            // Redirect based on role
+            if (result.user.role === 'admin') {
+                window.location.href = 'admin.html';
+            } else {
+                window.location.href = 'user-download.html';
+            }
+        } else {
+            showStatus(result ? result.message : 'Login failed', 'error');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        showStatus('Login failed. Please try again.', 'error');
+    }
+}
+
+// Logout handling
+async function handleLogout() {
+    try {
+        await apiCall('logout');
+        clearSessionToken();
+        window.location.href = 'index.html';
+    } catch (error) {
+        console.error('Logout error:', error);
+        clearSessionToken();
+        window.location.href = 'index.html';
+    }
+}
+
+function updateAdminUserInfo(user) {
+    const adminUsername = document.getElementById('adminUsername');
+    if (adminUsername && user) {
+        adminUsername.textContent = `Admin: ${user.username}`;
+    }
 }
 
 function setupEventListeners() {
@@ -790,24 +999,43 @@ function hideSetupSection() {
     }
 }
 
-function showStatus(message, type = 'info') {
+function showStatus(message, type = 'info', duration = null) {
     // Remove existing status messages
     document.querySelectorAll('.status-message').forEach(el => el.remove());
     
     const statusDiv = document.createElement('div');
     statusDiv.className = `status-message ${type}`;
-    statusDiv.textContent = message;
     
-    // Add to main panel content
-    const mainPanelContent = document.querySelector('.main-panel-content');
-    if (mainPanelContent) {
-        mainPanelContent.insertBefore(statusDiv, mainPanelContent.firstChild);
+    // Check if message contains HTML
+    if (message.includes('<')) {
+        statusDiv.innerHTML = message;
+    } else {
+        statusDiv.textContent = message;
+    }
+    
+    // Add to main panel content or body if no main panel
+    let container = document.querySelector('.main-panel-content') || document.querySelector('.user-content') || document.body;
+    
+    if (container) {
+        container.insertBefore(statusDiv, container.firstChild);
         
-        // Auto-hide after 5 seconds for success messages
-        if (type === 'success') {
+        // Auto-hide based on duration or type
+        let hideDelay = duration;
+        if (hideDelay === null) {
+            if (type === 'success') {
+                hideDelay = 5000;
+            } else if (type === 'info') {
+                hideDelay = 3000;
+            }
+            // Error messages don't auto-hide by default
+        }
+        
+        if (hideDelay && hideDelay > 0) {
             setTimeout(() => {
-                statusDiv.remove();
-            }, 5000);
+                if (statusDiv.parentNode) {
+                    statusDiv.remove();
+                }
+            }, hideDelay);
         }
     }
 }
@@ -1884,8 +2112,465 @@ function displayClientHistoryModal(history, macAddress) {
     showStatus('Client history loaded', 'success');
 }
 
+// User Download Page Functions
+function updateUserInfo(user) {
+    const usernameElement = document.getElementById('currentUsername');
+    if (usernameElement && user) {
+        usernameElement.textContent = user.username;
+    }
+}
+
+function setupUserDownloadEventListeners() {
+    // Download client button (now generates key and downloads)
+    const downloadButton = document.getElementById('downloadClient');
+    if (downloadButton) {
+        downloadButton.addEventListener('click', handleDownloadClient);
+    }
+    
+    // Logout button
+    const logoutButton = document.getElementById('logoutButton');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', handleLogout);
+    }
+}
+
+async function loadUserInstallationKey() {
+    // No longer needed since we generate keys per download
+    // Just ensure the UI is set up for download
+    const downloadSection = document.getElementById('downloadSection');
+    if (downloadSection) {
+        downloadSection.style.display = 'block';
+    }
+}
+
+async function handleDownloadClient() {
+    const downloadButton = document.getElementById('downloadClient');
+    const keySection = document.getElementById('installationKeySection');
+    const keyDisplay = document.getElementById('installationKeyDisplay');
+    const copyKeyButton = document.getElementById('copyInstallationKey');
+    
+    if (!downloadButton) return;
+    
+    // Disable button and show loading
+    downloadButton.disabled = true;
+    downloadButton.textContent = 'Generating Download Key...';
+    
+    try {
+        showStatus('Generating installation key...', 'info');
+        
+        // Generate download key
+        const result = await apiCall('generateDownloadKey');
+        
+        if (result && result.success) {
+            const installationKey = result.installationKey;
+            
+            // Show the key section
+            if (keySection) {
+                keySection.style.display = 'block';
+            }
+            
+            // Display the key
+            if (keyDisplay) {
+                keyDisplay.textContent = installationKey;
+            }
+            
+            // Setup copy button
+            if (copyKeyButton) {
+                copyKeyButton.onclick = () => copyToClipboard(installationKey);
+            }
+            
+            // Update button for download
+            downloadButton.textContent = 'Download Client Now';
+            downloadButton.disabled = false;
+            
+            // Change button action to actual download
+            downloadButton.onclick = () => {
+                // Initiate download
+                const downloadUrl = `${config.API_BASE_URL}/api/download?file=client`;
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = 'pushnotifications.py';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Show instructions
+                showDownloadInstructions(installationKey);
+            };
+            
+            showStatus('Installation key generated! Click "Download Client Now" to download.', 'success');
+            
+        } else {
+            throw new Error(result ? result.message : 'Failed to generate download key');
+        }
+    } catch (error) {
+        console.error('Download key generation error:', error);
+        showStatus('Failed to generate download key: ' + error.message, 'error');
+        
+        // Reset button
+        downloadButton.disabled = false;
+        downloadButton.textContent = 'Download Client';
+    }
+}
+
+function showDownloadInstructions(installationKey) {
+    const instructions = `
+        <div class="download-instructions">
+            <h3>Download Started</h3>
+            <p>Your client download has started. Please follow these steps:</p>
+            <ol>
+                <li>Save the downloaded file to your desired location</li>
+                <li>Run the installer</li>
+                <li>Use this installation key when prompted: <strong>${installationKey}</strong></li>
+            </ol>
+            <p><strong>Note:</strong> This installation key will expire in 24 hours.</p>
+        </div>
+    `;
+    
+    showStatus(instructions, 'info', 15000); // Show for 15 seconds
+}
+
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        showStatus('Installation key copied to clipboard!', 'success');
+    } catch (error) {
+        console.error('Failed to copy to clipboard:', error);
+        showStatus('Failed to copy to clipboard', 'error');
+        
+        // Fallback - select the text
+        const keyDisplay = document.getElementById('installationKeyDisplay');
+        if (keyDisplay) {
+            keyDisplay.select();
+        }
+    }
+}
+
+// Admin Panel Functions
+function setupAdminPanel() {
+    // Setup admin menu navigation
+    const adminMenuButtons = document.querySelectorAll('.admin-menu button');
+    adminMenuButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const section = button.dataset.section;
+            if (section) {
+                switchAdminSection(section);
+            }
+        });
+    });
+    
+    // Setup admin functionality buttons
+    setupAdminButtonListeners();
+    
+    // Load registered clients for sidebar
+    loadRegisteredClients();
+}
+
+function setupAdminButtonListeners() {
+    // User management buttons
+    document.getElementById('viewAllUsers')?.addEventListener('click', loadAllUsers);
+    document.getElementById('createNewUser')?.addEventListener('click', showCreateUserModal);
+    document.getElementById('exportUserData')?.addEventListener('click', exportUserData);
+    
+    // Client administration buttons
+    document.getElementById('viewAllClients')?.addEventListener('click', loadAllClients);
+    document.getElementById('deactivateAllClients')?.addEventListener('click', deactivateAllClients);
+    document.getElementById('exportClientData')?.addEventListener('click', exportClientData);
+    
+    // Data management buttons
+    document.getElementById('backupDatabase')?.addEventListener('click', backupDatabase);
+    document.getElementById('cleanupOldData')?.addEventListener('click', handleCleanupOldData);
+    document.getElementById('exportNotifications')?.addEventListener('click', exportNotifications);
+    
+    // Logout button
+    document.getElementById('adminLogoutButton')?.addEventListener('click', handleLogout);
+}
+
+function switchAdminSection(sectionName) {
+    // Update active menu item
+    document.querySelectorAll('.admin-menu button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`[data-section="${sectionName}"]`)?.classList.add('active');
+    
+    // Update visible section
+    document.querySelectorAll('.admin-section').forEach(section => {
+        section.classList.remove('active');
+    });
+    document.getElementById(sectionName)?.classList.add('active');
+    
+    // Update state
+    state.currentSection = sectionName;
+    
+    // Load section-specific data
+    switch (sectionName) {
+        case 'notifications':
+            refreshNotifications();
+            break;
+        case 'data-management':
+            // Load data management info
+            break;
+        case 'client-administration':
+            loadAllClients();
+            break;
+        case 'account-administration':
+            loadAllUsers();
+            break;
+        case 'version-history':
+            loadVersionHistory();
+            break;
+    }
+}
+
+async function loadAllUsers() {
+    try {
+        showStatus('Loading users...', 'info');
+        
+        const result = await apiCall('getAllUsers');
+        
+        if (result && result.success) {
+            displayUsersTable(result.data);
+            showStatus('Users loaded successfully', 'success');
+        } else {
+            showStatus(result ? result.message : 'Failed to load users', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading users:', error);
+        showStatus('Failed to load users.', 'error');
+    }
+}
+
+function displayUsersTable(users) {
+    const container = document.getElementById('usersTableContainer');
+    if (!container) return;
+    
+    if (users.length === 0) {
+        container.innerHTML = '<div class="no-data">No users found</div>';
+        return;
+    }
+    
+    let tableHTML = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Created</th>
+                    <th>Last Login</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    users.forEach(user => {
+        tableHTML += `
+            <tr>
+                <td>${escapeHtml(user.username)}</td>
+                <td>${escapeHtml(user.email)}</td>
+                <td><span class="role-badge role-${user.role}">${user.role}</span></td>
+                <td>${formatTimestamp(user.createdAt)}</td>
+                <td>${user.lastLogin ? formatTimestamp(user.lastLogin) : 'Never'}</td>
+                <td><span class="status-badge ${user.isActive ? 'active' : 'inactive'}">${user.isActive ? 'Active' : 'Inactive'}</span></td>
+                <td>
+                    <button class="btn-small" onclick="editUser('${user.id}')">Edit</button>
+                    ${user.isActive ? 
+                        `<button class="btn-small btn-warning" onclick="deactivateUser('${user.id}')">Deactivate</button>` : 
+                        `<button class="btn-small btn-success" onclick="activateUser('${user.id}')">Activate</button>`
+                    }
+                </td>
+            </tr>
+        `;
+    });
+    
+    tableHTML += '</tbody></table>';
+    container.innerHTML = tableHTML;
+}
+
+async function loadAllClients() {
+    try {
+        showStatus('Loading clients...', 'info');
+        
+        const result = await apiCall('getAllMacClients');
+        
+        if (result && result.success) {
+            displayClientsTable(result.data);
+            showStatus('Clients loaded successfully', 'success');
+        } else {
+            showStatus(result ? result.message : 'Failed to load clients', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading clients:', error);
+        showStatus('Failed to load clients.', 'error');
+    }
+}
+
+function displayClientsTable(clients) {
+    const container = document.getElementById('clientsTableContainer');
+    if (!container) return;
+    
+    if (clients.length === 0) {
+        container.innerHTML = '<div class="no-data">No clients found</div>';
+        return;
+    }
+    
+    let tableHTML = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>MAC Address</th>
+                    <th>Username</th>
+                    <th>Client Name</th>
+                    <th>Platform</th>
+                    <th>Version</th>
+                    <th>Last Checkin</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    clients.forEach(client => {
+        const isOnline = isRecentCheckin(client.lastCheckin) && client.activeClientId;
+        const version = client.activeClient?.version || 'Unknown';
+        
+        tableHTML += `
+            <tr>
+                <td><code>${escapeHtml(client.macAddress)}</code></td>
+                <td>${escapeHtml(client.username)}</td>
+                <td>${escapeHtml(client.clientName)}</td>
+                <td>${escapeHtml(client.platform || 'Unknown')}</td>
+                <td>${escapeHtml(version)}</td>
+                <td>${formatTimestamp(client.lastCheckin)}</td>
+                <td><span class="status-badge ${isOnline ? 'online' : 'offline'}">${isOnline ? 'Online' : 'Offline'}</span></td>
+                <td>
+                    <button class="btn-small" onclick="viewClientHistory('${client.macAddress}')">History</button>
+                    ${client.activeClientId ? 
+                        `<button class="btn-small btn-warning" onclick="deactivateMacClient('${client.activeClientId}')">Deactivate</button>` : 
+                        ''
+                    }
+                </td>
+            </tr>
+        `;
+    });
+    
+    tableHTML += '</tbody></table>';
+    container.innerHTML = tableHTML;
+}
+
+async function loadRegisteredClients() {
+    try {
+        const result = await apiCall('getAllMacClients');
+        
+        if (result && result.success) {
+            displayRegisteredClientsList(result.data);
+        }
+    } catch (error) {
+        console.error('Error loading registered clients:', error);
+    }
+}
+
+function displayRegisteredClientsList(clients) {
+    const container = document.getElementById('registeredClientsList');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (clients.length === 0) {
+        container.innerHTML = '<div class="no-clients">No registered clients</div>';
+        return;
+    }
+    
+    clients.forEach(client => {
+        const isOnline = isRecentCheckin(client.lastCheckin) && client.activeClientId;
+        
+        const clientDiv = document.createElement('div');
+        clientDiv.className = `client-item ${isOnline ? 'online' : 'offline'}`;
+        
+        clientDiv.innerHTML = `
+            <div class="client-status"></div>
+            <div class="client-info">
+                <div class="client-name">${escapeHtml(client.clientName)}</div>
+                <div class="client-details">${escapeHtml(client.username)} • ${escapeHtml(client.platform || 'Unknown')}</div>
+            </div>
+        `;
+        
+        container.appendChild(clientDiv);
+    });
+}
+
+async function loadVersionHistory() {
+    const container = document.getElementById('versionHistoryContainer');
+    if (!container) return;
+    
+    try {
+        const result = await apiCall('get_version');
+        
+        if (result && result.success) {
+            container.innerHTML = `
+                <div class="version-info">
+                    <h4>Current Version: ${escapeHtml(result.currentVersion)}</h4>
+                    <p><strong>Release Notes:</strong> ${escapeHtml(result.releaseNotes)}</p>
+                    <p><strong>Auto Update:</strong> ${result.autoUpdateEnabled ? 'Enabled' : 'Disabled'}</p>
+                    <p><strong>Last Updated:</strong> ${formatTimestamp(result.timestamp)}</p>
+                </div>
+            `;
+        } else {
+            container.innerHTML = '<div class="error-state">Failed to load version information</div>';
+        }
+    } catch (error) {
+        console.error('Error loading version history:', error);
+        container.innerHTML = '<div class="error-state">Failed to load version information</div>';
+    }
+}
+
+// Placeholder functions for admin features (to be implemented)
+function showCreateUserModal() {
+    alert('Create user modal - to be implemented');
+}
+
+function editUser(userId) {
+    alert(`Edit user ${userId} - to be implemented`);
+}
+
+function deactivateUser(userId) {
+    alert(`Deactivate user ${userId} - to be implemented`);
+}
+
+function activateUser(userId) {
+    alert(`Activate user ${userId} - to be implemented`);
+}
+
+function deactivateAllClients() {
+    alert('Deactivate all clients - to be implemented');
+}
+
+function exportUserData() {
+    alert('Export user data - to be implemented');
+}
+
+function exportClientData() {
+    alert('Export client data - to be implemented');
+}
+
+function backupDatabase() {
+    alert('Backup database - to be implemented');
+}
+
+function exportNotifications() {
+    alert('Export notifications - to be implemented');
+}
+
 // Export security and client management functions for global access
 window.loadClientInfo = loadClientInfo;
 window.loadSecurityKeys = loadSecurityKeys;
 window.deactivateMacClient = deactivateMacClient;
 window.viewClientHistory = viewClientHistory;
+window.loadAllUsers = loadAllUsers;
+window.loadAllClients = loadAllClients;
+window.editUser = editUser;
+window.deactivateUser = deactivateUser;
+window.activateUser = activateUser;

@@ -1,5 +1,5 @@
 // PushNotifications Node.js API
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import crypto from 'crypto';
 
 // Environment variables
@@ -1040,6 +1040,377 @@ class DatabaseOperations {
     }
   }
 
+  // User Management Methods
+  async createUser(username, email, password, role = 'user') {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'User management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Check if user already exists
+      const existingUser = await this.db.collection('users').findOne({
+        $or: [{ username }, { email }]
+      });
+      
+      if (existingUser) {
+        return { success: false, message: 'Username or email already exists' };
+      }
+
+      // Hash password (in production, use bcrypt)
+      const hashedPassword = Buffer.from(password).toString('base64');
+      
+      const userData = {
+        username,
+        email,
+        password: hashedPassword,
+        role,
+        createdAt: new Date(),
+        lastLogin: null,
+        isActive: true
+      };
+
+      const result = await this.db.collection('users').insertOne(userData);
+      
+      return {
+        success: true,
+        message: 'User created successfully',
+        userId: result.insertedId.toString()
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async authenticateUser(username, password) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Authentication requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      const user = await this.db.collection('users').findOne({
+        $or: [{ username }, { email: username }],
+        isActive: true
+      });
+      
+      if (!user) {
+        return { success: false, message: 'Invalid credentials' };
+      }
+
+      // Verify password (in production, use bcrypt.compare)
+      const hashedInput = Buffer.from(password).toString('base64');
+      if (hashedInput !== user.password) {
+        return { success: false, message: 'Invalid credentials' };
+      }
+
+      // Update last login
+      await this.db.collection('users').updateOne(
+        { _id: user._id },
+        { $set: { lastLogin: new Date() } }
+      );
+
+      // Create persistent session token
+      const sessionToken = this.generateSessionToken();
+      
+      // Remove any existing sessions for this user to prevent multiple sessions
+      await this.db.collection('sessions').deleteMany({ userId: user._id });
+      
+      // Create new session that expires when browser is closed (no explicit expiration)
+      await this.db.collection('sessions').insertOne({
+        userId: user._id,
+        username: user.username,
+        role: user.role,
+        token: sessionToken,
+        createdAt: new Date(),
+        persistent: true, // Flag for persistent session
+        lastActivity: new Date()
+      });
+
+      return {
+        success: true,
+        message: 'Authentication successful',
+        user: {
+          id: user._id.toString(),
+          username: user.username,
+          email: user.email,
+          role: user.role
+        },
+        sessionToken,
+        role: user.role
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async validateSession(token) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Session validation requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      const session = await this.db.collection('sessions').findOne({
+        token
+      });
+      
+      if (!session) {
+        return { success: false, message: 'Invalid session', authenticated: false };
+      }
+
+      const user = await this.db.collection('users').findOne({
+        _id: session.userId,
+        isActive: true
+      });
+      
+      if (!user) {
+        // Clean up invalid session
+        await this.db.collection('sessions').deleteOne({ token });
+        return { success: false, message: 'User not found or inactive', authenticated: false };
+      }
+
+      // Update last activity for persistent sessions
+      if (session.persistent) {
+        await this.db.collection('sessions').updateOne(
+          { token },
+          { $set: { lastActivity: new Date() } }
+        );
+      }
+
+      return {
+        success: true,
+        authenticated: true,
+        user: {
+          id: user._id.toString(),
+          username: user.username,
+          email: user.email,
+          role: user.role
+        },
+        role: user.role
+      };
+    } catch (error) {
+      return { success: false, message: error.message, authenticated: false };
+    }
+  }
+
+  async logout(token) {
+    try {
+      if (this.usesFallback) {
+        return { success: true, message: 'Logged out' };
+      }
+
+      await this.connect();
+      
+      await this.db.collection('sessions').deleteOne({ token });
+      
+      return { success: true, message: 'Logged out successfully' };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async generateDownloadKey(userId) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Download key generation requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Validate user exists and is active
+      const user = await this.db.collection('users').findOne({
+        _id: new ObjectId(userId),
+        isActive: true
+      });
+      
+      if (!user) {
+        return { success: false, message: 'User not found or inactive' };
+      }
+
+      // Generate new installation key for this download
+      const downloadKey = this.generateInstallationKey();
+      
+      // Store the download key with expiration (24 hours)
+      await this.db.collection('downloadKeys').insertOne({
+        userId: user._id,
+        username: user.username,
+        role: user.role,
+        installationKey: downloadKey,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        used: false
+      });
+
+      return {
+        success: true,
+        message: 'Download key generated successfully',
+        installationKey: downloadKey
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async regenerateInstallationKey(userId) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Key regeneration requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      const newKey = this.generateInstallationKey();
+      
+      const result = await this.db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
+        { $set: { installationKey: newKey } }
+      );
+      
+      if (result.modifiedCount === 0) {
+        return { success: false, message: 'User not found' };
+      }
+
+      return {
+        success: true,
+        message: 'Installation key regenerated',
+        installationKey: newKey
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async validateInstallationKey(installationKey) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Key validation requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Check for valid download key first
+      const downloadKey = await this.db.collection('downloadKeys').findOne({
+        installationKey,
+        expiresAt: { $gt: new Date() },
+        used: false
+      });
+      
+      if (downloadKey) {
+        // Mark the key as used
+        await this.db.collection('downloadKeys').updateOne(
+          { _id: downloadKey._id },
+          { $set: { used: true, usedAt: new Date() } }
+        );
+        
+        return {
+          success: true,
+          message: 'Installation key valid',
+          user: {
+            id: downloadKey.userId.toString(),
+            username: downloadKey.username,
+            role: downloadKey.role
+          }
+        };
+      }
+      
+      return { success: false, message: 'Invalid or expired installation key' };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getAllUsers() {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'User management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      const users = await this.db.collection('users')
+        .find({}, { projection: { password: 0 } })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      const processedUsers = users.map(user => ({
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        installationKey: user.installationKey,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin,
+        isActive: user.isActive
+      }));
+
+      return { success: true, data: processedUsers };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async updateUserRole(userId, newRole) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'User management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      const result = await this.db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
+        { $set: { role: newRole } }
+      );
+      
+      if (result.modifiedCount === 0) {
+        return { success: false, message: 'User not found' };
+      }
+
+      return { success: true, message: 'User role updated successfully' };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async deactivateUser(userId) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'User management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      const result = await this.db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
+        { $set: { isActive: false } }
+      );
+      
+      if (result.modifiedCount === 0) {
+        return { success: false, message: 'User not found' };
+      }
+
+      // Also invalidate all sessions for this user
+      await this.db.collection('sessions').deleteMany({ userId: new ObjectId(userId) });
+
+      return { success: true, message: 'User deactivated successfully' };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Helper methods
+  generateInstallationKey() {
+    return 'PNK_' + Math.random().toString(36).substr(2, 16).toUpperCase() + '_' + Date.now().toString(36).toUpperCase();
+  }
+
+  generateSessionToken() {
+    return 'PNS_' + Math.random().toString(36).substr(2, 32) + '_' + Date.now().toString(36);
+  }
+
   async close() {
     if (this.client) {
       await this.client.close();
@@ -1266,6 +1637,101 @@ export default async function handler(req, res) {
           params.macAddress || '',
           params.keyType || 'ENCRYPTION_KEY'
         );
+        break;
+
+      // User Authentication Actions
+      case 'login':
+      case 'authenticateUser':
+        result = await db.authenticateUser(
+          params.username || '',
+          params.password || ''
+        );
+        break;
+
+      case 'logout':
+        const authHeader = req.headers.authorization;
+        const token = authHeader && authHeader.startsWith('Bearer ') 
+          ? authHeader.substring(7)
+          : (params.token || '');
+        result = await db.logout(token);
+        break;
+
+      case 'validateSession':
+        const sessionAuthHeader = req.headers.authorization;
+        const sessionToken = sessionAuthHeader && sessionAuthHeader.startsWith('Bearer ') 
+          ? sessionAuthHeader.substring(7)
+          : (params.token || '');
+        result = await db.validateSession(sessionToken);
+        break;
+
+      case 'checkAuth':
+        // Check authentication from cookies or headers
+        const checkAuthHeader = req.headers.authorization;
+        const checkToken = checkAuthHeader && checkAuthHeader.startsWith('Bearer ') 
+          ? checkAuthHeader.substring(7)
+          : (params.token || req.cookies?.sessionToken || '');
+        
+        if (!checkToken) {
+          result = { success: true, authenticated: false };
+        } else {
+          const authResult = await db.validateSession(checkToken);
+          result = {
+            success: true,
+            authenticated: authResult.success,
+            role: authResult.role || null,
+            user: authResult.user || null
+          };
+        }
+        break;
+
+      case 'createUser':
+      case 'registerUser':
+        result = await db.createUser(
+          params.username || '',
+          params.email || '',
+          params.password || '',
+          params.role || 'user'
+        );
+        break;
+
+      // Installation Key Management Actions
+      case 'validateInstallationKey':
+        result = await db.validateInstallationKey(params.installationKey || '');
+        break;
+
+      case 'generateDownloadKey':
+        const keyAuthHeader = req.headers.authorization;
+        const keyToken = keyAuthHeader && keyAuthHeader.startsWith('Bearer ') 
+          ? keyAuthHeader.substring(7)
+          : (params.token || '');
+        
+        // Validate session first
+        const sessionValidation = await db.validateSession(keyToken);
+        if (!sessionValidation.success) {
+          result = { success: false, message: 'Authentication required' };
+        } else {
+          result = await db.generateDownloadKey(sessionValidation.user.id);
+        }
+        break;
+
+      case 'regenerateInstallationKey':
+        result = await db.regenerateInstallationKey(params.userId || '');
+        break;
+
+      // User Management Actions (Admin only - should add auth check in production)
+      case 'getAllUsers':
+        result = await db.getAllUsers();
+        break;
+
+      case 'updateUserRole':
+        result = await db.updateUserRole(
+          params.userId || '',
+          params.newRole || 'user'
+        );
+        break;
+
+      case 'deactivateUser':
+        result = await db.deactivateUser(params.userId || '');
         break;
     }
 

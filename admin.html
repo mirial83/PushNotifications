@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PushNotifications - Admin Panel</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Incomplete Notifications Banner -->
+    <div id="incompleteNotificationsBanner"></div>
+    
+    <!-- Completed Notification Headers -->
+    <div id="completedHeaders"></div>
+    
+    <!-- Uninstall Request Headers -->
+    <div id="uninstallRequestHeaders"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>PushNotifications Admin Panel</h1>
+            <div class="admin-header-info">
+                <div class="user-info" id="adminUserInfo">
+                    <span id="adminUsername">Loading...</span>
+                    <button class="logout-btn" onclick="handleLogout()">🔓 Logout</button>
+                </div>
+                <div class="status-indicator">
+                    <span id="connectionStatus" class="status-dot offline"></span>
+                    <span id="statusText">Database: Connecting...</span>
+                    <div class="refresh-indicator">
+                        <span id="refreshCountdown">Next refresh: 1:00</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Admin Navigation Menu -->
+        <nav class="admin-nav">
+            <div class="nav-tabs">
+                <button class="nav-tab active" onclick="showSection('notifications')">📱 Notifications</button>
+                <button class="nav-tab" onclick="showSection('data-management')">📁 Data Management</button>
+                <button class="nav-tab" onclick="showSection('client-admin')">🖥️ Client Administration</button>
+                <button class="nav-tab" onclick="showSection('account-admin')">👥 Account Administration</button>
+                <button class="nav-tab" onclick="showSection('version-history')">📊 Version History</button>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <!-- Left Sidebar - Active Notifications -->
+            <aside class="sidebar">
+                <h2>Active Notifications</h2>
+                <div id="activeNotificationsList" class="notifications-list">
+                    <div class="loading-notifications">
+                        <div class="loading-spinner"></div>
+                        <div>Loading notifications...</div>
+                    </div>
+                    <div class="no-notifications" style="display: none;">No active notifications</div>
+                </div>
+                
+                <!-- Clear All Notifications Button -->
+                <div class="sidebar-actions">
+                    <button type="button" id="clearAllNotifications" class="btn-warning btn-block">Clear All Notifications</button>
+                </div>
+                
+                <!-- Registered Clients List -->
+                <div class="registered-clients-section">
+                    <h3>Registered Clients</h3>
+                    <div id="registeredClientsList" class="clients-list">
+                        <div class="loading-clients">
+                            <div class="loading-spinner"></div>
+                            <div>Loading clients...</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Panel - Send Notification -->
+            <main class="main-panel">
+                <div class="main-panel-content">
+                    <!-- Send Notifications Section -->
+                    <div id="notifications-section" class="admin-section active">
+                    <div class="send-notification-form">
+                        <h2>Send Notification</h2>
+                    
+                        <!-- Client Selection -->
+                        <div class="form-group">
+                            <label for="targetClientSelect">Send to Client:</label>
+                            <select id="targetClientSelect">
+                                <option value="all">📡 All Active Clients</option>
+                                <option value="" disabled>Loading registered clients...</option>
+                            </select>
+                            <small>Select a specific client or send to all active clients</small>
+                        </div>
+
+                    <!-- Message Type Selection -->
+                    <div class="form-group">
+                        <label>Message Type:</label>
+                        <div class="radio-group">
+                            <input type="radio" id="presetMessage" name="messageType" value="preset" checked>
+                            <label for="presetMessage">Preset Message</label>
+                            
+                            <input type="radio" id="customMessage" name="messageType" value="custom">
+                            <label for="customMessage">Custom Message</label>
+                        </div>
+                    </div>
+
+                    <!-- Preset Messages -->
+                    <div class="form-group" id="presetGroup">
+                        <label for="presetSelect">Select Message:</label>
+                        <select id="presetSelect">
+                            <option value="">Loading preset messages...</option>
+                        </select>
+                    </div>
+
+                    <!-- Custom Message -->
+                    <div class="form-group hidden" id="customGroup">
+                        <label for="customText">Custom Message:</label>
+                        <textarea id="customText" placeholder="Enter your custom message..." rows="3"></textarea>
+                    </div>
+
+                    <!-- Browser Usage Option -->
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="allowBrowserUsage">
+                            <label for="allowBrowserUsage">🌐 Allow Browser Usage (with website restrictions)</label>
+                            <small class="browser-usage-description">
+                                <strong>Enables web browsers</strong> but restricts internet access to websites specified below.
+                                <br>Also disables VPNs and proxy connections to prevent bypassing restrictions.
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Browser Usage Warning -->
+                    <div class="form-group hidden warning-box" id="browserUsageWarning">
+                        <div class="warning-content">
+                            <h4>⚠️ Browser Usage Enabled - Important Information</h4>
+                            <p><strong>This will allow web browsers but with strict restrictions:</strong></p>
+                            <ul>
+                                <li><strong>Allowed:</strong> Web browsers (Chrome, Firefox, Edge, etc.)</li>
+                                <li><strong>Websites:</strong> Only those you specify below</li>
+                                <li><strong>Blocked:</strong> All VPNs, proxies, and circumvention tools</li>
+                                <li><strong>Still Blocked:</strong> All other applications (games, media players, etc.)</li>
+                            </ul>
+                            <p><strong>Leave websites empty for complete internet restriction.</strong></p>
+                            <p><strong>To disable:</strong> Complete or snooze the notification on the desktop client.</p>
+                            <p><strong>Emergency exit:</strong> Press Ctrl+Alt+End on the target computer.</p>
+                        </div>
+                    </div>
+
+                    <!-- Allowed Websites -->
+                    <div class="form-group hidden" id="websitesGroup">
+                        <label for="allowedWebsites">
+                            🌐 Allowed Websites (Browser Whitelist)
+                            <span class="optional-label">(Required when browser usage is enabled)</span>
+                        </label>
+                        
+                        <!-- Quick Add Website Buttons (Dynamic) -->
+                        <div id="quickAddWebsites" class="quick-add-websites hidden">
+                            <small>Quick add educational websites:</small><br>
+                            <div class="button-group"></div>
+                        </div>
+                        
+                        <textarea id="allowedWebsites"
+                                placeholder="Enter allowed websites, one per line or comma-separated&#10;&#10;Examples:&#10;docs.google.com&#10;github.com&#10;stackoverflow.com&#10;developer.mozilla.org&#10;&#10;Only these websites will be accessible when browsers are enabled.&#10;Leave EMPTY to block all internet access (browsers will open but show no content)." 
+                                rows="6"></textarea>
+                        
+                        <div class="website-help">
+                            <small>
+                                <strong>Tips:</strong>
+                                <ul>
+                                    <li>Enter domains without "http://" or "https://"</li>
+                                    <li>Both "example.com" and "www.example.com" will be allowed automatically</li>
+                                    <li>Use specific subdomains if needed (e.g., "docs.google.com" instead of "google.com")</li>
+                                    <li><strong>Empty = Complete Focus Mode</strong> (no websites allowed)</li>
+                                </ul>
+                            </small>
+                        </div>
+                        
+                        <!-- Website Count Display -->
+                        <div id="websiteCount" class="website-count">
+                            <span class="count-display">0 websites will be allowed</span>
+                        </div>
+                    </div>
+
+
+                    <!-- Save Custom Message Section -->
+                    <div class="form-group save-custom-message">
+                        <label for="saveMessageName">💾 Save this message as a preset (optional):</label>
+                        <div class="save-message-input-group">
+                            <input type="text" id="saveMessageName" placeholder="Enter preset message name (e.g., 'Study Time', 'Work Break')" class="save-message-input">
+                            <button type="button" id="saveCustomMessage" class="btn-small btn-secondary">Save Preset</button>
+                        </div>
+                        <small class="save-message-help">
+                            Save the current message text, browser settings, and website list as a reusable preset.
+                        </small>
+                    </div>
+
+                    <!-- Send Button -->
+                    <button type="button" id="sendNotification" class="btn-primary">Send Notification</button>
+                </div>
+
+                <!-- Database Setup -->
+                <div class="setup-section">
+                    <h3>Database Setup</h3>
+                    <p>Before using the system, you need to:</p>
+                    <ol>
+                        <li>Ensure database connection is configured in environment variables</li>
+                        <li>Deploy to Vercel with proper environment variables</li>
+                        <li>Click the button below to initialize the database collections</li>
+                    </ol>
+                    <button type="button" id="initDatabase" class="btn-secondary">Initialize Database</button>
+                    <div id="setupStatus" class="status-message"></div>
+                </div>
+                </div>
+
+                <!-- Website access requests are now displayed as banner notifications under relevant notifications in the sidebar -->
+                
+                <!-- Data Cleanup Section -->
+                <div class="cleanup-section">
+                    <h3>🧹 Data Management</h3>
+                    <div class="cleanup-actions">
+                        <button type="button" id="cleanupOldData" class="btn-warning btn-block">🗑️ Cleanup Old Data</button>
+                        <p class="cleanup-description">
+                            <strong>This will remove:</strong>
+                            <ul>
+                                <li>Active notifications older than 48 hours</li>
+                                <li>Regular notifications older than 7 days</li>
+                                <li>Website requests older than 7 days</li>
+                            </ul>
+                            <strong>Preserved:</strong> Encryption keys, app deletion requests, custom messages, completed notifications
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Uninstall All Clients Section -->
+                <div class="uninstall-all-section">
+                    <h3>Administrative Actions</h3>
+                    <div class="admin-actions">
+                        <button type="button" id="uninstallAllClients" class="btn-danger btn-block">⚠️ Uninstall All Active Clients</button>
+                        <p class="admin-warning"><strong>Warning:</strong> This will immediately uninstall the client from all computers. No approval required.</p>
+                    </div>
+                </div>
+
+                <!-- Security Management Section -->
+                <div class="security-section">
+                    <h3>🔐 Security Management</h3>
+                    
+                    <div class="security-tabs">
+                        <button type="button" class="tab-button active" id="clientInfoTab">Client Information</button>
+                        <button type="button" class="tab-button" id="securityKeysTab">Security Keys</button>
+                    </div>
+
+                    <!-- Client Information Tab -->
+                    <div class="tab-content active" id="clientInfoContent">
+                        <div class="section-description">
+                            <p>View and manage all registered client installations with MongoDB backend.</p>
+                        </div>
+                        
+                        <div class="action-buttons">
+                            <button type="button" id="refreshClients" class="btn-secondary">🔄 Refresh Client List</button>
+                            <span id="clientsLastRefreshed" class="last-refreshed">Never refreshed</span>
+                        </div>
+                        
+                        <div id="clientInfoList" class="data-list">
+                            <div class="loading-data">
+                                <div class="loading-spinner"></div>
+                                <div>Loading client information...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Security Keys Tab -->
+                    <div class="tab-content" id="securityKeysContent">
+                        <div class="section-description">
+                            <p>Monitor encryption keys and security data stored in MongoDB. Key values are never displayed for security.</p>
+                        </div>
+                        
+                        <div class="action-buttons">
+                            <button type="button" id="refreshSecurityKeys" class="btn-secondary">🔄 Refresh Security Keys</button>
+                            <span id="keysLastRefreshed" class="last-refreshed">Never refreshed</span>
+                        </div>
+                        
+                        <div id="securityKeysList" class="data-list">
+                            <div class="loading-data">
+                                <div class="loading-spinner"></div>
+                                <div>Loading security keys...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Data Management Section -->
+                <div id="data-management-section" class="admin-section">
+                    <h2>📁 Data Management</h2>
+                    
+                    <div class="data-management-actions">
+                        <div class="action-card">
+                            <h3>Remove Old Active Notifications</h3>
+                            <p>Remove notifications older than 48 hours from active notifications list</p>
+                            <button type="button" id="removeOldActiveNotifications" class="btn-warning">🗑️ Remove Old Active Notifications</button>
+                        </div>
+                        
+                        <div class="action-card">
+                            <h3>Clean Old Notifications from Database</h3>
+                            <p>Permanently delete notifications older than 7 days (all statuses)</p>
+                            <button type="button" id="cleanOldNotifications" class="btn-danger">🧹 Clean Old Notifications</button>
+                        </div>
+                        
+                        <div class="action-card">
+                            <h3>Clear Old Website Requests</h3>
+                            <p>Remove website access requests older than 7 days</p>
+                            <button type="button" id="clearOldWebsiteRequests" class="btn-warning">🌐 Clear Old Website Requests</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Client Administration Section -->
+                <div id="client-admin-section" class="admin-section">
+                    <h2>🖥️ Client Administration</h2>
+                    
+                    <div class="client-admin-actions">
+                        <div class="action-card">
+                            <h3>Uninstall All Active Clients</h3>
+                            <p>Send uninstall command to all currently active clients</p>
+                            <button type="button" id="uninstallAllActiveClients" class="btn-danger">⚠️ Uninstall All Active Clients</button>
+                        </div>
+                        
+                        <div class="action-card">
+                            <h3>Uninstall Specific Client</h3>
+                            <p>Select and uninstall a specific client installation</p>
+                            <button type="button" id="uninstallSpecificClient" class="btn-warning">📱 Uninstall Client</button>
+                        </div>
+                        
+                        <div class="action-card">
+                            <h3>Retrieve Security Key</h3>
+                            <p>View the security key for a specific client</p>
+                            <button type="button" id="retrieveSecurityKey" class="btn-secondary">🔑 Retrieve Security Key</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Account Administration Section -->
+                <div id="account-admin-section" class="admin-section">
+                    <h2>👥 Account Administration</h2>
+                    
+                    <div class="account-admin-actions">
+                        <div class="action-card">
+                            <h3>Reset Client Password</h3>
+                            <p>Generate a new password for an existing user</p>
+                            <div class="form-group">
+                                <label for="resetPasswordUser">Select User:</label>
+                                <select id="resetPasswordUser">
+                                    <option value="">Loading users...</option>
+                                </select>
+                            </div>
+                            <button type="button" id="resetUserPassword" class="btn-warning">🔄 Reset Password</button>
+                            <div id="resetPasswordResult" class="password-result"></div>
+                        </div>
+                        
+                        <div class="action-card">
+                            <h3>Create New User</h3>
+                            <p>Add a new user account with generated password</p>
+                            <div class="form-group">
+                                <label for="newUsername">Username:</label>
+                                <input type="text" id="newUsername" placeholder="Enter new username">
+                            </div>
+                            <button type="button" id="createNewUser" class="btn-success">➕ Create User</button>
+                            <div id="createUserResult" class="password-result"></div>
+                        </div>
+                        
+                        <div class="action-card">
+                            <h3>Remove User</h3>
+                            <p>Delete a user account and associated data</p>
+                            <div class="form-group">
+                                <label for="removeUser">Select User:</label>
+                                <select id="removeUser">
+                                    <option value="">Loading users...</option>
+                                </select>
+                            </div>
+                            <button type="button" id="removeUserAccount" class="btn-danger">🗑️ Remove User</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Version History Section -->
+                <div id="version-history-section" class="admin-section">
+                    <h2>📊 Version History</h2>
+                    
+                    <div class="version-history-content">
+                        <div class="section-description">
+                            <p>Track all deployments and version releases of the PushNotifications system</p>
+                        </div>
+                        
+                        <div class="action-buttons">
+                            <button type="button" id="refreshVersionHistory" class="btn-secondary">🔄 Refresh Version History</button>
+                            <span id="versionLastRefreshed" class="last-refreshed">Never refreshed</span>
+                        </div>
+                        
+                        <div id="versionHistoryList" class="version-list">
+                            <div class="loading-data">
+                                <div class="loading-spinner"></div>
+                                <div>Loading version history...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Modal for Client Selection -->
+    <div id="clientSelectionModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Select Client</h3>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="modalClientSelect">Choose Client:</label>
+                    <select id="modalClientSelect">
+                        <option value="">Loading clients...</option>
+                    </select>
+                </div>
+                <div id="modalResult" class="modal-result"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+                <button id="modalActionBtn" class="btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
