@@ -2718,49 +2718,28 @@ function displayVersionHistory(deployments, totalDeployments, lastRefreshed) {
     
     let html = `
         <div class="version-history-header">
-            <h4>Deployment History (${totalDeployments} deployments)</h4>
+            <h4>Version History (${totalDeployments} versions)</h4>
             <p class="last-refreshed">Last refreshed: ${formatTimestamp(lastRefreshed)}</p>
         </div>
-        <div class="deployments-list">
+        <div class="versions-list">
     `;
     
     if (deployments.length === 0) {
-        html += '<div class="no-data">No deployment history found</div>';
+        html += '<div class="no-data">No version history found</div>';
     } else {
-        deployments.forEach(deployment => {
-            const statusClass = deployment.status === 'Ready' ? 'ready' : 'failed';
-            const isCurrentBadge = deployment.isCurrent ? '<span class="current-badge">CURRENT</span>' : '';
+        deployments.forEach(version => {
+            const isCurrentBadge = version.isCurrent ? '<span class="current-badge">CURRENT</span>' : '';
             
             html += `
-                <div class="deployment-item ${deployment.isCurrent ? 'current' : ''}">
-                    <div class="deployment-header">
-                        <div class="deployment-id">
-                            <strong>${escapeHtml(deployment.id)}</strong>
+                <div class="version-item ${version.isCurrent ? 'current' : ''}">
+                    <div class="version-header">
+                        <div class="version-number">
+                            <strong>v${escapeHtml(version.version)}</strong>
                             ${isCurrentBadge}
                         </div>
-                        <div class="deployment-status status-${statusClass}">
-                            ${deployment.status === 'Ready' ? '✅' : '❌'} ${escapeHtml(deployment.status)}
-                        </div>
                     </div>
-                    <div class="deployment-details">
-                        <div class="detail-row">
-                            <strong>Message:</strong> ${escapeHtml(deployment.message)}
-                        </div>
-                        <div class="detail-row">
-                            <strong>Author:</strong> ${escapeHtml(deployment.author)}
-                        </div>
-                        <div class="detail-row">
-                            <strong>Branch:</strong> ${escapeHtml(deployment.branch)}
-                        </div>
-                        <div class="detail-row">
-                            <strong>Commit:</strong> <code>${escapeHtml(deployment.commit)}</code>
-                        </div>
-                        <div class="detail-row">
-                            <strong>Deployment Time:</strong> ${escapeHtml(deployment.deploymentTime)}
-                        </div>
-                        <div class="detail-row">
-                            <strong>Age:</strong> ${escapeHtml(deployment.age)}
-                        </div>
+                    <div class="version-message">
+                        ${escapeHtml(version.message)}
                     </div>
                 </div>
             `;

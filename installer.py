@@ -9,7 +9,7 @@ Complete desktop client with advanced security features including:
 5. Auto-startup executable
 6. Advanced notification priority system
 
-Version: 3.0.0
+Version: 1.1.9
 Usage:
     python3 installer.py
     
@@ -70,7 +70,7 @@ SCRIPT_URL = "https://push-notifications-phi.vercel.app"
 # Global configuration for client
 CLIENT_CONFIG = {
     'server_url': 'https://script.google.com/macros/s/AKfycbxz_tUH78XlNqLpdQKqy9SrD6dK6Y0azFIXCM0kUpo3kEfAD6jWoMsngxO710KxTrA/exec',
-    'client_version': '3.0.0',
+    'client_version': '1.1.9',
     'check_interval': 30,  # seconds
     'encryption_algorithm': 'AES-256',
     'max_retry_attempts': 3,
