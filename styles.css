@@ -1155,7 +1155,8 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     justify-content: flex-start;
     gap: 0;
     padding: 0 2rem;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
 }
 
 .nav-link {
@@ -1212,20 +1213,299 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
 /* Responsive navigation */
 @media (max-width: 768px) {
     .nav-tabs {
-        padding: 0 1rem;
-        justify-content: center;
+        padding: 0 0.5rem;
+        justify-content: flex-start;
     }
     
     .nav-link {
-        padding: 0.75rem 1rem;
+        padding: 0.75rem 0.75rem;
         font-size: 14pt !important;
+        flex-shrink: 0;
     }
     
     .nav-logout {
-        margin-left: 0 !important;
-        margin-top: 0.5rem;
-        order: 999;
-        flex-basis: 100%;
-        text-align: center;
+        margin-left: auto !important;
+        padding: 0.5rem 0.75rem !important;
+        font-size: 12pt !important;
+        flex-shrink: 0;
     }
+}
+
+@media (max-width: 480px) {
+    .nav-link {
+        padding: 0.5rem 0.5rem;
+        font-size: 12pt !important;
+    }
+    
+    .nav-logout {
+        padding: 0.5rem 0.5rem !important;
+        font-size: 11pt !important;
+    }
+}
+
+/* Action Cards for Admin Pages */
+.action-card {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 5px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.15s ease-in-out;
+}
+
+.action-card:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-card h3 {
+    color: #495057;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    font-size: 18pt;
+}
+
+.action-card p {
+    color: #6c757d;
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}
+
+/* Data Management Actions */
+.data-management-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Client Admin Actions */
+.client-admin-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Account Admin Actions */
+.account-admin-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Version History Content */
+.version-history-content {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 5px;
+    padding: 2rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.section-description {
+    margin-bottom: 2rem;
+}
+
+.section-description p {
+    color: #6c757d;
+    font-size: 16pt;
+    line-height: 1.6;
+}
+
+.action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+.last-refreshed {
+    color: #6c757d;
+    font-size: 14pt;
+    font-style: italic;
+}
+
+/* Data Lists */
+.data-list {
+    background-color: white;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    min-height: 200px;
+    padding: 1rem;
+}
+
+.version-list {
+    background-color: white;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    min-height: 300px;
+    padding: 1rem;
+}
+
+.loading-data {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 150px;
+    color: #6c757d;
+    font-size: 16pt;
+}
+
+/* Security Section Styles */
+.security-section {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 5px;
+    padding: 2rem;
+    margin-top: 2rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.security-section h3 {
+    color: #495057;
+    margin-bottom: 1.5rem;
+    font-weight: bold;
+    font-size: 18pt;
+}
+
+.security-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.tab-button {
+    background: none;
+    border: none;
+    padding: 1rem 1.5rem;
+    color: #6c757d;
+    font-size: 16pt;
+    font-family: Arial, sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s ease-in-out;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.tab-button:hover {
+    color: #495057;
+    border-bottom-color: #dee2e6;
+    background: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.tab-button.active {
+    color: #1e6b7a;
+    border-bottom-color: #1e6b7a;
+    font-weight: bold;
+    background: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Password Result Styles */
+.password-result {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border-radius: 5px;
+    display: none;
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+}
+
+.password-result.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+    display: block;
+}
+
+.password-result.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    display: block;
+}
+
+/* Loading States for Other Pages */
+.loading-clients {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 16pt;
+}
+
+/* Button Success Variant */
+.btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%) !important;
+    color: white !important;
+    font-weight: bold !important;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16pt;
+    font-family: Arial, sans-serif;
+    transition: all 0.15s ease-in-out;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #218838 0%, #1c7e5f 100%) !important;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* Ensure consistent sidebar styling across all pages */
+.clients-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin-top: 1rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.clients-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.clients-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.clients-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.clients-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* Make sure page titles are consistent */
+.main-panel-content h2 {
+    color: #495057;
+    margin-bottom: 2rem;
+    font-weight: bold;
+    font-size: 24pt;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 1rem;
 }
