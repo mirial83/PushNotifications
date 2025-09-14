@@ -148,7 +148,6 @@ def authenticate_with_server():
             'action': 'authenticateClientByMac',
             'macAddress': MAC_ADDRESS,
             'username': USERNAME,
-            'hostname': hostname,
             'installPath': install_path,
             'platform': platform_info,
             'version': VERSION

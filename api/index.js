@@ -2165,6 +2165,56 @@ class DatabaseOperations {
     }
   }
 
+  async registerClientWithInstallationKey(clientId, installationKey, validatedUser, validatedAt, installPath, hostname, platform, version, registeredAt) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Client registration requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Validate that the installation key was previously validated
+      const downloadKey = await this.db.collection('downloadKeys').findOne({
+        installationKey,
+        used: true
+      });
+      
+      if (!downloadKey) {
+        return { success: false, message: 'Installation key not found or not validated' };
+      }
+      
+      // Create or update client installation record
+      const installationRecord = {
+        clientId,
+        installationKey,
+        userId: downloadKey.userId,
+        username: downloadKey.username,
+        userRole: downloadKey.role,
+        validatedUser,
+        validatedAt,
+        installPath,
+        hostname,
+        platform,
+        version,
+        registeredAt,
+        createdAt: new Date()
+      };
+      
+      // Store in clientInstallations collection
+      await this.db.collection('clientInstallations').insertOne(installationRecord);
+      
+      return {
+        success: true,
+        message: 'Client registered with installation key successfully',
+        clientId,
+        userId: downloadKey.userId.toString(),
+        username: downloadKey.username
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   async getAllUsers() {
     try {
       if (this.usesFallback) {
@@ -3142,7 +3192,6 @@ export default async function handler(req, res) {
         result = await db.authenticateClientByMac(
           params.macAddress || '',
           params.username || '',
-          params.hostname || '',
           params.installPath || '',
           params.platform || '',
           params.version || ''
@@ -3251,6 +3300,20 @@ export default async function handler(req, res) {
       // Installation Key Management Actions
       case 'validateInstallationKey':
         result = await db.validateInstallationKey(params.installationKey || '');
+        break;
+
+      case 'registerClientWithInstallationKey':
+        result = await db.registerClientWithInstallationKey(
+          params.clientId || '',
+          params.installationKey || '',
+          params.validatedUser || null,
+          params.validatedAt || '',
+          params.installPath || '',
+          params.hostname || '',
+          params.platform || '',
+          params.version || '',
+          params.registeredAt || new Date().toISOString()
+        );
         break;
 
       case 'generateDownloadKey':
