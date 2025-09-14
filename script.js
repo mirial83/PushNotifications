@@ -2232,31 +2232,10 @@ function displayClientHistoryModal(history, macAddress) {
     // Create modal overlay
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
-    overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-    `;
     
     // Create modal content
     const modal = document.createElement('div');
-    modal.className = 'client-history-modal';
-    modal.style.cssText = `
-        background: white;
-        border-radius: 8px;
-        padding: 20px;
-        max-width: 800px;
-        max-height: 80vh;
-        overflow-y: auto;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    `;
+    modal.className = 'modal-content';
     
     let historyHTML = `
         <div class="modal-header">
@@ -3368,39 +3347,21 @@ async function handleRetrieveSecurityKey() {
             // Create modal to display the security key safely
             const modal = document.createElement('div');
             modal.className = 'modal-overlay';
-            modal.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.5);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 1000;
-            `;
             
             const modalContent = document.createElement('div');
-            modalContent.style.cssText = `
-                background: white;
-                border-radius: 8px;
-                padding: 20px;
-                max-width: 500px;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            `;
+            modalContent.className = 'modal-content';
             
             modalContent.innerHTML = `
                 <h3>Security Key Retrieved</h3>
                 <p><strong>Client ID:</strong> ${escapeHtml(clientId)}</p>
                 <p><strong>Security Key:</strong></p>
-                <div style="background: #f5f5f5; padding: 10px; border-radius: 4px; font-family: monospace; word-break: break-all; margin: 10px 0;">
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 16pt; word-break: break-all; margin: 15px 0; color: #dc3545; font-weight: bold; border: 2px solid #e9ecef;">
                     ${escapeHtml(result.securityKey)}
                 </div>
-                <p class="warning" style="color: #d32f2f; font-size: 0.9em;">This key should be kept secure and not shared.</p>
-                <div style="text-align: right; margin-top: 20px;">
-                    <button class="btn-small" onclick="copyToClipboard('${escapeHtml(result.securityKey)}')">Copy Key</button>
-                    <button class="btn-small" onclick="this.closest('.modal-overlay').remove()" style="margin-left: 10px;">Close</button>
+                <p class="warning" style="color: #d32f2f; font-size: 16pt; font-family: Arial, sans-serif; margin: 15px 0;">This key should be kept secure and not shared.</p>
+                <div class="modal-footer">
+                    <button class="btn-copy" onclick="copyToClipboard('${escapeHtml(result.securityKey)}')">Copy Key</button>
+                    <button class="btn-close" onclick="this.closest('.modal-overlay').remove()">Close</button>
                 </div>
             `;
             
@@ -3522,126 +3483,37 @@ function showPasswordModal(title, options) {
     
     // Create modal overlay
     const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay password-modal-overlay';
-    overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-    `;
+    overlay.className = 'modal-overlay';
     
     // Create modal content
     const modal = document.createElement('div');
     modal.className = 'password-modal';
-    modal.style.cssText = `
-        background: white;
-        border-radius: 12px;
-        padding: 30px;
-        max-width: 500px;
-        width: 90%;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        text-align: center;
-    `;
     
     modal.innerHTML = `
-        <div class="modal-header" style="margin-bottom: 20px;">
-            <h3 style="margin: 0; color: #2c5530; font-size: 1.5em;">${escapeHtml(title)}</h3>
+        <div class="modal-header">
+            <h3>${escapeHtml(title)}</h3>
         </div>
         <div class="modal-body">
-            <p style="margin: 0 0 20px 0; color: #666; font-size: 1.1em;">${escapeHtml(message)}</p>
-            <div class="credentials-container" style="
-                background: #f8f9fa;
-                border-radius: 8px;
-                padding: 20px;
-                margin: 20px 0;
-                border: 2px solid #e9ecef;
-            ">
-                <div class="credential-field" style="margin-bottom: 15px;">
-                    <label style="
-                        display: block;
-                        font-weight: bold;
-                        color: #495057;
-                        margin-bottom: 5px;
-                        text-align: left;
-                    ">Username:</label>
-                    <div style="
-                        background: white;
-                        border: 1px solid #dee2e6;
-                        border-radius: 4px;
-                        padding: 10px;
-                        font-family: 'Courier New', monospace;
-                        font-size: 1.1em;
-                        word-break: break-all;
-                    ">${escapeHtml(username)}</div>
+            <p>${escapeHtml(message)}</p>
+            <div class="credentials-container">
+                <div class="credential-field">
+                    <label>Username:</label>
+                    <div>${escapeHtml(username)}</div>
                 </div>
                 <div class="credential-field">
-                    <label style="
-                        display: block;
-                        font-weight: bold;
-                        color: #495057;
-                        margin-bottom: 5px;
-                        text-align: left;
-                    ">Password:</label>
-                    <div id="passwordDisplay" style="
-                        background: white;
-                        border: 1px solid #dee2e6;
-                        border-radius: 4px;
-                        padding: 10px;
-                        font-family: 'Courier New', monospace;
-                        font-size: 1.1em;
-                        word-break: break-all;
-                        color: #dc3545;
-                        font-weight: bold;
-                    ">${escapeHtml(password)}</div>
+                    <label>Password:</label>
+                    <div id="passwordDisplay">${escapeHtml(password)}</div>
                 </div>
             </div>
-            <div class="warning-message" style="
-                background: #fff3cd;
-                border: 1px solid #ffeaa7;
-                border-radius: 6px;
-                padding: 15px;
-                margin: 20px 0;
-                color: #856404;
-                font-size: 0.95em;
-            ">
+            <div class="warning-message">
                 ⚠️ <strong>Important:</strong> Please copy this password immediately. For security reasons, it will not be shown again.
             </div>
         </div>
-        <div class="modal-footer" style="
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-top: 25px;
-        ">
-            <button id="copyPasswordBtn" class="btn-copy" style="
-                background: #28a745;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 6px;
-                cursor: pointer;
-                font-size: 1em;
-                transition: background-color 0.2s;
-            " onmouseover="this.style.background='#218838'" onmouseout="this.style.background='#28a745'">
+        <div class="modal-footer">
+            <button id="copyPasswordBtn" class="btn-copy">
                 📋 Copy Password
             </button>
-            <button id="closeModalBtn" class="btn-close" style="
-                background: #6c757d;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 6px;
-                cursor: pointer;
-                font-size: 1em;
-                transition: background-color 0.2s;
-            " onmouseover="this.style.background='#545b62'" onmouseout="this.style.background='#6c757d'">
+            <button id="closeModalBtn" class="btn-close">
                 Close
             </button>
         </div>
