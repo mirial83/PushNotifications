@@ -1615,8 +1615,6 @@ class DatabaseOperations {
   // Version History Management Methods
   async syncVersionHistory() {
     try {
-      // First check if we need to fix existing version numbers
-      await this.fixExistingVersionNumbers();
       
       // Get the latest version from database
       const latestDbVersion = await this.db.collection('versionHistory')
@@ -1641,157 +1639,6 @@ class DatabaseOperations {
     }
   }
   
-  async resetVersionHistory() {
-    try {
-      console.log('Resetting version history completely...');
-      
-      // Step 1: Delete all existing version history
-      const deleteResult = await this.db.collection('versionHistory').deleteMany({});
-      console.log(`Deleted ${deleteResult.deletedCount} existing version records`);
-      
-      // Step 2: Fetch all versions from external sources
-      const externalVersions = await this.fetchLatestExternalVersions();
-      
-      if (!externalVersions || externalVersions.length === 0) {
-        return { success: false, message: 'No external versions found to populate database' };
-      }
-      
-      console.log(`Found ${externalVersions.length} external versions to process`);
-      
-      // Step 3: Sort by date (OLDEST first) so oldest gets version 1
-      const sortedVersions = [...externalVersions].sort((a, b) => new Date(a.date) - new Date(b.date));
-      
-      // Step 4: Create version records with proper numbering (oldest = 1.0.0)
-      const versionRecords = sortedVersions.map((version, index) => {
-        const versionNumber = index + 1; // Start from 1 for oldest
-        const major = 1;
-        const minor = Math.floor(index / 10);
-        const patch = index % 10;
-        const semanticVersion = `${major}.${minor}.${patch}`;
-        
-        console.log(`Version ${index + 1}: ${semanticVersion} - ${version.message?.substring(0, 60)}...`);
-        
-        return {
-          versionNumber,
-          version: semanticVersion,
-          message: version.message || 'No message',
-          description: version.description || '',
-          date: version.date,
-          sha: version.sha || null,
-          deploymentId: version.deploymentId || null,
-          author: version.author || 'Unknown',
-          source: version.source || 'unknown',
-          isCurrent: index === sortedVersions.length - 1, // Mark NEWEST as current (last in sorted array)
-          createdAt: new Date(),
-          url: version.url || null
-        };
-      });
-      
-      // Step 5: Insert all versions into database
-      if (versionRecords.length > 0) {
-        await this.db.collection('versionHistory').insertMany(versionRecords);
-        
-        const currentVersion = versionRecords[versionRecords.length - 1]; // Newest version
-        
-        console.log(`Successfully reset version history:`);
-        console.log(`- Total versions: ${versionRecords.length}`);
-        console.log(`- Oldest version: ${versionRecords[0].version} (${versionRecords[0].message})`);
-        console.log(`- Newest version: ${currentVersion.version} (${currentVersion.message}) [CURRENT]`);
-        
-        return {
-          success: true,
-          message: `Successfully reset version history with ${versionRecords.length} versions`,
-          totalVersions: versionRecords.length,
-          oldestVersion: {
-            number: versionRecords[0].version,
-            message: versionRecords[0].message
-          },
-          newestVersion: {
-            number: currentVersion.version,
-            message: currentVersion.message,
-            isCurrent: true
-          }
-        };
-      }
-      
-      return { success: false, message: 'No version records to create' };
-    } catch (error) {
-      console.error('Error resetting version history:', error);
-      return { success: false, message: error.message };
-    }
-  }
-  
-  async fixExistingVersionNumbers(forceReassign = false) {
-    try {
-      // Get all versions sorted by original date (newest first)
-      const allVersions = await this.db.collection('versionHistory')
-        .find({})
-        .sort({ date: -1 })
-        .toArray();
-      
-      if (allVersions.length === 0) {
-        console.log('No versions found in database');
-        return { success: true, message: 'No versions found' };
-      }
-      
-      console.log(`Checking ${allVersions.length} versions for proper numbering...`);
-      
-      if (!forceReassign) {
-        // Check if the newest version has the highest version number
-        const newestVersion = allVersions[0];
-        const highestVersionNumber = await this.db.collection('versionHistory')
-          .findOne({}, { sort: { versionNumber: -1 } });
-        
-        if (newestVersion._id.equals(highestVersionNumber._id)) {
-          console.log('Version numbers are already correct');
-          return { success: true, message: 'Version numbers are already correct' };
-        }
-      }
-      
-      console.log('Reassigning version numbers for all records...');
-      
-      // Renumber all versions - newest gets highest number
-      const updates = allVersions.map((version, index) => {
-        const newVersionNumber = index + 1;
-        const major = 1;
-        const minor = Math.floor(index / 10);
-        const patch = index % 10;
-        const newSemanticVersion = `${major}.${minor}.${patch}`;
-        
-        console.log(`Version ${version.message?.substring(0, 50)}... -> v${newVersionNumber} (${newSemanticVersion})`);
-        
-        return {
-          updateOne: {
-            filter: { _id: version._id },
-            update: {
-              $set: {
-                versionNumber: newVersionNumber,
-                version: newSemanticVersion,
-                isCurrent: index === 0 // Mark newest as current
-              }
-            }
-          }
-        };
-      });
-      
-      if (updates.length > 0) {
-        const result = await this.db.collection('versionHistory').bulkWrite(updates);
-        console.log(`Successfully reassigned version numbers for ${updates.length} records`);
-        console.log(`Modified: ${result.modifiedCount}, Matched: ${result.matchedCount}`);
-        return { 
-          success: true, 
-          message: `Successfully reassigned ${updates.length} version numbers`,
-          modifiedCount: result.modifiedCount,
-          matchedCount: result.matchedCount
-        };
-      }
-      
-      return { success: false, message: 'No updates to perform' };
-    } catch (error) {
-      console.error('Error fixing existing version numbers:', error);
-      return { success: false, message: error.message };
-    }
-  }
   
   async fetchLatestExternalVersions() {
     // Priority order: Vercel deployments > GitHub releases > GitHub commits
@@ -1837,8 +1684,8 @@ class DatabaseOperations {
       
       let nextVersionNumber = highestVersion ? highestVersion.versionNumber + 1 : 1;
       
-      // Sort external versions by date (newest first) to assign highest numbers to newest
-      const sortedExternalVersions = [...externalVersions].sort((a, b) => new Date(b.date) - new Date(a.date));
+      // Sort external versions by date (oldest first) to assign lowest numbers to oldest
+      const sortedExternalVersions = [...externalVersions].sort((a, b) => new Date(a.date) - new Date(b.date));
       
       // Filter external versions to only include new ones
       const newVersions = [];
@@ -1880,7 +1727,7 @@ class DatabaseOperations {
       }
       
       if (newVersions.length > 0) {
-        // Insert new versions (no need to reverse since we want newest to have highest numbers)
+        // Insert new versions in chronological order (oldest first)
         await this.db.collection('versionHistory').insertMany(newVersions);
         
         // Update current version flag
@@ -1927,11 +1774,11 @@ class DatabaseOperations {
         return;
       }
       
-      // Sort by date (newest first) so newest versions get highest numbers
-      const sortedVersions = [...externalVersions].sort((a, b) => new Date(b.date) - new Date(a.date));
+      // Sort by date (oldest first) so oldest versions get lowest numbers
+      const sortedVersions = [...externalVersions].sort((a, b) => new Date(a.date) - new Date(b.date));
       
       const versionRecords = sortedVersions.map((version, index) => {
-        const versionNumber = index + 1; // Newest gets number 1, then 2, 3, etc.
+        const versionNumber = index + 1; // Oldest gets number 1, then 2, 3, etc.
         const major = 1;
         const minor = Math.floor(index / 10);
         const patch = index % 10;
@@ -1947,7 +1794,7 @@ class DatabaseOperations {
           deploymentId: version.deploymentId || null,
           author: version.author || 'Unknown',
           source: version.source || 'unknown',
-          isCurrent: index === 0, // Mark the newest (first in sorted array) as current
+          isCurrent: index === sortedVersions.length - 1, // Mark the newest (last in sorted array) as current
           createdAt: new Date(),
           url: version.url || null
         };
@@ -1956,6 +1803,7 @@ class DatabaseOperations {
       if (versionRecords.length > 0) {
         await this.db.collection('versionHistory').insertMany(versionRecords);
         console.log(`Initial sync completed: ${versionRecords.length} versions added`);
+        console.log(`Version numbers: ${versionRecords[0].versionNumber} (oldest) to ${versionRecords[versionRecords.length-1].versionNumber} (newest)`);
       }
     } catch (error) {
       console.error('Error performing initial version sync:', error);
@@ -2351,15 +2199,6 @@ export default async function handler(req, res) {
         result = await db.getVersionHistory();
         break;
         
-      case 'fixVersionNumbers':
-        await db.connect();
-        result = await db.fixExistingVersionNumbers(true); // Force reassignment
-        break;
-        
-      case 'resetVersionHistory':
-        await db.connect();
-        result = await db.resetVersionHistory(); // Complete reset
-        break;
     }
 
     await db.close();
