@@ -1790,6 +1790,22 @@ document.addEventListener('DOMContentLoaded', function() {
         saveCustomMessageBtn.addEventListener('click', saveCustomMessage);
     }
     
+    // Add account administration listeners
+    const createNewUserBtn = document.getElementById('createNewUser');
+    if (createNewUserBtn) {
+        createNewUserBtn.addEventListener('click', showCreateUserModal);
+    }
+    
+    const resetUserPasswordBtn = document.getElementById('resetUserPassword');
+    if (resetUserPasswordBtn) {
+        resetUserPasswordBtn.addEventListener('click', handleResetUserPassword);
+    }
+    
+    const removeUserAccountBtn = document.getElementById('removeUserAccount');
+    if (removeUserAccountBtn) {
+        removeUserAccountBtn.addEventListener('click', handleRemoveUserAccount);
+    }
+    
     // Initialize descriptions
     updateWorkModeDescription();
     updateBrowserUsageDescription();
@@ -2458,11 +2474,16 @@ function setupAdminButtonListeners() {
     document.getElementById('viewAllClients')?.addEventListener('click', loadAllClients);
     document.getElementById('deactivateAllClients')?.addEventListener('click', deactivateAllClients);
     document.getElementById('exportClientData')?.addEventListener('click', exportClientData);
+    document.getElementById('uninstallSpecificClient')?.addEventListener('click', handleUninstallSpecificClient);
+    document.getElementById('retrieveSecurityKey')?.addEventListener('click', handleRetrieveSecurityKey);
     
     // Data management buttons
     document.getElementById('backupDatabase')?.addEventListener('click', backupDatabase);
     document.getElementById('cleanupOldData')?.addEventListener('click', handleCleanupOldData);
     document.getElementById('exportNotifications')?.addEventListener('click', exportNotifications);
+    document.getElementById('removeOldActiveNotifications')?.addEventListener('click', handleRemoveOldActiveNotifications);
+    document.getElementById('cleanOldNotifications')?.addEventListener('click', handleCleanOldNotifications);
+    document.getElementById('clearOldWebsiteRequests')?.addEventListener('click', handleClearOldWebsiteRequests);
     
     // Version history button
     document.getElementById('refreshVersionHistory')?.addEventListener('click', loadVersionHistory);
@@ -2504,6 +2525,7 @@ function switchAdminSection(sectionName) {
             break;
         case 'account-administration':
             loadAllUsers();
+            loadUsersIntoDropdowns();
             break;
         case 'version-history':
             loadVersionHistory();
@@ -2753,41 +2775,688 @@ function displayVersionHistory(deployments, totalDeployments, lastRefreshed, sou
 }
 
 
-// Placeholder functions for admin features (to be implemented)
+// User administration functions
 function showCreateUserModal() {
-    alert('Create user modal - to be implemented');
+    // Get the username from the input field
+    const username = document.getElementById('newUsername')?.value?.trim();
+    
+    if (!username) {
+        showStatus('Please enter a valid username', 'error');
+        return;
+    }
+    
+    // Confirm creation
+    if (confirm(`Create new user with username "${username}"? A random password will be generated.`)) {
+        handleCreateUser(username);
+    }
 }
 
+async function handleCreateUser(username) {
+    try {
+        showStatus('Creating new user...', 'info');
+        
+        // Generate a random email based on username if not provided
+        const email = `${username}@pushnotifications.local`;
+        
+        // Generate a random password
+        const password = generateRandomPassword();
+        
+        // Call the API to create user
+        const result = await apiCall('createUser', {
+            username: username,
+            email: email,
+            password: password,
+            role: 'user' // Default role is 'user'
+        });
+        
+        if (result && result.success) {
+            // Display success message with the generated password
+            const resultElement = document.getElementById('createUserResult');
+            if (resultElement) {
+                resultElement.innerHTML = `
+                    <div class="success-message">
+                        <p><strong>User created successfully!</strong></p>
+                        <p>Username: ${escapeHtml(username)}</p>
+                        <p>Email: ${escapeHtml(email)}</p>
+                        <p>Password: <strong>${escapeHtml(password)}</strong></p>
+                        <p class="warning">Please copy this password now. It will not be shown again.</p>
+                        <button class="btn-small" onclick="copyToClipboard('${escapeHtml(password)}')">Copy Password</button>
+                    </div>
+                `;
+            }
+            
+            // Clear the username input field
+            const usernameInput = document.getElementById('newUsername');
+            if (usernameInput) {
+                usernameInput.value = '';
+            }
+            
+            // Refresh the user list
+            loadAllUsers();
+            
+            // Show success notification
+            showStatus('User created successfully!', 'success');
+        } else {
+            const errorMessage = result ? result.message : 'Failed to create user';
+            showStatus(`Failed to create user: ${errorMessage}`, 'error');
+            
+            // Show error in the result element
+            const resultElement = document.getElementById('createUserResult');
+            if (resultElement) {
+                resultElement.innerHTML = `<div class="error-message">${escapeHtml(errorMessage)}</div>`;
+            }
+        }
+    } catch (error) {
+        console.error('Error creating user:', error);
+        showStatus('Failed to create user. Please check console for details.', 'error');
+        
+        // Show error in the result element
+        const resultElement = document.getElementById('createUserResult');
+        if (resultElement) {
+            resultElement.innerHTML = `<div class="error-message">Error: ${escapeHtml(error.message)}</div>`;
+        }
+    }
+}
+
+// Generate a random password with at least one uppercase, lowercase, number, and special character
+function generateRandomPassword() {
+    const length = 12;
+    const charset = {
+        uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+        lowercase: 'abcdefghijklmnopqrstuvwxyz',
+        numbers: '0123456789',
+        special: '!@#$%^&*()-_=+[{]}\\|;:,<.>/?'
+    };
+    
+    // Ensure at least one of each character type
+    let password = '';
+    password += charset.uppercase.charAt(Math.floor(Math.random() * charset.uppercase.length));
+    password += charset.lowercase.charAt(Math.floor(Math.random() * charset.lowercase.length));
+    password += charset.numbers.charAt(Math.floor(Math.random() * charset.numbers.length));
+    password += charset.special.charAt(Math.floor(Math.random() * charset.special.length));
+    
+    // Fill the rest of the password
+    const allChars = charset.uppercase + charset.lowercase + charset.numbers + charset.special;
+    for (let i = 4; i < length; i++) {
+        password += allChars.charAt(Math.floor(Math.random() * allChars.length));
+    }
+    
+    // Shuffle the password characters
+    return password.split('').sort(() => 0.5 - Math.random()).join('');
+}
+
+// Load users into dropdown selects
+async function loadUsersIntoDropdowns() {
+    try {
+        const result = await apiCall('getAllUsers');
+        
+        if (result && result.success) {
+            const users = result.data;
+            
+            // Update reset password dropdown
+            const resetPasswordSelect = document.getElementById('resetPasswordUser');
+            if (resetPasswordSelect) {
+                resetPasswordSelect.innerHTML = '<option value="">Select a user...</option>';
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = `${user.username} (${user.email})`;
+                    resetPasswordSelect.appendChild(option);
+                });
+            }
+            
+            // Update remove user dropdown
+            const removeUserSelect = document.getElementById('removeUser');
+            if (removeUserSelect) {
+                removeUserSelect.innerHTML = '<option value="">Select a user...</option>';
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = `${user.username} (${user.email})`;
+                    removeUserSelect.appendChild(option);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading users into dropdowns:', error);
+    }
+}
+
+// Handle reset user password
+async function handleResetUserPassword() {
+    const userSelect = document.getElementById('resetPasswordUser');
+    const userId = userSelect?.value;
+    
+    if (!userId) {
+        showStatus('Please select a user to reset password for', 'error');
+        return;
+    }
+    
+    const username = userSelect.options[userSelect.selectedIndex].text.split(' (')[0];
+    
+    if (confirm(`Reset password for user "${username}"? A new random password will be generated.`)) {
+        try {
+            showStatus('Resetting user password...', 'info');
+            
+            // Generate new password
+            const newPassword = generateRandomPassword();
+            
+            // Call API to reset password (this would need to be implemented in the API)
+            const result = await apiCall('resetUserPassword', {
+                userId: userId,
+                newPassword: newPassword
+            });
+            
+            if (result && result.success) {
+                // Display success message with the new password
+                const resultElement = document.getElementById('resetPasswordResult');
+                if (resultElement) {
+                    resultElement.innerHTML = `
+                        <div class="success-message">
+                            <p><strong>Password reset successfully!</strong></p>
+                            <p>Username: ${escapeHtml(username)}</p>
+                            <p>New Password: <strong>${escapeHtml(newPassword)}</strong></p>
+                            <p class="warning">Please copy this password and share it with the user. It will not be shown again.</p>
+                            <button class="btn-small" onclick="copyToClipboard('${escapeHtml(newPassword)}')">Copy Password</button>
+                        </div>
+                    `;
+                }
+                
+                // Reset the dropdown
+                userSelect.value = '';
+                
+                showStatus('Password reset successfully!', 'success');
+            } else {
+                const errorMessage = result ? result.message : 'Failed to reset password';
+                showStatus(`Failed to reset password: ${errorMessage}`, 'error');
+                
+                const resultElement = document.getElementById('resetPasswordResult');
+                if (resultElement) {
+                    resultElement.innerHTML = `<div class="error-message">${escapeHtml(errorMessage)}</div>`;
+                }
+            }
+        } catch (error) {
+            console.error('Error resetting password:', error);
+            showStatus('Failed to reset password. Please check console for details.', 'error');
+            
+            const resultElement = document.getElementById('resetPasswordResult');
+            if (resultElement) {
+                resultElement.innerHTML = `<div class="error-message">Error: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+    }
+}
+
+// Handle remove user account
+async function handleRemoveUserAccount() {
+    const userSelect = document.getElementById('removeUser');
+    const userId = userSelect?.value;
+    
+    if (!userId) {
+        showStatus('Please select a user to remove', 'error');
+        return;
+    }
+    
+    const username = userSelect.options[userSelect.selectedIndex].text.split(' (')[0];
+    
+    if (confirm(`Are you sure you want to remove user "${username}"? This action cannot be undone and will permanently delete the user account and all associated data.`)) {
+        try {
+            showStatus('Removing user account...', 'info');
+            
+            // Call API to deactivate/remove user
+            const result = await apiCall('deactivateUser', {
+                userId: userId
+            });
+            
+            if (result && result.success) {
+                showStatus('User account removed successfully!', 'success');
+                
+                // Reset the dropdown
+                userSelect.value = '';
+                
+                // Refresh user lists
+                loadAllUsers();
+                loadUsersIntoDropdowns();
+            } else {
+                const errorMessage = result ? result.message : 'Failed to remove user';
+                showStatus(`Failed to remove user: ${errorMessage}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error removing user:', error);
+            showStatus('Failed to remove user. Please check console for details.', 'error');
+        }
+    }
+}
+
+// Edit User function - opens a modal for editing user details
 function editUser(userId) {
-    alert(`Edit user ${userId} - to be implemented`);
+    // Find the user in the current users data
+    const usersTable = document.getElementById('usersTableContainer');
+    if (!usersTable) {
+        showStatus('User table not available', 'error');
+        return;
+    }
+    
+    // For now, we'll show a simple prompt-based editor
+    // In a full implementation, this would be a proper modal
+    showStatus('Edit user functionality - advanced modal editor would be implemented here', 'info');
 }
 
-function deactivateUser(userId) {
-    alert(`Deactivate user ${userId} - to be implemented`);
+// Deactivate User function
+async function deactivateUser(userId) {
+    if (!confirm('Are you sure you want to deactivate this user? They will not be able to log in until reactivated.')) {
+        return;
+    }
+    
+    const reason = prompt('Reason for deactivation:', 'Administrative deactivation');
+    if (!reason) return;
+    
+    try {
+        showStatus('Deactivating user...', 'info');
+        
+        const result = await apiCall('deactivateUser', {
+            userId: userId,
+            reason: reason
+        });
+        
+        if (result && result.success) {
+            showStatus('User deactivated successfully!', 'success');
+            loadAllUsers(); // Refresh the users list
+        } else {
+            showStatus(`Failed to deactivate user: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error deactivating user:', error);
+        showStatus('Failed to deactivate user. Please try again.', 'error');
+    }
 }
 
-function activateUser(userId) {
-    alert(`Activate user ${userId} - to be implemented`);
+// Activate User function
+async function activateUser(userId) {
+    if (!confirm('Are you sure you want to activate this user? They will be able to log in again.')) {
+        return;
+    }
+    
+    try {
+        showStatus('Activating user...', 'info');
+        
+        const result = await apiCall('activateUser', {
+            userId: userId
+        });
+        
+        if (result && result.success) {
+            showStatus('User activated successfully!', 'success');
+            loadAllUsers(); // Refresh the users list
+        } else {
+            showStatus(`Failed to activate user: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error activating user:', error);
+        showStatus('Failed to activate user. Please try again.', 'error');
+    }
 }
 
-function deactivateAllClients() {
-    alert('Deactivate all clients - to be implemented');
+// Deactivate All Clients function
+async function deactivateAllClients() {
+    if (!confirm('Are you sure you want to deactivate ALL active clients? This will disconnect all users from receiving notifications until they restart their clients.')) {
+        return;
+    }
+    
+    const reason = prompt('Reason for mass deactivation:', 'Administrative mass deactivation');
+    if (!reason) return;
+    
+    try {
+        showStatus('Deactivating all clients...', 'info');
+        
+        const result = await apiCall('deactivateAllClients', {
+            reason: reason
+        });
+        
+        if (result && result.success) {
+            showStatus(`Successfully deactivated ${result.deactivatedCount || 0} client(s)!`, 'success');
+            loadAllClients(); // Refresh the clients list
+            loadRegisteredClients(); // Refresh sidebar
+        } else {
+            showStatus(`Failed to deactivate clients: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error deactivating all clients:', error);
+        showStatus('Failed to deactivate all clients. Please try again.', 'error');
+    }
 }
 
-function exportUserData() {
-    alert('Export user data - to be implemented');
+// Export User Data function
+async function exportUserData() {
+    try {
+        showStatus('Preparing user data export...', 'info');
+        
+        const result = await apiCall('exportUserData');
+        
+        if (result && result.success) {
+            // Create and download the file
+            const blob = new Blob([result.data], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `user-data-export-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            showStatus('User data exported successfully!', 'success');
+        } else {
+            showStatus(`Failed to export user data: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error exporting user data:', error);
+        showStatus('Failed to export user data. Please try again.', 'error');
+    }
 }
 
-function exportClientData() {
-    alert('Export client data - to be implemented');
+// Export Client Data function
+async function exportClientData() {
+    try {
+        showStatus('Preparing client data export...', 'info');
+        
+        const result = await apiCall('exportClientData');
+        
+        if (result && result.success) {
+            // Create and download the file
+            const blob = new Blob([result.data], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `client-data-export-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            showStatus('Client data exported successfully!', 'success');
+        } else {
+            showStatus(`Failed to export client data: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error exporting client data:', error);
+        showStatus('Failed to export client data. Please try again.', 'error');
+    }
 }
 
-function backupDatabase() {
-    alert('Backup database - to be implemented');
+// Backup Database function
+async function backupDatabase() {
+    if (!confirm('Create a full database backup? This may take some time depending on the amount of data.')) {
+        return;
+    }
+    
+    try {
+        showStatus('Creating database backup...', 'info');
+        
+        const result = await apiCall('backupDatabase');
+        
+        if (result && result.success) {
+            if (result.downloadUrl) {
+                // If the API provides a download URL
+                const link = document.createElement('a');
+                link.href = result.downloadUrl;
+                link.download = `database-backup-${new Date().toISOString().split('T')[0]}.zip`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else if (result.data) {
+                // If the API provides the data directly
+                const blob = new Blob([result.data], { type: 'application/octet-stream' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `database-backup-${new Date().toISOString().split('T')[0]}.zip`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            }
+            
+            showStatus('Database backup created successfully!', 'success');
+        } else {
+            showStatus(`Failed to create database backup: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error creating database backup:', error);
+        showStatus('Failed to create database backup. Please try again.', 'error');
+    }
 }
 
-function exportNotifications() {
-    alert('Export notifications - to be implemented');
+// Export Notifications function
+async function exportNotifications() {
+    const days = prompt('Export notifications from how many days? (Enter number of days, or "all" for complete history)', '30');
+    if (!days) return;
+    
+    try {
+        showStatus('Preparing notifications export...', 'info');
+        
+        const result = await apiCall('exportNotifications', {
+            days: days === 'all' ? 'all' : parseInt(days)
+        });
+        
+        if (result && result.success) {
+            // Create and download the file
+            const blob = new Blob([result.data], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const fileName = days === 'all' ? 
+                `notifications-export-all-${new Date().toISOString().split('T')[0]}.json` :
+                `notifications-export-${days}days-${new Date().toISOString().split('T')[0]}.json`;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            showStatus(`Notifications exported successfully! (${result.count || 0} records)`, 'success');
+        } else {
+            showStatus(`Failed to export notifications: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error exporting notifications:', error);
+        showStatus('Failed to export notifications. Please try again.', 'error');
+    }
+}
+
+// Handle uninstall specific client
+async function handleUninstallSpecificClient() {
+    const clientId = prompt('Enter the Client ID to uninstall:', '');
+    if (!clientId) return;
+    
+    if (!confirm(`Are you sure you want to uninstall the client with ID "${clientId}"? This action cannot be undone and will remove the software from that specific computer.`)) {
+        return;
+    }
+    
+    const reason = prompt('Please provide a reason for uninstalling this client:', 'Administrative uninstall');
+    if (!reason) return;
+    
+    try {
+        showStatus('Uninstalling specific client...', 'info');
+        
+        const result = await apiCall('uninstallSpecificClient', {
+            clientId: clientId,
+            reason: reason
+        });
+        
+        if (result && result.success) {
+            showStatus(`Uninstall command sent to client "${clientId}"!`, 'success');
+            loadAllClients(); // Refresh client list
+        } else {
+            showStatus(`Failed to uninstall client: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error uninstalling specific client:', error);
+        showStatus('Failed to uninstall client. Please try again.', 'error');
+    }
+}
+
+// Handle retrieve security key
+async function handleRetrieveSecurityKey() {
+    const clientId = prompt('Enter the Client ID to retrieve security key for:', '');
+    if (!clientId) return;
+    
+    try {
+        showStatus('Retrieving security key...', 'info');
+        
+        const result = await apiCall('retrieveSecurityKey', {
+            clientId: clientId
+        });
+        
+        if (result && result.success) {
+            // Create modal to display the security key safely
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            `;
+            
+            const modalContent = document.createElement('div');
+            modalContent.style.cssText = `
+                background: white;
+                border-radius: 8px;
+                padding: 20px;
+                max-width: 500px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            `;
+            
+            modalContent.innerHTML = `
+                <h3>Security Key Retrieved</h3>
+                <p><strong>Client ID:</strong> ${escapeHtml(clientId)}</p>
+                <p><strong>Security Key:</strong></p>
+                <div style="background: #f5f5f5; padding: 10px; border-radius: 4px; font-family: monospace; word-break: break-all; margin: 10px 0;">
+                    ${escapeHtml(result.securityKey)}
+                </div>
+                <p class="warning" style="color: #d32f2f; font-size: 0.9em;">This key should be kept secure and not shared.</p>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button class="btn-small" onclick="copyToClipboard('${escapeHtml(result.securityKey)}')">Copy Key</button>
+                    <button class="btn-small" onclick="this.closest('.modal-overlay').remove()" style="margin-left: 10px;">Close</button>
+                </div>
+            `;
+            
+            modal.appendChild(modalContent);
+            document.body.appendChild(modal);
+            
+            // Close on overlay click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+            
+            showStatus('Security key retrieved successfully!', 'success');
+        } else {
+            showStatus(`Failed to retrieve security key: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error retrieving security key:', error);
+        showStatus('Failed to retrieve security key. Please try again.', 'error');
+    }
+}
+
+// Handle remove old active notifications
+async function handleRemoveOldActiveNotifications() {
+    const days = prompt('Remove active notifications older than how many days?', '30');
+    if (!days || isNaN(days) || days <= 0) {
+        showStatus('Please enter a valid number of days', 'error');
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to remove all active notifications older than ${days} days? This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        showStatus('Removing old active notifications...', 'info');
+        
+        const result = await apiCall('removeOldActiveNotifications', {
+            days: parseInt(days)
+        });
+        
+        if (result && result.success) {
+            showStatus(`Successfully removed ${result.removedCount || 0} old active notifications!`, 'success');
+            refreshNotifications(); // Refresh the notifications display
+        } else {
+            showStatus(`Failed to remove old notifications: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error removing old active notifications:', error);
+        showStatus('Failed to remove old notifications. Please try again.', 'error');
+    }
+}
+
+// Handle clean old notifications
+async function handleCleanOldNotifications() {
+    const days = prompt('Clean completed/acknowledged notifications older than how many days?', '90');
+    if (!days || isNaN(days) || days <= 0) {
+        showStatus('Please enter a valid number of days', 'error');
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to permanently delete all completed/acknowledged notifications older than ${days} days? This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        showStatus('Cleaning old notifications...', 'info');
+        
+        const result = await apiCall('cleanOldNotifications', {
+            days: parseInt(days)
+        });
+        
+        if (result && result.success) {
+            showStatus(`Successfully cleaned ${result.cleanedCount || 0} old notifications!`, 'success');
+        } else {
+            showStatus(`Failed to clean old notifications: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error cleaning old notifications:', error);
+        showStatus('Failed to clean old notifications. Please try again.', 'error');
+    }
+}
+
+// Handle clear old website requests
+async function handleClearOldWebsiteRequests() {
+    const days = prompt('Clear website access requests older than how many days?', '30');
+    if (!days || isNaN(days) || days <= 0) {
+        showStatus('Please enter a valid number of days', 'error');
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to clear all website access requests older than ${days} days? This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        showStatus('Clearing old website requests...', 'info');
+        
+        const result = await apiCall('clearOldWebsiteRequests', {
+            days: parseInt(days)
+        });
+        
+        if (result && result.success) {
+            showStatus(`Successfully cleared ${result.clearedCount || 0} old website requests!`, 'success');
+            refreshNotifications(); // Refresh to update any website request displays
+        } else {
+            showStatus(`Failed to clear old website requests: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error clearing old website requests:', error);
+        showStatus('Failed to clear old website requests. Please try again.', 'error');
+    }
 }
 
 // Export security and client management functions for global access
@@ -2800,3 +3469,8 @@ window.loadAllClients = loadAllClients;
 window.editUser = editUser;
 window.deactivateUser = deactivateUser;
 window.activateUser = activateUser;
+window.handleUninstallSpecificClient = handleUninstallSpecificClient;
+window.handleRetrieveSecurityKey = handleRetrieveSecurityKey;
+window.handleRemoveOldActiveNotifications = handleRemoveOldActiveNotifications;
+window.handleCleanOldNotifications = handleCleanOldNotifications;
+window.handleClearOldWebsiteRequests = handleClearOldWebsiteRequests;
