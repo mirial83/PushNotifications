@@ -1153,6 +1153,31 @@ class DatabaseOperations {
     }
   }
 
+  async clearAllNotifications() {
+    try {
+      let clearedCount = 0;
+      
+      if (this.usesFallback) {
+        clearedCount = fallbackStorage.notifications.length;
+        fallbackStorage.notifications = [];
+      } else {
+        await this.connect();
+        const result = await this.db.collection('notifications').deleteMany({
+          status: { $ne: 'Completed' } // Clear all notifications except completed ones
+        });
+        clearedCount = result.deletedCount;
+      }
+
+      return {
+        success: true,
+        message: `Cleared all ${clearedCount} active notifications successfully`,
+        clearedCount
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   // Security Key Management Methods
   async getSecurityKey(clientId, keyType) {
     try {
@@ -3485,6 +3510,28 @@ export default async function handler(req, res) {
         result = await db.clearOldWebsiteRequests(
           parseInt(params.days) || 7 // Default to 7 days
         );
+        break;
+      }
+
+      // Clear All Notifications Action (Admin only)
+      case 'clearAllNotifications': {
+        const clearAllAuthHeader = req.headers.authorization;
+        const clearAllToken = clearAllAuthHeader && clearAllAuthHeader.startsWith('Bearer ')
+          ? clearAllAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(clearAllToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.clearAllNotifications();
         break;
       }
       
