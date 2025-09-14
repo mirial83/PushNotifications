@@ -37,6 +37,8 @@ import winreg
 import psutil
 from pathlib import Path
 from datetime import datetime, timedelta
+import socket
+import getpass
 
 # Auto-install requests if not available
 try:
@@ -102,7 +104,18 @@ class SecurityManager:
         self.encryption_key = None
         self.client_id = None
         self.server_url = CLIENT_CONFIG['server_url']
+        self.mac_address = self._get_mac_address()
         self._initialize_security()
+    
+    def _get_mac_address(self):
+        try:
+            import uuid
+            mac = uuid.getnode()
+            mac_addr = ':'.join([f"{(mac >> ele) & 0xff:02x}" for ele in range(40, -8, -8)])
+            return mac_addr
+        except Exception as e:
+            print(f"Failed to get MAC address: {e}")
+            return "00:00:00:00:00:00"
     
     def _initialize_security(self):
         """Initialize security database and encryption keys via server"""
@@ -150,6 +163,7 @@ class SecurityManager:
                 'keyValue': new_key,
                 'installPath': str(self.install_dir),
                 'hostname': platform.node(),
+                'macAddress': self.mac_address,
                 'createdAt': datetime.now().isoformat(),
                 'lastUsed': datetime.now().isoformat()
             }
@@ -204,6 +218,7 @@ class SecurityManager:
                 'installationId': installation_id,
                 'installPath': str(self.install_dir),
                 'hostname': platform.node(),
+                'macAddress': self.mac_address,
                 'platform': platform.system(),
                 'version': CLIENT_CONFIG['client_version'],
                 'createdAt': datetime.now().isoformat(),
@@ -662,6 +677,14 @@ class PushNotificationsInstaller:
                         print(f"  User: {user_info.get('username', 'Unknown')}")
                         print(f"  Role: {user_info.get('role', 'Unknown')}")
                         print()
+                        
+                        # Store the validated installation key details for client registration
+                        self.installation_key_data = {
+                            'installationKey': installation_key,
+                            'validatedUser': user_info,
+                            'validatedAt': datetime.now().isoformat()
+                        }
+                        
                         return True
                     else:
                         error_msg = result.get('message', 'Invalid installation key')
@@ -1518,6 +1541,10 @@ To uninstall:
         # Set up monitoring and backup system
         self.setup_monitoring_system(install_dir)
         
+        # Register client with installation key details
+        if hasattr(self, 'installation_key_data'):
+            self.register_client_with_installation_key(install_dir)
+        
         # Success message (console only, no popup)
         print(f"\nPushNotifications has been installed successfully!")
         print(f"Installation directory: {install_dir}")
@@ -1976,9 +2003,63 @@ if __name__ == "__main__":
             print(f"[OK] Backup system configured in: {backup_dir}")
             
         except Exception as e:
-            print(f"[WARN] Could not set up monitoring system: {e}")
+        print(f"[WARN] Could not set up monitoring system: {e}")
             
         return True
+    
+    def register_client_with_installation_key(self, install_dir):
+        """Register or update the client with installation key details"""
+        print("Registering client with installation key details...")
+        
+        try:
+            if not hasattr(self, 'installation_key_data'):
+                print("[WARN] No installation key data available for registration")
+                return False
+            
+            # Get or create security manager to get client ID
+            security = SecurityManager(install_dir)
+            
+            # Prepare registration data with installation key details
+            data = {
+                'action': 'registerClientWithInstallationKey',
+                'clientId': security.client_id,
+                'installationKey': self.installation_key_data['installationKey'],
+                'validatedUser': self.installation_key_data['validatedUser'],
+                'validatedAt': self.installation_key_data['validatedAt'],
+                'installPath': str(install_dir),
+                'hostname': platform.node(),
+                'platform': platform.system(),
+                'version': CLIENT_CONFIG['client_version'],
+                'registeredAt': datetime.now().isoformat()
+            }
+            
+            # Send registration to server
+            response = requests.post(f"{self.gas_script_url}/api/index", json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                if result.get('success'):
+                    user_info = self.installation_key_data['validatedUser']
+                    print(f"✓ Client registered successfully with installation key!")
+                    print(f"  Client ID: {security.client_id}")
+                    print(f"  User: {user_info.get('username', 'Unknown')}")
+                    print(f"  Role: {user_info.get('role', 'Unknown')}")
+                    print()
+                    return True
+                else:
+                    error_msg = result.get('message', 'Registration failed')
+                    print(f"✗ Client registration failed: {error_msg}")
+                    
+            else:
+                print(f"✗ Server error during registration: HTTP {response.status_code}")
+                
+        except requests.exceptions.RequestException as e:
+            print(f"✗ Network error during client registration: {e}")
+        except Exception as e:
+            print(f"✗ Client registration error: {e}")
+        
+        return False
 
 class PushNotificationsClient:
     """Main client application class"""
@@ -2116,7 +2197,7 @@ class PushNotificationsClient:
             self.tray_icon.stop()
     
     def _create_tray_icon(self):
-        """Create system tray icon"""
+        """Create system tray icon with protected quit functionality"""
         try:
             from PIL import Image, ImageDraw
             import pystray
@@ -2127,18 +2208,22 @@ class PushNotificationsClient:
             draw.ellipse([16, 16, 48, 48], fill='white')
             draw.text((28, 24), "PN", fill='blue')
             
-            # Create menu
+            # Create menu with protected quit option
             menu = pystray.Menu(
-                pystray.MenuItem("PushNotifications", lambda: None, enabled=False),
-                pystray.MenuItem("Status: Running", lambda: None, enabled=False),
+                pystray.MenuItem("PushNotifications Client", lambda: None, enabled=False),
+                pystray.MenuItem(f"Status: Running (Protected)", lambda: None, enabled=False),
+                pystray.MenuItem(f"Client ID: {self.security.client_id[:12]}...", lambda: None, enabled=False),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Check Now", self._manual_check),
                 pystray.MenuItem("Show Folder", self._show_folder),
+                pystray.MenuItem("View Protection Status", self._show_protection_status),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Quit", self._quit_application)
+                pystray.MenuItem("Request Shutdown Approval", self._request_shutdown_approval),
+                pystray.MenuItem("Force Quit (Requires Admin)", self._force_quit_with_warning)
             )
             
             self.tray_icon = pystray.Icon("PushNotifications", image, menu=menu)
+            self.tray_icon.title = "PushNotifications Client - Protected Mode"
             
         except Exception as e:
             print(f"Failed to create tray icon: {e}")
@@ -2356,10 +2441,201 @@ class PushNotificationsClient:
         except Exception as e:
             print(f"Failed to show folder: {e}")
     
+    def _show_protection_status(self):
+        """Show current protection status"""
+        try:
+            if GUI_AVAILABLE:
+                import tkinter as tk
+                from tkinter import messagebox
+                
+                status_msg = f"""PushNotifications Client Protection Status:
+                
+✓ Status: Protected and Running
+✓ Client ID: {self.security.client_id}
+✓ Installation Path: {self.install_dir}
+✓ Version: {CLIENT_CONFIG['client_version']}
+✓ Folder Protection: Active
+✓ Auto-restart: Enabled
+
+This client is protected and requires administrator 
+approval for shutdown or uninstallation.
+
+To request shutdown approval, use the menu option 
+or contact your administrator."""
+                
+                root = tk.Tk()
+                root.withdraw()
+                messagebox.showinfo("Protection Status", status_msg)
+                root.destroy()
+            else:
+                print("\n=== PushNotifications Protection Status ===")
+                print(f"Status: Protected and Running")
+                print(f"Client ID: {self.security.client_id}")
+                print(f"Installation Path: {self.install_dir}")
+                print(f"Version: {CLIENT_CONFIG['client_version']}")
+                print(f"Folder Protection: Active")
+                print(f"Auto-restart: Enabled")
+                print("\nThis client is protected and requires administrator approval.")
+                
+        except Exception as e:
+            print(f"Failed to show protection status: {e}")
+    
+    def _request_shutdown_approval(self):
+        """Request shutdown approval from administrator"""
+        try:
+            import getpass
+            import uuid
+            
+            if GUI_AVAILABLE:
+                import tkinter as tk
+                from tkinter import messagebox, simpledialog
+                
+                root = tk.Tk()
+                root.withdraw()
+                
+                reason = simpledialog.askstring(
+                    "Shutdown Request",
+                    "Please provide a reason for requesting client shutdown:",
+                    minsize=(400, 100)
+                )
+                root.destroy()
+                
+                if not reason:
+                    return
+            else:
+                reason = input("Please provide a reason for requesting client shutdown: ").strip()
+                if not reason:
+                    print("Shutdown request cancelled.")
+                    return
+            
+            # Send shutdown request to server
+            data = {
+                'action': 'requestClientShutdown',
+                'clientId': self.security.client_id,
+                'installationPath': str(self.install_dir),
+                'username': getpass.getuser(),
+                'computerName': os.environ.get('COMPUTERNAME', 'Unknown'),
+                'requestId': str(uuid.uuid4()),
+                'reason': reason,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            response = requests.post(f"{SCRIPT_URL}/api/index", json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    msg = f"""Shutdown request submitted successfully!
+                    
+Request ID: {data['requestId']}
+Reason: {reason}
+
+The administrator has been notified of your request.
+You will be contacted when the request is processed.
+
+The client will continue running until approval is granted."""
+                    
+                    if GUI_AVAILABLE:
+                        root = tk.Tk()
+                        root.withdraw()
+                        messagebox.showinfo("Request Submitted", msg)
+                        root.destroy()
+                    else:
+                        print("\n" + msg)
+                else:
+                    error_msg = result.get('message', 'Request failed')
+                    if GUI_AVAILABLE:
+                        root = tk.Tk()
+                        root.withdraw()
+                        messagebox.showerror("Request Failed", f"Failed to submit request: {error_msg}")
+                        root.destroy()
+                    else:
+                        print(f"\nRequest failed: {error_msg}")
+            else:
+                if GUI_AVAILABLE:
+                    root = tk.Tk()
+                    root.withdraw()
+                    messagebox.showerror("Request Failed", f"Server error: HTTP {response.status_code}")
+                    root.destroy()
+                else:
+                    print(f"\nServer error: HTTP {response.status_code}")
+                    
+        except Exception as e:
+            error_msg = f"Failed to submit shutdown request: {e}"
+            if GUI_AVAILABLE:
+                root = tk.Tk()
+                root.withdraw()
+                messagebox.showerror("Request Error", error_msg)
+                root.destroy()
+            else:
+                print(f"\n{error_msg}")
+    
+    def _force_quit_with_warning(self):
+        """Force quit with strong warning about consequences"""
+        try:
+            warning_msg = """⚠️ FORCE QUIT WARNING ⚠️
+
+This action will force-quit the PushNotifications client 
+without administrator approval.
+
+CONSEQUENCES:
+• This action will be logged and reported
+• The client will automatically restart
+• Your administrator will be notified
+• You may face disciplinary action
+• System protection will remain active
+
+To properly shutdown the client, use "Request Shutdown Approval" instead.
+
+Are you sure you want to force quit?"""
+            
+            if GUI_AVAILABLE:
+                import tkinter as tk
+                from tkinter import messagebox
+                
+                root = tk.Tk()
+                root.withdraw()
+                proceed = messagebox.askyesno(
+                    "⚠️ FORCE QUIT WARNING", 
+                    warning_msg,
+                    default='no'
+                )
+                root.destroy()
+            else:
+                print(f"\n{warning_msg}")
+                response = input("\nType 'YES' to force quit (anything else to cancel): ").strip()
+                proceed = response.upper() == 'YES'
+            
+            if proceed:
+                # Log the force quit attempt
+                try:
+                    import getpass
+                    data = {
+                        'action': 'logForceQuit',
+                        'clientId': self.security.client_id,
+                        'installationPath': str(self.install_dir),
+                        'username': getpass.getuser(),
+                        'computerName': os.environ.get('COMPUTERNAME', 'Unknown'),
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    
+                    # Send notification to server (don't wait for response)
+                    requests.post(f"{SCRIPT_URL}/api/index", json=data, timeout=5)
+                except Exception:
+                    pass  # Don't let logging failure prevent quit
+                
+                print("Force quit logged. Administrator will be notified. Client stopping...")
+                self.stop()
+            else:
+                print("Force quit cancelled.")
+                
+        except Exception as e:
+            print(f"Error in force quit: {e}")
+    
     def _quit_application(self):
-        """Quit the application"""
-        print("Quitting PushNotifications Client...")
-        self.stop()
+        """Quit the application (redirects to request approval)"""
+        print("Redirecting to shutdown approval request...")
+        self._request_shutdown_approval()
 
 def check_admin_privileges():
     """Check if running with administrator privileges"""
