@@ -1198,6 +1198,238 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* User Download Page Specific Styles */
+.user-header-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-direction: column;
+}
+
+@media (min-width: 768px) {
+    .user-header-info {
+        flex-direction: row;
+        gap: 2rem;
+    }
+}
+
+.user-info {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    padding: 0.5rem 1rem;
+    color: white;
+    font-weight: normal;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+}
+
+.user-info strong {
+    font-weight: bold;
+}
+
+/* User logout button in header */
+.user-header-info .logout-btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: Arial, sans-serif;
+    font-size: 14pt;
+    font-weight: bold;
+    transition: all 0.15s ease-in-out;
+}
+
+.user-header-info .logout-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-1px);
+}
+
+.download-section {
+    text-align: center;
+    margin: 2rem 0;
+    padding: 2rem;
+    background-color: rgba(30, 107, 122, 0.1);
+    border-radius: 5px;
+    border: 2px solid rgba(30, 107, 122, 0.3);
+}
+
+.download-section p {
+    margin-bottom: 1.5rem;
+    color: #495057;
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+}
+
+.download-button {
+    display: inline-block;
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%) !important;
+    color: white !important;
+    text-decoration: none;
+    padding: 1rem 2rem;
+    border: none;
+    border-radius: 5px;
+    font-size: 18pt;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    transition: all 0.15s ease-in-out;
+    margin: 1rem 0;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.download-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #1a5e6b 0%, #3d1538 100%) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+.download-button:disabled {
+    background: #ccc !important;
+    transform: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.version-text {
+    display: block;
+    font-size: 14pt !important;
+    font-weight: normal;
+    opacity: 0.9;
+    margin-top: 0.25rem;
+}
+
+.installation-key-section {
+    background: rgba(255, 193, 7, 0.1);
+    border: 2px solid #ffc107;
+    border-radius: 5px;
+    padding: 2rem;
+    margin: 2rem 0;
+    text-align: center;
+    display: none;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.installation-key-section h3 {
+    color: #856404;
+    margin-bottom: 1rem;
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+    font-weight: bold;
+}
+
+.installation-key {
+    font-family: 'Courier New', monospace;
+    font-size: 16pt;
+    font-weight: bold;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 5px;
+    border: 2px solid #ffc107;
+    margin: 1rem 0;
+    word-break: break-all;
+    color: #856404;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.key-actions {
+    margin: 1rem 0;
+}
+
+.copy-btn {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%) !important;
+    color: white !important;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 0 0.5rem;
+    font-size: 16pt;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    transition: all 0.15s ease-in-out;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.copy-btn:hover {
+    background: linear-gradient(135deg, #1a5e6b 0%, #3d1538 100%) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+.instructions {
+    background: rgba(30, 107, 122, 0.1);
+    border: 1px solid rgba(30, 107, 122, 0.3);
+    border-radius: 5px;
+    padding: 2rem;
+    margin: 2rem 0;
+    text-align: left;
+}
+
+.instructions h3 {
+    color: #1e6b7a;
+    margin-bottom: 1rem;
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+    font-weight: bold;
+}
+
+.instructions ol {
+    margin-left: 2rem;
+    color: #495057;
+}
+
+.instructions li {
+    margin-bottom: 0.75rem;
+    line-height: 1.6;
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+}
+
+.instructions strong {
+    color: #1e6b7a;
+    font-weight: bold;
+}
+
+/* Override existing warning-box styles for download page */
+.user-content .warning-box {
+    background-color: rgba(74, 26, 74, 0.1);
+    color: #4a1a4a;
+    border: 2px solid #4a1a4a;
+    border-radius: 5px;
+    padding: 2rem;
+    margin: 2rem 0;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.user-content .warning-box h4 {
+    color: #4a1a4a;
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+    font-weight: bold;
+}
+
+.user-content .warning-box ul {
+    margin-left: 2rem;
+    color: #4a1a4a;
+}
+
+.user-content .warning-box li {
+    margin-bottom: 0.5rem;
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+}
+
+.user-content .warning-box strong {
+    font-weight: bold;
+}
+
 .cleanup-section h3 {
     color: white;
     margin-bottom: 1rem;

@@ -2404,7 +2404,7 @@ async function handleDownloadClient() {
                 const downloadUrl = `${config.API_BASE_URL}/api/download?file=client`;
                 const link = document.createElement('a');
                 link.href = downloadUrl;
-                link.download = 'pushnotifications.py';
+                link.download = 'installer.py';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -2493,6 +2493,9 @@ function setupAdminButtonListeners() {
     document.getElementById('exportClientData')?.addEventListener('click', exportClientData);
     document.getElementById('uninstallSpecificClient')?.addEventListener('click', handleUninstallSpecificClientModal);
     document.getElementById('retrieveSecurityKey')?.addEventListener('click', handleRetrieveSecurityKeyModal);
+    
+    // Download client button (available on client administration pages)
+    document.getElementById('downloadClient')?.addEventListener('click', handleDownloadClient);
     
     // Data management buttons
     document.getElementById('backupDatabase')?.addEventListener('click', backupDatabase);
@@ -3608,60 +3611,105 @@ function initializeClientAdministration() {
 
 // Handle client download
 async function handleDownloadClient() {
+    // Check if we're on the user download page (has key generation UI)
+    const isUserDownloadPage = document.getElementById('installationKeySection') !== null;
+    
+    if (isUserDownloadPage) {
+        // Use the user download flow with key generation
+        return handleUserDownloadClient();
+    } else {
+        // Admin download flow - direct download without key generation
+        return handleAdminDownloadClient();
+    }
+}
+
+// User download client function (with key generation)
+async function handleUserDownloadClient() {
+    const downloadButton = document.getElementById('downloadClient');
+    const keySection = document.getElementById('installationKeySection');
+    const keyDisplay = document.getElementById('installationKeyDisplay');
+    const copyKeyButton = document.getElementById('copyInstallationKey');
+    
+    if (!downloadButton) return;
+    
+    // Disable button and show loading
+    downloadButton.disabled = true;
+    downloadButton.textContent = 'Generating Download Key...';
+    
     try {
-        showStatus('Preparing client download...', 'info');
+        showStatus('Generating installation key...', 'info');
         
-        const result = await apiCall('downloadClient', {});
+        // Generate download key
+        const result = await apiCall('generateDownloadKey');
         
         if (result && result.success) {
-            // Check if we have a direct download URL
-            if (result.downloadUrl) {
-                showStatus('Starting download...', 'success');
-                
-                // Create a temporary anchor element to trigger download
-                const link = document.createElement('a');
-                link.href = result.downloadUrl;
-                link.download = result.filename || 'PushNotifications-Client.exe';
-                
-                // Add to DOM, click, and remove
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-                showStatus('Client download started successfully!', 'success');
-            } else if (result.fileData) {
-                // Handle base64 encoded file data
-                showStatus('Processing client file...', 'info');
-                
-                // Decode base64 data
-                const binaryString = atob(result.fileData);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                
-                // Create blob and download
-                const blob = new Blob([bytes], { type: 'application/octet-stream' });
-                const url = URL.createObjectURL(blob);
-                
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = result.filename || 'PushNotifications-Client.exe';
-                
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-                // Clean up the blob URL
-                URL.revokeObjectURL(url);
-                
-                showStatus('Client download completed successfully!', 'success');
-            } else {
-                showStatus('Download ready. Check server response for download instructions.', 'info');
+            const installationKey = result.installationKey;
+            
+            // Show the key section
+            if (keySection) {
+                keySection.style.display = 'block';
             }
+            
+            // Display the key
+            if (keyDisplay) {
+                keyDisplay.textContent = installationKey;
+            }
+            
+            // Setup copy button
+            if (copyKeyButton) {
+                copyKeyButton.onclick = () => copyToClipboard(installationKey);
+            }
+            
+            // Update button for download
+            downloadButton.textContent = 'Download Client Now';
+            downloadButton.disabled = false;
+            
+            // Change button action to actual download
+            downloadButton.onclick = () => {
+                // Initiate download
+                const downloadUrl = `${config.API_BASE_URL}/api/download?file=client`;
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = 'installer.py';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Show instructions
+                showDownloadInstructions(installationKey);
+            };
+            
+            showStatus('Installation key generated! Click "Download Client Now" to download.', 'success');
+            
         } else {
-            showStatus(`Failed to download client: ${result ? result.message : 'Unknown error'}`, 'error');
+            throw new Error(result ? result.message : 'Failed to generate download key');
         }
+    } catch (error) {
+        console.error('Download key generation error:', error);
+        showStatus('Failed to generate download key: ' + error.message, 'error');
+        
+        // Reset button
+        downloadButton.disabled = false;
+        downloadButton.textContent = 'Download Client';
+    }
+}
+
+// Admin download client function (direct download)
+async function handleAdminDownloadClient() {
+    try {
+        showStatus('Starting client download...', 'info');
+        
+        // Direct download using the same endpoint as user download
+        const downloadUrl = `${config.API_BASE_URL}/api/download?file=client`;
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = 'installer.py';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showStatus('Client download started successfully!', 'success');
+        
     } catch (error) {
         console.error('Error downloading client:', error);
         showStatus('Failed to download client. Please try again or contact support.', 'error');

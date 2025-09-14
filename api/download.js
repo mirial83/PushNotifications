@@ -161,7 +161,7 @@ class DownloadHandler {
 
       // Set appropriate headers for file download
       res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Disposition', 'attachment; filename="pushnotifications.py"');
+      res.setHeader('Content-Disposition', 'attachment; filename="installer.py"');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');

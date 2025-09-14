@@ -104,26 +104,52 @@
                             </div>
                             
                             <div class="action-card">
-                                <h3>Download Client for Testing</h3>
-                                <p>Download the latest client application for testing and deployment purposes</p>
-                                <div class="client-download-info">
-                                    <div class="download-details">
-                                        <span class="download-label">💻 Platform:</span>
-                                        <span class="download-value">Windows (.exe)</span>
-                                    </div>
-                                    <div class="download-details">
-                                        <span class="download-label">📦 Type:</span>
-                                        <span class="download-value">Standalone Executable</span>
-                                    </div>
-                                    <div class="download-details">
-                                        <span class="download-label">🔒 Requirements:</span>
-                                        <span class="download-value">Administrator privileges</span>
-                                    </div>
+                                <h3>📥 Download Client</h3>
+                                
+                                <div class="download-section" id="downloadSection">
+                                    <p>Click the button below to generate a secure installation key and download the PushNotifications client.</p>
+                                    <button class="download-button" id="downloadClient">
+                                        📥 Download Client
+                                        <span class="version-text">v2.1.0</span>
+                                    </button>
                                 </div>
-                                <div class="download-warning">
-                                    <strong>Note:</strong> This client connects to your current server configuration. Ensure the target computer can reach this server.
+                                
+                                <div class="installation-key-section" id="installationKeySection">
+                                    <h3>🔑 Your Installation Key</h3>
+                                    <p>This key has been generated for this download and will expire in 24 hours. Copy it before installing.</p>
+                                    
+                                    <div class="installation-key" id="installationKeyDisplay">
+                                        <!-- Key will be displayed here -->
+                                    </div>
+                                    
+                                    <div class="key-actions">
+                                        <button class="copy-btn" id="copyInstallationKey">📋 Copy Key</button>
+                                    </div>
+                                    
+                                    <p><small><strong>Important:</strong> This key is valid for 24 hours and will be consumed during installation.</small></p>
                                 </div>
-                                <button type="button" id="downloadClient" class="btn-success">⬇️ Download Client</button>
+                                
+                                <div class="instructions">
+                                    <h3>📋 How to Install</h3>
+                                    <ol>
+                                        <li><strong>Click "Download Client"</strong> to generate your unique installation key</li>
+                                        <li><strong>Copy the installation key</strong> that appears</li>
+                                        <li><strong>Download the client file</strong> when prompted</li>
+                                        <li><strong>Run the installer</strong> as Administrator on your computer</li>
+                                        <li><strong>Paste your installation key</strong> when prompted during setup</li>
+                                        <li><strong>Complete the installation</strong> following the on-screen prompts</li>
+                                    </ol>
+                                </div>
+                                
+                                <div class="warning-box">
+                                    <h4>⚠️ Important Notes</h4>
+                                    <ul>
+                                        <li><strong>Installation keys expire in 24 hours</strong> and are consumed during installation</li>
+                                        <li><strong>Generate a new key</strong> for each installation attempt</li>
+                                        <li><strong>Run as Administrator</strong> during installation for proper setup</li>
+                                        <li><strong>Only use downloads</strong> from this official page</li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
 
