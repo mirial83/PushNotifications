@@ -560,6 +560,52 @@ class DatabaseOperations {
     }
   }
 
+  async uninstallAllClients(reason = 'Administrative uninstall') {
+    try {
+      // Get count of active clients before uninstalling
+      let clientCount = 0;
+      
+      if (this.usesFallback) {
+        clientCount = fallbackStorage.clients.length;
+      } else {
+        await this.connect();
+        // Count active clients (those that have checked in recently)
+        const activeClients = await this.db.collection('macClients')
+          .find({ activeClientId: { $ne: null } })
+          .toArray();
+        clientCount = activeClients.length;
+      }
+
+      // Create special uninstall notification for all active clients
+      const uninstallNotification = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        message: '__UNINSTALL_ALL_COMMAND__',
+        clientId: 'all',
+        status: 'Active',
+        type: 'uninstall_command',
+        reason: reason,
+        allowBrowserUsage: false,
+        allowedWebsites: '',
+        created: new Date().toISOString()
+      };
+
+      if (this.usesFallback) {
+        fallbackStorage.notifications.push(uninstallNotification);
+      } else {
+        await this.connect();
+        await this.db.collection('notifications').insertOne(uninstallNotification);
+      }
+
+      return {
+        success: true,
+        message: `Uninstall command sent to ${clientCount} active client(s)`,
+        clientCount
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   async getActiveNotifications() {
     try {
       let notifications;
@@ -2448,6 +2494,30 @@ export default async function handler(req, res) {
           };
         }
         break;
+
+      // Uninstall All Clients Action (Admin only)
+      case 'uninstallAllClients': {
+        const uninstallAuthHeader = req.headers.authorization;
+        const uninstallToken = uninstallAuthHeader && uninstallAuthHeader.startsWith('Bearer ')
+          ? uninstallAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(uninstallToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.uninstallAllClients(
+          params.reason || 'Administrative uninstall'
+        );
+        break;
+      }
         
     }
 

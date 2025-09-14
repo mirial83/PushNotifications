@@ -860,25 +860,16 @@ async function handleUninstallAllClients() {
     try {
         showStatus('Uninstalling all clients...', 'info');
         
-        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                action: 'uninstallAllClients',
-                
-                reason: reason
-            })
+        const result = await apiCall('uninstallAllClients', {
+            reason: reason
         });
         
-        const result = await response.json();
-        
-        if (result.success) {
+        if (result && result.success) {
             showStatus(`Uninstall command sent to ${result.clientCount || 0} client(s)!`, 'success');
             refreshNotifications();
         } else {
-            showStatus(`Failed to uninstall clients: ${result.error}`, 'error');
+            const errorMessage = result ? (result.message || result.error) : 'Unknown error';
+            showStatus(`Failed to uninstall clients: ${errorMessage}`, 'error');
         }
     } catch (error) {
         console.error('Error uninstalling all clients:', error);
