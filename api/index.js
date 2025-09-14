@@ -1731,6 +1731,52 @@ class DatabaseOperations {
     }
   }
 
+  async resetUserPassword(userId, newPassword) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'User management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Check if user exists first
+      const user = await this.db.collection('users').findOne({ _id: new ObjectId(userId) });
+      if (!user) {
+        return { success: false, message: 'User not found' };
+      }
+
+      // Hash the new password (in production, use bcrypt)
+      const hashedPassword = Buffer.from(newPassword).toString('base64');
+      
+      // Update user's password
+      const result = await this.db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
+        { 
+          $set: { 
+            password: hashedPassword,
+            passwordResetAt: new Date()
+          }
+        }
+      );
+      
+      if (result.modifiedCount === 0) {
+        return { success: false, message: 'Failed to update password' };
+      }
+
+      // Invalidate all existing sessions for this user to force re-login
+      await this.db.collection('sessions').deleteMany({ userId: new ObjectId(userId) });
+
+      return { 
+        success: true, 
+        message: 'Password reset successfully',
+        username: user.username
+      };
+    } catch (error) {
+      console.error('Error resetting user password:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
   // Version History Management Methods
   async syncVersionHistory() {
     try {
@@ -2341,6 +2387,29 @@ export default async function handler(req, res) {
           break;
         }
         result = await db.deleteUser(params.userId || '');
+        break;
+      }
+
+      case 'resetUserPassword': {
+        const resetAuthHeader = req.headers.authorization;
+        const resetToken = resetAuthHeader && resetAuthHeader.startsWith('Bearer ')
+          ? resetAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(resetToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        result = await db.resetUserPassword(
+          params.userId || '',
+          params.newPassword || ''
+        );
         break;
       }
 
