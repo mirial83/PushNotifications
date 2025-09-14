@@ -318,7 +318,10 @@ class DatabaseOperations {
 
       await this.connect();
       
-      // Just fetch from database - don't auto-sync (use syncAllCommits action instead)
+      // Check for and sync any new commits (lightweight sync)
+      await this.syncNewestCommits();
+      
+      // Fetch from database
       const versions = await this.db.collection('versionHistory')
         .find({})
         .sort({ versionNumber: -1 }) // Sort by version number descending (newest first)
@@ -369,6 +372,57 @@ class DatabaseOperations {
       }));
     } catch (error) {
       console.log('GitHub releases fetch failed:', error.message);
+      return null;
+    }
+  }
+
+  async fetchRecentGitHubCommits(limit = 10) {
+    try {
+      // Check for GitHub token (optional for public repos, but recommended for higher rate limits)
+      const githubToken = process.env.GITHUB_TOKEN;
+      
+      const headers = {
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'PushNotifications-API'
+      };
+      
+      if (githubToken) {
+        headers['Authorization'] = `Bearer ${githubToken}`;
+      }
+      
+      // Fetch only the most recent commits (lightweight)
+      const apiUrl = `https://api.github.com/repos/mirial83/PushNotifications/commits?per_page=${limit}&page=1`;
+      
+      const response = await fetch(apiUrl, { headers });
+      
+      if (!response.ok) {
+        console.log(`GitHub API error: ${response.status} - ${response.statusText}`);
+        return null;
+      }
+      
+      const commits = await response.json();
+      
+      if (!commits || commits.length === 0) {
+        return null;
+      }
+      
+      // Map commits to our format
+      const formattedCommits = commits.map((commit, index) => {
+        return {
+          message: commit.commit.message.split('\n')[0], // First line only
+          description: commit.commit.message,
+          date: commit.commit.committer.date,
+          sha: commit.sha.substring(0, 8),
+          author: commit.commit.author.name,
+          source: 'github-commits'
+        };
+      });
+      
+      return formattedCommits;
+      
+    } catch (error) {
+      console.log('Recent GitHub commits fetch failed:', error.message);
       return null;
     }
   }
@@ -2444,6 +2498,56 @@ class DatabaseOperations {
       }
     } catch (error) {
       console.error('Error performing initial version sync:', error);
+    }
+  }
+  
+  async syncNewestCommits() {
+    try {
+      if (this.usesFallback) {
+        return;
+      }
+      
+      await this.connect();
+      
+      // Fetch just the first few commits to check for new ones (lightweight)
+      const recentCommits = await this.fetchRecentGitHubCommits(10); // Only get 10 recent commits
+      
+      if (!recentCommits || recentCommits.length === 0) {
+        return;
+      }
+      
+      // Get the latest commit from database
+      const latestDbCommit = await this.db.collection('versionHistory')
+        .findOne({}, { sort: { versionNumber: -1 } });
+      
+      if (!latestDbCommit) {
+        // No commits in DB, don't auto-sync all (that's for syncAllCommits)
+        return;
+      }
+      
+      // Check if the newest commit from GitHub is newer than our latest
+      const newestGitHubCommit = recentCommits[0]; // First one is newest
+      
+      // Check if this commit already exists
+      if (latestDbCommit.sha && latestDbCommit.sha === newestGitHubCommit.sha) {
+        // Latest commit already in database
+        return;
+      }
+      
+      // Check by date as fallback
+      const newestDate = new Date(newestGitHubCommit.date);
+      const latestDbDate = new Date(latestDbCommit.date || latestDbCommit.createdAt);
+      
+      if (newestDate <= latestDbDate) {
+        // Not newer
+        return;
+      }
+      
+      // New commit found - add it
+      await this.addNewestVersionToDatabase(newestGitHubCommit, latestDbCommit);
+      
+    } catch (error) {
+      console.log('Lightweight commit sync failed:', error.message);
     }
   }
   
