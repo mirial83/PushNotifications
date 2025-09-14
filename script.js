@@ -178,6 +178,15 @@ function initializeAdmin() {
             loadUsersIntoDropdowns();
         }, 500);
     }
+    
+    // If this is the standalone version-history page, load version history directly
+    if (window.location.pathname.endsWith('version-history.html')) {
+        console.log('Standalone version-history page detected, loading version history');
+        // Add a small delay to ensure DOM is fully loaded
+        setTimeout(() => {
+            loadVersionHistory();
+        }, 500);
+    }
 }
 
 // Session validation
