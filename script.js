@@ -3114,43 +3114,50 @@ async function handleRemoveUserAccount() {
     
     const username = userSelect.options[userSelect.selectedIndex].text.split(' (')[0];
     
-    if (confirm(`Are you sure you want to permanently delete user "${username}"? This action cannot be undone and will permanently delete the user account and all associated data.`)) {
-        try {
-            showStatus('Deleting user account...', 'info');
-            
-            // Get session token for authorization
-            const token = localStorage.getItem('sessionToken') || '';
-            
-            // Call API to delete user
-            const response = await fetch(`${config.API_BASE_URL}/api/index`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': 'Bearer ' + token } : {})
-                },
-                body: JSON.stringify({ action: 'deleteUser', userId })
-            });
-            
-            const result = await response.json();
-            
-            if (result && result.success) {
-                showStatus('User account deleted successfully!', 'success');
+    showConfirmationModal({
+        title: 'Delete User Account',
+        message: `Are you sure you want to permanently delete user "${username}"? This action cannot be undone and will permanently delete the user account and all associated data.`,
+        confirmText: 'Delete User',
+        cancelText: 'Cancel',
+        dangerMode: true,
+        onConfirm: async () => {
+            try {
+                showStatus('Deleting user account...', 'info');
                 
-                // Reset the dropdown
-                userSelect.value = '';
+                // Get session token for authorization
+                const token = localStorage.getItem('sessionToken') || '';
                 
-                // Refresh user lists
-                loadAllUsers();
-                loadUsersIntoDropdowns();
-            } else {
-                const errorMessage = result ? result.message : 'Failed to delete user';
-                showStatus(`Failed to delete user: ${errorMessage}`, 'error');
+                // Call API to delete user
+                const response = await fetch(`${config.API_BASE_URL}/api/index`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+                    },
+                    body: JSON.stringify({ action: 'deleteUser', userId })
+                });
+                
+                const result = await response.json();
+                
+                if (result && result.success) {
+                    showStatus('User account deleted successfully!', 'success');
+                    
+                    // Reset the dropdown
+                    userSelect.value = '';
+                    
+                    // Refresh user lists
+                    loadAllUsers();
+                    loadUsersIntoDropdowns();
+                } else {
+                    const errorMessage = result ? result.message : 'Failed to delete user';
+                    showStatus(`Failed to delete user: ${errorMessage}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                showStatus('Failed to delete user. Please check console for details.', 'error');
             }
-        } catch (error) {
-            console.error('Error deleting user:', error);
-            showStatus('Failed to delete user. Please check console for details.', 'error');
         }
-    }
+    });
 }
 
 // Edit User function - opens a modal for editing user details
