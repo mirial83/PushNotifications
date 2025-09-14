@@ -3596,6 +3596,68 @@ function initializeClientAdministration() {
     }
 }
 
+// Handle client download
+async function handleDownloadClient() {
+    try {
+        showStatus('Preparing client download...', 'info');
+        
+        const result = await apiCall('downloadClient', {});
+        
+        if (result && result.success) {
+            // Check if we have a direct download URL
+            if (result.downloadUrl) {
+                showStatus('Starting download...', 'success');
+                
+                // Create a temporary anchor element to trigger download
+                const link = document.createElement('a');
+                link.href = result.downloadUrl;
+                link.download = result.filename || 'PushNotifications-Client.exe';
+                
+                // Add to DOM, click, and remove
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                showStatus('Client download started successfully!', 'success');
+            } else if (result.fileData) {
+                // Handle base64 encoded file data
+                showStatus('Processing client file...', 'info');
+                
+                // Decode base64 data
+                const binaryString = atob(result.fileData);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                
+                // Create blob and download
+                const blob = new Blob([bytes], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = result.filename || 'PushNotifications-Client.exe';
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Clean up the blob URL
+                URL.revokeObjectURL(url);
+                
+                showStatus('Client download completed successfully!', 'success');
+            } else {
+                showStatus('Download ready. Check server response for download instructions.', 'info');
+            }
+        } else {
+            showStatus(`Failed to download client: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error downloading client:', error);
+        showStatus('Failed to download client. Please try again or contact support.', 'error');
+    }
+}
+
 // Export security and client management functions for global access
 window.loadClientInfo = loadClientInfo;
 window.loadSecurityKeys = loadSecurityKeys;
@@ -3611,3 +3673,4 @@ window.handleRetrieveSecurityKey = handleRetrieveSecurityKey;
 window.handleRemoveOldActiveNotifications = handleRemoveOldActiveNotifications;
 window.handleCleanOldNotifications = handleCleanOldNotifications;
 window.handleClearOldWebsiteRequests = handleClearOldWebsiteRequests;
+window.handleDownloadClient = handleDownloadClient;
