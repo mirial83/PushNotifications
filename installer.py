@@ -3454,9 +3454,24 @@ def main():
         if is_client_mode():
             # Check if we need admin privileges for client mode
             if not check_admin_privileges():
+                print("PushNotifications Client requires administrator privileges.")
                 print("Restarting with administrator privileges...")
-                restart_with_admin()
+                print("Please accept the UAC prompt when it appears.")
+                print("\nNote: The console will close and reopen with admin rights.")
+                
+                # Give user time to read the message
+                time.sleep(3)
+                
+                try:
+                    restart_with_admin()
+                except Exception as e:
+                    print(f"Failed to restart with admin privileges: {e}")
+                    print("Please run the client manually as administrator.")
+                    input("Press Enter to exit...")
                 return
+            
+            # If we reach here, we have admin privileges
+            print("Running PushNotifications Client with administrator privileges...")
             
             # Run as client
             install_dir = Path.home() / "PushNotifications"
