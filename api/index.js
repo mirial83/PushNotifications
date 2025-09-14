@@ -419,7 +419,8 @@ class DatabaseOperations {
       
       const headers = {
         'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28'
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'PushNotifications-API'
       };
       
       if (githubToken) {
@@ -432,20 +433,34 @@ class DatabaseOperations {
       const perPage = 100;
       let hasMorePages = true;
       
-      console.log('Fetching all GitHub deployments...');
+      console.log('🚀 Fetching ALL GitHub deployments with comprehensive pagination...');
       
-      while (hasMorePages && page <= 10) { // Safety limit of 10 pages (1000 deployments max)
+      while (hasMorePages && page <= 20) { // Increased limit to 20 pages (2000 deployments max)
         const apiUrl = `https://api.github.com/repos/mirial83/PushNotifications/deployments?per_page=${perPage}&page=${page}`;
         
+        console.log(`📄 Fetching page ${page}...`);
         const response = await fetch(apiUrl, { headers });
         
         if (!response.ok) {
-          throw new Error(`GitHub API error: ${response.status} - ${response.statusText}`);
+          console.log(`❌ GitHub API error on page ${page}: ${response.status} - ${response.statusText}`);
+          if (response.status === 404) {
+            // Repo not found or no more pages
+            hasMorePages = false;
+            break;
+          } else if (response.status === 403) {
+            // Rate limited, wait and try again
+            console.log('⏱️ Rate limited, waiting 60 seconds...');
+            await new Promise(resolve => setTimeout(resolve, 60000));
+            continue;
+          } else {
+            throw new Error(`GitHub API error: ${response.status} - ${response.statusText}`);
+          }
         }
         
         const deployments = await response.json();
         
         if (!deployments || deployments.length === 0) {
+          console.log(`📄 Page ${page} returned no deployments, stopping pagination`);
           hasMorePages = false;
           break;
         }
@@ -454,36 +469,42 @@ class DatabaseOperations {
         
         // Check if we got less than the requested amount (indicates last page)
         if (deployments.length < perPage) {
+          console.log(`📄 Page ${page} returned ${deployments.length} deployments (less than ${perPage}), this is the last page`);
           hasMorePages = false;
         } else {
           page++;
         }
         
-        console.log(`Fetched page ${page - 1}: ${deployments.length} deployments (total: ${allDeployments.length})`);
+        console.log(`   ✅ Got ${deployments.length} deployments (total so far: ${allDeployments.length})`);
+        
+        // Add delay between pages to avoid rate limiting
+        if (page <= 20) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
       
       if (allDeployments.length === 0) {
-        console.log('No GitHub deployments found');
+        console.log('❌ No GitHub deployments found at all');
         return null;
       }
       
-      console.log(`Total deployments fetched: ${allDeployments.length}`);
+      console.log(`📦 Total deployments fetched from GitHub: ${allDeployments.length}`);
       
-      // Get deployments with successful deployment status AND passing Vercel checks
+      // TEMPORARILY: Let's be less restrictive and include deployments even without perfect Vercel checks
       const validDeployments = [];
       let processedCount = 0;
       let skippedNoStatus = 0;
       let skippedFailedStatus = 0;
-      let skippedNoVercelChecks = 0;
+      let includedWithoutVercelChecks = 0;
       let skippedFailedVercelChecks = 0;
       
-      console.log(`Starting to process ${allDeployments.length} deployments...`);
+      console.log(`🔬 Processing ${allDeployments.length} deployments with relaxed filtering...`);
       
       for (const deployment of allDeployments) {
         processedCount++;
         
-        if (processedCount % 5 === 0) {
-          console.log(`Processing deployment ${processedCount}/${allDeployments.length}: ${deployment.id}`);
+        if (processedCount % 10 === 0) {
+          console.log(`   Processing deployment ${processedCount}/${allDeployments.length}: ${deployment.id}`);
         }
         
         try {
@@ -493,7 +514,9 @@ class DatabaseOperations {
           });
           
           if (!statusResponse.ok) {
-            console.log(`Failed to get deployment status for ${deployment.id}: ${statusResponse.status}`);
+            if (statusResponse.status !== 404) {
+              console.log(`⚠️ Failed to get deployment status for ${deployment.id}: ${statusResponse.status}`);
+            }
             skippedNoStatus++;
             continue;
           }
@@ -503,81 +526,77 @@ class DatabaseOperations {
           
           // Only proceed if deployment was successful
           if (!latestStatus || latestStatus.state !== 'success') {
-            console.log(`Deployment ${deployment.id} status: ${latestStatus?.state || 'no status'} - skipping`);
             skippedFailedStatus++;
             continue;
           }
           
-          console.log(`Deployment ${deployment.id} has successful status, checking Vercel...`);
-          
-          // Check Vercel status checks for this commit
-          const checksResponse = await fetch(`https://api.github.com/repos/mirial83/PushNotifications/commits/${deployment.sha}/status`, {
-            headers
-          });
-          
+          // RELAXED APPROACH: Include deployments with successful status, regardless of Vercel checks
           let hasVercelChecks = false;
           let vercelChecksPassed = true;
           
-          if (checksResponse.ok) {
-            const checksData = await checksResponse.json();
-            
-            // Look for Vercel checks in the status checks
-            const vercelChecks = checksData.statuses?.filter(status => 
-              status.context && (
-                status.context.toLowerCase().includes('vercel') ||
-                status.context.toLowerCase().includes('deployment')
-              )
-            ) || [];
-            
-            if (vercelChecks.length > 0) {
-              hasVercelChecks = true;
-              vercelChecksPassed = vercelChecks.every(check => check.state === 'success');
-              console.log(`Deployment ${deployment.id} has ${vercelChecks.length} Vercel status checks, all passed: ${vercelChecksPassed}`);
-            }
-            
-            // Also check GitHub check runs (newer API)
-            const checkRunsResponse = await fetch(`https://api.github.com/repos/mirial83/PushNotifications/commits/${deployment.sha}/check-runs`, {
+          try {
+            // Check Vercel status checks for this commit
+            const checksResponse = await fetch(`https://api.github.com/repos/mirial83/PushNotifications/commits/${deployment.sha}/status`, {
               headers
             });
             
-            if (checkRunsResponse.ok) {
-              const checkRunsData = await checkRunsResponse.json();
+            if (checksResponse.ok) {
+              const checksData = await checksResponse.json();
               
-              // Look for Vercel check runs
-              const vercelCheckRuns = checkRunsData.check_runs?.filter(checkRun => 
-                checkRun.name && (
-                  checkRun.name.toLowerCase().includes('vercel') ||
-                  checkRun.name.toLowerCase().includes('deployment') ||
-                  checkRun.app?.name?.toLowerCase().includes('vercel')
+              // Look for Vercel checks in the status checks
+              const vercelChecks = checksData.statuses?.filter(status => 
+                status.context && (
+                  status.context.toLowerCase().includes('vercel') ||
+                  status.context.toLowerCase().includes('deployment')
                 )
               ) || [];
               
-              if (vercelCheckRuns.length > 0) {
+              if (vercelChecks.length > 0) {
                 hasVercelChecks = true;
-                const allVercelCheckRunsPassed = vercelCheckRuns.every(checkRun => 
-                  checkRun.conclusion === 'success' || checkRun.conclusion === 'neutral'
-                );
-                vercelChecksPassed = vercelChecksPassed && allVercelCheckRunsPassed;
-                console.log(`Deployment ${deployment.id} has ${vercelCheckRuns.length} Vercel check runs, all passed: ${allVercelCheckRunsPassed}`);
+                vercelChecksPassed = vercelChecks.every(check => check.state === 'success');
+              }
+              
+              // Also check GitHub check runs (newer API)
+              const checkRunsResponse = await fetch(`https://api.github.com/repos/mirial83/PushNotifications/commits/${deployment.sha}/check-runs`, {
+                headers
+              });
+              
+              if (checkRunsResponse.ok) {
+                const checkRunsData = await checkRunsResponse.json();
+                
+                // Look for Vercel check runs
+                const vercelCheckRuns = checkRunsData.check_runs?.filter(checkRun => 
+                  checkRun.name && (
+                    checkRun.name.toLowerCase().includes('vercel') ||
+                    checkRun.name.toLowerCase().includes('deployment') ||
+                    checkRun.app?.name?.toLowerCase().includes('vercel')
+                  )
+                ) || [];
+                
+                if (vercelCheckRuns.length > 0) {
+                  hasVercelChecks = true;
+                  const allVercelCheckRunsPassed = vercelCheckRuns.every(checkRun => 
+                    checkRun.conclusion === 'success' || checkRun.conclusion === 'neutral'
+                  );
+                  vercelChecksPassed = vercelChecksPassed && allVercelCheckRunsPassed;
+                }
               }
             }
-          } else {
-            console.log(`Failed to get status checks for deployment ${deployment.id} commit ${deployment.sha}: ${checksResponse.status}`);
+          } catch (checkError) {
+            // Continue anyway, don't skip due to check errors
+            console.log(`⚠️ Error checking Vercel status for ${deployment.id}, but including anyway: ${checkError.message}`);
           }
           
-          if (!hasVercelChecks) {
-            console.log(`Deployment ${deployment.id} has no Vercel checks - skipping`);
-            skippedNoVercelChecks++;
-            continue;
-          }
-          
-          if (!vercelChecksPassed) {
-            console.log(`Deployment ${deployment.id} has failed Vercel checks - skipping`);
+          // RELAXED: Skip only if Vercel checks exist AND failed
+          if (hasVercelChecks && !vercelChecksPassed) {
             skippedFailedVercelChecks++;
             continue;
           }
           
-          console.log(`✅ Deployment ${deployment.id} passed all checks - adding to valid deployments`);
+          // Include this deployment
+          if (!hasVercelChecks) {
+            includedWithoutVercelChecks++;
+          }
           
           // Get commit info for better messages
           let commitMessage = deployment.description || deployment.payload?.description || `Deployment ${deployment.id}`;
@@ -595,7 +614,7 @@ class DatabaseOperations {
                 commitAuthor = commitData.commit.author.name;
               }
             } catch (commitError) {
-              console.log(`Failed to get commit info for ${deployment.sha}: ${commitError.message}`);
+              // Use deployment info if commit fetch fails
             }
           }
           
@@ -607,33 +626,40 @@ class DatabaseOperations {
           });
           
           // Add a small delay to avoid rate limiting
-          if (processedCount % 10 === 0) {
-            await new Promise(resolve => setTimeout(resolve, 200));
+          if (processedCount % 20 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
           
         } catch (checkError) {
-          console.log(`Failed to check status for deployment ${deployment.id}:`, checkError.message);
+          console.log(`❌ Error processing deployment ${deployment.id}: ${checkError.message}`);
           continue;
         }
       }
       
-      console.log(`Deployment processing complete:`);
-      console.log(`- Total processed: ${processedCount}`);
-      console.log(`- Valid deployments: ${validDeployments.length}`);
-      console.log(`- Skipped (no status): ${skippedNoStatus}`);
-      console.log(`- Skipped (failed status): ${skippedFailedStatus}`);
-      console.log(`- Skipped (no Vercel checks): ${skippedNoVercelChecks}`);
-      console.log(`- Skipped (failed Vercel checks): ${skippedFailedVercelChecks}`);
+      console.log(`\n📊 DEPLOYMENT PROCESSING RESULTS:`);
+      console.log(`   Total deployments fetched: ${allDeployments.length}`);
+      console.log(`   Total processed: ${processedCount}`);
+      console.log(`   ✅ Valid deployments: ${validDeployments.length}`);
+      console.log(`   ❌ Skipped (no status): ${skippedNoStatus}`);
+      console.log(`   ❌ Skipped (failed status): ${skippedFailedStatus}`);
+      console.log(`   ⚠️ Included without Vercel checks: ${includedWithoutVercelChecks}`);
+      console.log(`   ❌ Skipped (failed Vercel checks): ${skippedFailedVercelChecks}`);
       
       if (validDeployments.length === 0) {
-        console.log('❌ No GitHub deployments found with passing Vercel checks');
+        console.log('❌ No valid deployments found after processing');
         return null;
       }
       
-      console.log(`Found ${validDeployments.length} deployments with passing Vercel checks out of ${allDeployments.length} total deployments`);
+      if (validDeployments.length === 1) {
+        console.log('⚠️ WARNING: Only 1 valid deployment found! This might indicate overly restrictive filtering.');
+      }
+      
+      console.log(`🎉 Found ${validDeployments.length} deployments to sync out of ${allDeployments.length} total`);
       
       // Sort by date (oldest first) to maintain chronological order
       validDeployments.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      
+      console.log(`📅 Date range: ${validDeployments[0]?.created_at} to ${validDeployments[validDeployments.length - 1]?.created_at}`);
       
       // Convert to our format
       return validDeployments.map((deployment, index) => ({
@@ -651,7 +677,8 @@ class DatabaseOperations {
       }));
       
     } catch (error) {
-      console.log('GitHub deployments fetch failed:', error.message);
+      console.log('❌ GitHub deployments fetch failed:', error.message);
+      console.log('Stack trace:', error.stack);
       return null;
     }
   }
