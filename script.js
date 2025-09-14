@@ -1812,6 +1812,9 @@ window.dismissIncompleteNotification = dismissIncompleteNotification;
 
 // Add website count listener
 document.addEventListener('DOMContentLoaded', function() {
+    // Hide modal on page load to prevent it from showing inappropriately
+    hideModalOnLoad();
+    
     const websitesTextarea = document.getElementById('allowedWebsites');
     if (websitesTextarea) {
         websitesTextarea.addEventListener('input', updateWebsiteCount);
@@ -3669,7 +3672,8 @@ async function handleDownloadClient() {
 function closeModal() {
     const modal = document.getElementById('clientSelectionModal');
     if (modal) {
-        modal.style.display = 'none';
+        modal.style.display = 'none !important';
+        modal.style.visibility = 'hidden';
         
         // Clear modal content
         const modalResult = document.getElementById('modalResult');
@@ -3688,6 +3692,15 @@ function closeModal() {
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.remove();
     });
+}
+
+// Hide modal on page load to ensure it's not visible
+function hideModalOnLoad() {
+    const modal = document.getElementById('clientSelectionModal');
+    if (modal) {
+        modal.style.display = 'none !important';
+        modal.style.visibility = 'hidden';
+    }
 }
 
 function showClientSelectionModal(title, actionType, callback) {
@@ -3721,8 +3734,9 @@ function showClientSelectionModal(title, actionType, callback) {
         }
     };
     
-    // Show modal
-    modal.style.display = 'block';
+    // Show modal - override CSS with important
+    modal.style.display = 'flex !important';
+    modal.style.visibility = 'visible';
     
     // Add event listeners for closing
     modal.addEventListener('click', (e) => {
