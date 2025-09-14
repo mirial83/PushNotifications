@@ -225,17 +225,89 @@ class DatabaseOperations {
   }
 
   async getVersionInfo() {
-    return {
-      success: true,
-      currentVersion: '1.1.9',
-      latestVersion: '1.1.9',
-      releaseNotes: 'Node.js/MongoDB/Vercel version with enhanced reliability',
-      updateAvailable: false,
-      autoUpdateEnabled: true,
-      forceUpdate: false,
-      downloadUrl: '/api/download?file=client',
-      timestamp: new Date().toISOString()
-    };
+    try {
+      if (this.usesFallback) {
+        return {
+          success: true,
+          currentVersion: '1.0.0',
+          latestVersion: '1.0.0',
+          releaseNotes: 'Fallback version - MongoDB not configured',
+          updateAvailable: false,
+          autoUpdateEnabled: true,
+          forceUpdate: false,
+          downloadUrl: '/api/download?file=client',
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      await this.connect();
+      
+      // Get the current version (highest version number) from database
+      const currentVersion = await this.db.collection('versionHistory')
+        .findOne({ isCurrent: true });
+      
+      if (!currentVersion) {
+        // If no current version found, try to get the highest version number
+        const latestVersion = await this.db.collection('versionHistory')
+          .findOne({}, { sort: { versionNumber: -1 } });
+        
+        if (latestVersion) {
+          // Mark it as current
+          await this.db.collection('versionHistory').updateOne(
+            { _id: latestVersion._id },
+            { $set: { isCurrent: true } }
+          );
+          
+          return {
+            success: true,
+            currentVersion: latestVersion.version,
+            latestVersion: latestVersion.version,
+            releaseNotes: latestVersion.message || 'Latest deployment',
+            updateAvailable: false,
+            autoUpdateEnabled: true,
+            forceUpdate: false,
+            downloadUrl: '/api/download?file=client',
+            timestamp: new Date().toISOString(),
+            versionNumber: latestVersion.versionNumber
+          };
+        }
+        
+        // No versions found, return default
+        return {
+          success: true,
+          currentVersion: '1.0.0',
+          latestVersion: '1.0.0',
+          releaseNotes: 'No deployment history found',
+          updateAvailable: false,
+          autoUpdateEnabled: true,
+          forceUpdate: false,
+          downloadUrl: '/api/download?file=client',
+          timestamp: new Date().toISOString(),
+          versionNumber: 1
+        };
+      }
+      
+      return {
+        success: true,
+        currentVersion: currentVersion.version,
+        latestVersion: currentVersion.version,
+        releaseNotes: currentVersion.message || 'Latest deployment',
+        updateAvailable: false,
+        autoUpdateEnabled: true,
+        forceUpdate: false,
+        downloadUrl: '/api/download?file=client',
+        timestamp: new Date().toISOString(),
+        versionNumber: currentVersion.versionNumber
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Error retrieving version info: ' + error.message,
+        currentVersion: '1.0.0',
+        latestVersion: '1.0.0',
+        updateAvailable: false
+      };
+    }
   }
 
   async getVersionHistory() {
@@ -1615,10 +1687,9 @@ class DatabaseOperations {
   // Version History Management Methods
   async syncVersionHistory() {
     try {
-      
       // Get the latest version from database
       const latestDbVersion = await this.db.collection('versionHistory')
-        .findOne({}, { sort: { createdAt: -1 } });
+        .findOne({}, { sort: { versionNumber: -1 } });
       
       // Fetch latest versions from external sources
       const externalVersions = await this.fetchLatestExternalVersions();
@@ -1627,12 +1698,13 @@ class DatabaseOperations {
         return;
       }
       
-      // Get the newest external version
-      const newestExternal = externalVersions[0];
+      // Sort external versions by date (newest first) to get the most recent
+      const sortedExternalVersions = [...externalVersions].sort((a, b) => new Date(b.date) - new Date(a.date));
+      const newestExternal = sortedExternalVersions[0];
       
-      // Check if we need to add new versions
+      // Check if we need to add the newest version
       if (!latestDbVersion || this.isNewerVersion(newestExternal, latestDbVersion)) {
-        await this.addNewVersionsToDatabase(externalVersions, latestDbVersion);
+        await this.addNewestVersionToDatabase(newestExternal, latestDbVersion);
       }
     } catch (error) {
       console.log('Version sync failed:', error.message);
@@ -1658,7 +1730,7 @@ class DatabaseOperations {
   isNewerVersion(externalVersion, dbVersion) {
     // Compare by date and unique identifiers
     const externalDate = new Date(externalVersion.date);
-    const dbDate = new Date(dbVersion.createdAt);
+    const dbDate = new Date(dbVersion.date || dbVersion.createdAt);
     
     if (externalDate > dbDate) {
       return true;
@@ -1676,67 +1748,58 @@ class DatabaseOperations {
     return false;
   }
   
-  async addNewVersionsToDatabase(externalVersions, latestDbVersion) {
+  async addNewestVersionToDatabase(newestExternal, latestDbVersion) {
     try {
       // Get the current highest version number
       const highestVersion = await this.db.collection('versionHistory')
         .findOne({}, { sort: { versionNumber: -1 } });
       
-      let nextVersionNumber = highestVersion ? highestVersion.versionNumber + 1 : 1;
+      const nextVersionNumber = highestVersion ? highestVersion.versionNumber + 1 : 1;
       
-      // Sort external versions by date (oldest first) to assign lowest numbers to oldest
-      const sortedExternalVersions = [...externalVersions].sort((a, b) => new Date(a.date) - new Date(b.date));
+      // Check if this version already exists
+      const exists = await this.db.collection('versionHistory').findOne({
+        $or: [
+          newestExternal.sha ? { sha: newestExternal.sha } : {},
+          newestExternal.deploymentId ? { deploymentId: newestExternal.deploymentId } : {},
+          { message: newestExternal.message, date: newestExternal.date }
+        ].filter(obj => Object.keys(obj).length > 0)
+      });
       
-      // Filter external versions to only include new ones
-      const newVersions = [];
-      
-      for (const extVersion of sortedExternalVersions) {
-        const exists = await this.db.collection('versionHistory').findOne({
-          $or: [
-            extVersion.sha ? { sha: extVersion.sha } : {},
-            extVersion.deploymentId ? { deploymentId: extVersion.deploymentId } : {},
-            { message: extVersion.message, date: extVersion.date }
-          ].filter(obj => Object.keys(obj).length > 0)
-        });
+      if (!exists) {
+        // Calculate semantic version from version number
+        const major = 1;
+        const minor = Math.floor((nextVersionNumber - 1) / 10);
+        const patch = (nextVersionNumber - 1) % 10;
+        const semanticVersion = `${major}.${minor}.${patch}`;
         
-        if (!exists) {
-          // Calculate semantic version from version number
-          const major = 1;
-          const minor = Math.floor((nextVersionNumber - 1) / 10);
-          const patch = (nextVersionNumber - 1) % 10;
-          const semanticVersion = `${major}.${minor}.${patch}`;
-          
-          const versionRecord = {
-            versionNumber: nextVersionNumber,
-            version: semanticVersion,
-            message: extVersion.message || 'No message',
-            description: extVersion.description || '',
-            date: extVersion.date,
-            sha: extVersion.sha || null,
-            deploymentId: extVersion.deploymentId || null,
-            author: extVersion.author || 'Unknown',
-            source: extVersion.source || 'unknown',
-            isCurrent: false, // Will be updated later
-            createdAt: new Date(),
-            url: extVersion.url || null
-          };
-          
-          newVersions.push(versionRecord);
-          nextVersionNumber++;
-        }
-      }
-      
-      if (newVersions.length > 0) {
-        // Insert new versions in chronological order (oldest first)
-        await this.db.collection('versionHistory').insertMany(newVersions);
+        const versionRecord = {
+          versionNumber: nextVersionNumber,
+          version: semanticVersion,
+          message: newestExternal.message || 'No message',
+          description: newestExternal.description || '',
+          date: newestExternal.date,
+          sha: newestExternal.sha || null,
+          deploymentId: newestExternal.deploymentId || null,
+          author: newestExternal.author || 'Unknown',
+          source: newestExternal.source || 'unknown',
+          isCurrent: true, // Mark as current since it's the newest
+          createdAt: new Date(),
+          url: newestExternal.url || null
+        };
         
-        // Update current version flag
-        await this.updateCurrentVersionFlag();
+        // Remove current flag from all existing versions
+        await this.db.collection('versionHistory').updateMany(
+          {},
+          { $set: { isCurrent: false } }
+        );
         
-        console.log(`Added ${newVersions.length} new versions to database`);
+        // Insert the new version
+        await this.db.collection('versionHistory').insertOne(versionRecord);
+        
+        console.log(`Added new version ${nextVersionNumber} (${semanticVersion}) to database: ${newestExternal.message}`);
       }
     } catch (error) {
-      console.error('Error adding new versions to database:', error);
+      console.error('Error adding newest version to database:', error);
     }
   }
   
@@ -2197,6 +2260,37 @@ export default async function handler(req, res) {
       // Version History Actions
       case 'getVersionHistory':
         result = await db.getVersionHistory();
+        break;
+        
+      case 'checkForUpdates':
+        const clientVersionNumber = parseInt(params.versionNumber || '0');
+        
+        // Get the latest version info from database
+        const versionInfo = await db.getVersionInfo();
+        
+        if (versionInfo.success && versionInfo.versionNumber) {
+          const latestVersionNumber = versionInfo.versionNumber;
+          const updateAvailable = latestVersionNumber > clientVersionNumber;
+          
+          result = {
+            success: true,
+            updateAvailable,
+            latestVersion: versionInfo.currentVersion,
+            latestVersionNumber,
+            currentVersionNumber: clientVersionNumber,
+            releaseNotes: versionInfo.releaseNotes || 'New version available',
+            downloadUrl: '/api/download?file=client',
+            forceUpdate: false,
+            timestamp: new Date().toISOString()
+          };
+        } else {
+          result = {
+            success: true,
+            updateAvailable: false,
+            message: 'Unable to check for updates',
+            timestamp: new Date().toISOString()
+          };
+        }
         break;
         
     }

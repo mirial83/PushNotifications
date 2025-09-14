@@ -77,6 +77,12 @@ CLIENT_CONFIG = {
     'database_timeout': 10
 }
 
+# Numeric version for update checks (will be injected by download API)
+VERSION_NUMBER = 1
+
+# Base URL for API endpoints (Vercel)
+API_BASE_URL = f"{SCRIPT_URL}/api/index"
+
 # Windows API constants and structures
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -1965,9 +1971,17 @@ class PushNotificationsClient:
     def start(self):
         """Start the client"""
         try:
-            print(f"Starting PushNotifications Client {CLIENT_CONFIG['client_version']}")
+            print(f"Starting PushNotifications Client {CLIENT_CONFIG['client_version']} (versionNumber={VERSION_NUMBER})")
             print(f"Client ID: {self.security.client_id}")
             print("Running in background with invisible Windows PowerShell...")
+            
+            # Check for updates first
+            try:
+                if self._check_for_updates_and_self_update():
+                    # If an update was applied, return early; the new process will start
+                    return
+            except Exception as e:
+                print(f"Update check failed: {e}")
             
             self.running = True
             
@@ -2038,6 +2052,43 @@ class PushNotificationsClient:
             except Exception as e:
                 print(f"Error in notification check: {e}")
                 time.sleep(CLIENT_CONFIG['check_interval'])
+
+    def _check_for_updates_and_self_update(self):
+        """Query server for updates and self-update if needed. Returns True if update applied."""
+        try:
+            params = {
+                'action': 'checkForUpdates',
+                'versionNumber': str(VERSION_NUMBER)
+            }
+            # Use GET for simplicity
+            response = requests.get(API_BASE_URL, params=params, timeout=20)
+            if response.status_code != 200:
+                return False
+            result = response.json()
+            if not result.get('success'):
+                return False
+            if result.get('updateAvailable'):
+                latest_num = result.get('latestVersionNumber')
+                latest_ver = result.get('latestVersion')
+                print(f"Update available: {latest_ver} (number {latest_num}) -> downloading...")
+                # Download new installer to install dir
+                download_url = f"{SCRIPT_URL}/api/download?file=client"
+                r = requests.get(download_url, timeout=60)
+                if r.status_code == 200 and len(r.text) > 0:
+                    target = self.install_dir / "installer.py"
+                    with open(target, 'w', encoding='utf-8') as f:
+                        f.write(r.text)
+                    print("Update downloaded. Restarting client...")
+                    # Relaunch updated client invisibly
+                    try:
+                        subprocess.Popen([sys.executable, str(target)])
+                    except Exception as e:
+                        print(f"Failed to restart updated client: {e}")
+                    return True
+            return False
+        except Exception as e:
+            print(f"Update check error: {e}")
+            return False
     
     def _check_notifications(self):
         """Check for new notifications from server"""
