@@ -187,6 +187,15 @@ function initializeAdmin() {
             loadVersionHistory();
         }, 500);
     }
+    
+    // If this is the standalone client-admin page, load client administration data
+    if (window.location.pathname.endsWith('client-admin.html')) {
+        console.log('Standalone client-admin page detected, loading client administration data');
+        // Add a small delay to ensure DOM is fully loaded
+        setTimeout(() => {
+            initializeClientAdministration();
+        }, 500);
+    }
 }
 
 // Session validation
@@ -3672,6 +3681,31 @@ function showPasswordModal(title, options) {
     
     // Focus the copy button for better accessibility
     setTimeout(() => copyBtn.focus(), 100);
+}
+
+// Client Administration Page Initialization
+function initializeClientAdministration() {
+    console.log('Initializing client administration page...');
+    
+    // Determine which tab is currently active and refresh its data
+    const activeTab = document.querySelector('.tab-button.active');
+    
+    if (activeTab) {
+        const tabId = activeTab.id;
+        console.log('Active tab detected:', tabId);
+        
+        if (tabId === 'clientInfoTab') {
+            console.log('Loading client information data');
+            loadClientInfo();
+        } else if (tabId === 'securityKeysTab') {
+            console.log('Loading security keys data');
+            loadSecurityKeys();
+        }
+    } else {
+        // Default to loading client info if no active tab detected
+        console.log('No active tab detected, defaulting to client info');
+        loadClientInfo();
+    }
 }
 
 // Export security and client management functions for global access
