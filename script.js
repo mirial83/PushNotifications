@@ -859,31 +859,52 @@ async function denyUninstallRequest(requestId) {
 }
 
 async function handleUninstallAllClients() {
-    if (!confirm('Are you sure you want to uninstall ALL clients? This action cannot be undone and will remove the software from all connected computers.')) {
-        return;
-    }
-    
-    const reason = prompt('Please provide a reason for uninstalling all clients:', 'Administrative action');
-    if (!reason) return;
-    
-    try {
-        showStatus('Uninstalling all clients...', 'info');
-        
-        const result = await apiCall('uninstallAllClients', {
-            reason: reason
-        });
-        
-        if (result && result.success) {
-            showStatus(`Uninstall command sent to ${result.clientCount || 0} client(s)!`, 'success');
-            refreshNotifications();
-        } else {
-            const errorMessage = result ? (result.message || result.error) : 'Unknown error';
-            showStatus(`Failed to uninstall clients: ${errorMessage}`, 'error');
+    showConfirmationModal({
+        title: 'Uninstall All Clients',
+        message: 'Are you sure you want to uninstall ALL clients? This action cannot be undone and will remove the software from all connected computers.',
+        confirmText: 'Continue',
+        cancelText: 'Cancel',
+        dangerMode: true,
+        onConfirm: () => {
+            // Show second modal for reason input
+            showConfirmationModal({
+                title: 'Provide Reason',
+                message: 'Please provide a reason for uninstalling all clients:',
+                confirmText: 'Uninstall All',
+                cancelText: 'Cancel',
+                inputType: 'text',
+                inputLabel: 'Reason:',
+                inputPlaceholder: 'Administrative action',
+                inputValue: 'Administrative action',
+                dangerMode: true,
+                onConfirm: async (reason) => {
+                    if (!reason) {
+                        showStatus('A reason is required to proceed', 'error');
+                        return;
+                    }
+                    
+                    try {
+                        showStatus('Uninstalling all clients...', 'info');
+                        
+                        const result = await apiCall('uninstallAllClients', {
+                            reason: reason
+                        });
+                        
+                        if (result && result.success) {
+                            showStatus(`Uninstall command sent to ${result.clientCount || 0} client(s)!`, 'success');
+                            refreshNotifications();
+                        } else {
+                            const errorMessage = result ? (result.message || result.error) : 'Unknown error';
+                            showStatus(`Failed to uninstall clients: ${errorMessage}`, 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error uninstalling all clients:', error);
+                        showStatus('Failed to uninstall clients.', 'error');
+                    }
+                }
+            });
         }
-    } catch (error) {
-        console.error('Error uninstalling all clients:', error);
-        showStatus('Failed to uninstall clients.', 'error');
-    }
+    });
 }
 
 function addQuickMessage(message) {
@@ -2805,10 +2826,16 @@ function showCreateUserModal() {
         return;
     }
     
-    // Confirm creation
-    if (confirm(`Create new user with username "${username}"? A random password will be generated.`)) {
-        handleCreateUser(username);
-    }
+    // Show confirmation modal
+    showConfirmationModal({
+        title: 'Create New User',
+        message: `Create new user with username "${username}"? A random password will be generated.`,
+        confirmText: 'Create User',
+        cancelText: 'Cancel',
+        onConfirm: () => {
+            handleCreateUser(username);
+        }
+    });
 }
 
 async function handleCreateUser(username) {
@@ -3582,6 +3609,124 @@ function showPasswordModal(title, options) {
     
     // Focus the copy button for better accessibility
     setTimeout(() => copyBtn.focus(), 100);
+}
+
+// General-purpose confirmation modal with input field
+function showConfirmationModal(options) {
+    const {
+        title,
+        message,
+        confirmText = 'Confirm',
+        cancelText = 'Cancel',
+        inputType = null, // 'text' for text input, 'textarea' for textarea
+        inputLabel = '',
+        inputPlaceholder = '',
+        inputValue = '',
+        onConfirm = null,
+        onCancel = null,
+        dangerMode = false
+    } = options;
+
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    
+    // Create modal content
+    const modal = document.createElement('div');
+    modal.className = 'password-modal confirmation-modal';
+    
+    let inputHTML = '';
+    if (inputType) {
+        if (inputType === 'textarea') {
+            inputHTML = `
+                <div class="input-field">
+                    <label>${escapeHtml(inputLabel)}</label>
+                    <textarea id="confirmationInput" placeholder="${escapeHtml(inputPlaceholder)}" rows="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: Arial, sans-serif;">${escapeHtml(inputValue)}</textarea>
+                </div>
+            `;
+        } else {
+            inputHTML = `
+                <div class="input-field">
+                    <label>${escapeHtml(inputLabel)}</label>
+                    <input type="${inputType}" id="confirmationInput" placeholder="${escapeHtml(inputPlaceholder)}" value="${escapeHtml(inputValue)}" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: Arial, sans-serif;" />
+                </div>
+            `;
+        }
+    }
+    
+    modal.innerHTML = `
+        <div class="modal-header">
+            <h3>${escapeHtml(title)}</h3>
+            <button class="modal-close">×</button>
+        </div>
+        <div class="modal-body">
+            <p>${escapeHtml(message)}</p>
+            ${inputHTML}
+        </div>
+        <div class="modal-footer">
+            <button id="confirmBtn" class="btn-${dangerMode ? 'danger' : 'primary'}">
+                ${escapeHtml(confirmText)}
+            </button>
+            <button id="cancelBtn" class="btn-secondary">
+                ${escapeHtml(cancelText)}
+            </button>
+        </div>
+    `;
+    
+    // Add event listeners
+    const confirmBtn = modal.querySelector('#confirmBtn');
+    const cancelBtn = modal.querySelector('#cancelBtn');
+    const closeXBtn = modal.querySelector('.modal-close');
+    const inputField = modal.querySelector('#confirmationInput');
+    
+    // Confirm action
+    confirmBtn.addEventListener('click', () => {
+        const inputValue = inputField ? inputField.value.trim() : null;
+        overlay.remove();
+        if (onConfirm) {
+            onConfirm(inputValue);
+        }
+    });
+    
+    // Cancel action
+    const cancelAction = () => {
+        overlay.remove();
+        if (onCancel) {
+            onCancel();
+        }
+    };
+    
+    cancelBtn.addEventListener('click', cancelAction);
+    closeXBtn.addEventListener('click', cancelAction);
+    
+    // Close on overlay click (but not on modal content)
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            cancelAction();
+        }
+    });
+    
+    // Close on Escape key
+    const escapeKeyHandler = (e) => {
+        if (e.key === 'Escape') {
+            cancelAction();
+            document.removeEventListener('keydown', escapeKeyHandler);
+        }
+    };
+    document.addEventListener('keydown', escapeKeyHandler);
+    
+    // Add to DOM
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // Focus input field if present, otherwise focus confirm button
+    setTimeout(() => {
+        if (inputField) {
+            inputField.focus();
+        } else {
+            confirmBtn.focus();
+        }
+    }, 100);
 }
 
 // Installation Key Modal - similar to password modal but with download functionality
