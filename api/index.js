@@ -412,72 +412,151 @@ class DatabaseOperations {
     }
   }
 
-  async fetchVercelDeployments() {
+  async fetchGitHubDeployments() {
     try {
-      // Check for required environment variables
-      const vercelToken = process.env.VERCEL_TOKEN;
-      const vercelTeamId = process.env.VERCEL_TEAM_ID;
-      const vercelProjectId = process.env.VERCEL_PROJECT_ID;
+      // Check for GitHub token (optional for public repos, but recommended for higher rate limits)
+      const githubToken = process.env.GITHUB_TOKEN;
       
-      if (!vercelToken) {
-        console.log('VERCEL_TOKEN not configured, skipping Vercel API');
-        return null;
+      // Build API URL for GitHub deployments API
+      const apiUrl = 'https://api.github.com/repos/mirial83/PushNotifications/deployments?per_page=100';
+      
+      const headers = {
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      };
+      
+      if (githubToken) {
+        headers['Authorization'] = `Bearer ${githubToken}`;
       }
       
-      // Build API URL
-      let apiUrl = 'https://api.vercel.com/v6/deployments?limit=100';
-      
-      if (vercelTeamId) {
-        apiUrl += `&teamId=${vercelTeamId}`;
-      }
-      
-      if (vercelProjectId) {
-        apiUrl += `&projectId=${vercelProjectId}`;
-      }
-      
-      const response = await fetch(apiUrl, {
-        headers: {
-          'Authorization': `Bearer ${vercelToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(apiUrl, { headers });
       
       if (!response.ok) {
-        throw new Error(`Vercel API error: ${response.status} - ${response.statusText}`);
+        throw new Error(`GitHub API error: ${response.status} - ${response.statusText}`);
       }
       
-      const data = await response.json();
+      const deployments = await response.json();
       
-      if (!data.deployments || data.deployments.length === 0) {
-        console.log('No Vercel deployments found');
+      if (!deployments || deployments.length === 0) {
+        console.log('No GitHub deployments found');
         return null;
       }
       
-      // Filter for successful deployments only
-      const successfulDeployments = data.deployments.filter(deployment => 
-        deployment.state === 'READY' && deployment.readyState === 'READY'
-      );
+      // Get deployments with successful deployment status AND passing Vercel checks
+      const validDeployments = [];
       
-      if (successfulDeployments.length === 0) {
-        console.log('No successful Vercel deployments found');
+      for (const deployment of deployments.slice(0, 20)) { // Limit to 20 to avoid rate limits
+        try {
+          // Check deployment status
+          const statusResponse = await fetch(`https://api.github.com/repos/mirial83/PushNotifications/deployments/${deployment.id}/statuses`, {
+            headers
+          });
+          
+          if (!statusResponse.ok) {
+            console.log(`Failed to get deployment status for ${deployment.id}`);
+            continue;
+          }
+          
+          const statuses = await statusResponse.json();
+          const latestStatus = statuses[0]; // Most recent status
+          
+          // Only proceed if deployment was successful
+          if (!latestStatus || latestStatus.state !== 'success') {
+            continue;
+          }
+          
+          // Check Vercel status checks for this commit
+          const checksResponse = await fetch(`https://api.github.com/repos/mirial83/PushNotifications/commits/${deployment.sha}/status`, {
+            headers
+          });
+          
+          if (checksResponse.ok) {
+            const checksData = await checksResponse.json();
+            
+            // Look for Vercel checks in the status checks
+            const vercelChecks = checksData.statuses?.filter(status => 
+              status.context && (
+                status.context.toLowerCase().includes('vercel') ||
+                status.context.toLowerCase().includes('deployment')
+              )
+            ) || [];
+            
+            // If there are Vercel checks, ensure they all passed
+            if (vercelChecks.length > 0) {
+              const allVercelChecksPassed = vercelChecks.every(check => check.state === 'success');
+              if (!allVercelChecksPassed) {
+                console.log(`Deployment ${deployment.id} has failing Vercel checks`);
+                continue;
+              }
+            }
+            
+            // Also check GitHub check runs (newer API)
+            const checkRunsResponse = await fetch(`https://api.github.com/repos/mirial83/PushNotifications/commits/${deployment.sha}/check-runs`, {
+              headers
+            });
+            
+            if (checkRunsResponse.ok) {
+              const checkRunsData = await checkRunsResponse.json();
+              
+              // Look for Vercel check runs
+              const vercelCheckRuns = checkRunsData.check_runs?.filter(checkRun => 
+                checkRun.name && (
+                  checkRun.name.toLowerCase().includes('vercel') ||
+                  checkRun.name.toLowerCase().includes('deployment') ||
+                  checkRun.app?.name?.toLowerCase().includes('vercel')
+                )
+              ) || [];
+              
+              // If there are Vercel check runs, ensure they all passed
+              if (vercelCheckRuns.length > 0) {
+                const allVercelCheckRunsPassed = vercelCheckRuns.every(checkRun => 
+                  checkRun.conclusion === 'success' || checkRun.conclusion === 'neutral'
+                );
+                if (!allVercelCheckRunsPassed) {
+                  console.log(`Deployment ${deployment.id} has failing Vercel check runs`);
+                  continue;
+                }
+              }
+            }
+          }
+          
+          // If we get here, the deployment is successful and Vercel checks passed
+          validDeployments.push({
+            ...deployment,
+            status: latestStatus
+          });
+          
+        } catch (checkError) {
+          console.log(`Failed to check Vercel status for deployment ${deployment.id}:`, checkError.message);
+          // Skip this deployment if we can't verify Vercel checks
+          continue;
+        }
+      }
+      
+      if (validDeployments.length === 0) {
+        console.log('No GitHub deployments found with passing Vercel checks');
         return null;
       }
+      
+      console.log(`Found ${validDeployments.length} deployments with passing Vercel checks`);
       
       // Convert to our format
-      return successfulDeployments.map((deployment, index) => ({
+      return validDeployments.map((deployment, index) => ({
         version: null, // Will be set by applyVersionNumbering
-        message: deployment.meta?.githubCommitMessage || deployment.name || `Deployment ${deployment.uid}`,
-        description: deployment.meta?.githubCommitMessage || '',
-        date: new Date(deployment.createdAt).toISOString(),
-        deploymentId: deployment.uid,
-        url: deployment.url,
-        source: 'vercel-deployments',
+        message: deployment.description || deployment.payload?.description || `Deployment ${deployment.id}`,
+        description: deployment.description || deployment.payload?.description || '',
+        date: deployment.created_at,
+        deploymentId: deployment.id.toString(),
+        sha: deployment.sha ? deployment.sha.substring(0, 8) : null,
+        url: deployment.status?.target_url || deployment.status?.environment_url || null,
+        source: 'github-deployments',
         isCurrent: index === 0,
-        author: deployment.creator?.username || 'Unknown'
+        author: deployment.creator?.login || 'Unknown',
+        environment: deployment.environment || 'production'
       }));
       
     } catch (error) {
-      console.log('Vercel deployments fetch failed:', error.message);
+      console.log('GitHub deployments fetch failed:', error.message);
       return null;
     }
   }
@@ -2018,8 +2097,8 @@ class DatabaseOperations {
   
   
   async fetchLatestExternalVersions() {
-    // Priority order: Vercel deployments > GitHub releases > GitHub commits
-    let externalData = await this.fetchVercelDeployments();
+    // Priority order: GitHub deployments > GitHub releases > GitHub commits
+    let externalData = await this.fetchGitHubDeployments();
     
     if (!externalData || externalData.length === 0) {
       externalData = await this.fetchGitHubReleases();
@@ -2071,11 +2150,8 @@ class DatabaseOperations {
       });
       
       if (!exists) {
-        // Calculate semantic version from version number
-        const major = 1;
-        const minor = Math.floor((nextVersionNumber - 1) / 10);
-        const patch = (nextVersionNumber - 1) % 10;
-        const semanticVersion = `${major}.${minor}.${patch}`;
+        // Calculate semantic version using the helper method
+        const semanticVersion = this.calculateSemanticVersion(nextVersionNumber - 1);
         
         const versionRecord = {
           versionNumber: nextVersionNumber,
@@ -2147,10 +2223,7 @@ class DatabaseOperations {
       
       const versionRecords = sortedVersions.map((version, index) => {
         const versionNumber = index + 1; // Oldest gets number 1, then 2, 3, etc.
-        const major = 1;
-        const minor = Math.floor(index / 10);
-        const patch = index % 10;
-        const semanticVersion = `${major}.${minor}.${patch}`;
+        const semanticVersion = this.calculateSemanticVersion(index);
         
         return {
           versionNumber,
@@ -2171,7 +2244,7 @@ class DatabaseOperations {
       if (versionRecords.length > 0) {
         await this.db.collection('versionHistory').insertMany(versionRecords);
         console.log(`Initial sync completed: ${versionRecords.length} versions added`);
-        console.log(`Version numbers: ${versionRecords[0].versionNumber} (oldest) to ${versionRecords[versionRecords.length-1].versionNumber} (newest)`);
+        console.log(`Version range: ${versionRecords[0].version} (oldest) to ${versionRecords[versionRecords.length-1].version} (newest)`);
       }
     } catch (error) {
       console.error('Error performing initial version sync:', error);
@@ -2206,6 +2279,31 @@ class DatabaseOperations {
   }
   
   // Helper methods
+  calculateSemanticVersion(index) {
+    // Start with version 1.0.0 for index 0
+    // Increment the rightmost digit first, then the middle, then the leftmost
+    // Only the leftmost section can be multiple digits
+    
+    if (index === 0) {
+      return '1.0.0';
+    }
+    
+    // Calculate version components
+    let patch = index % 10;
+    let minor = Math.floor(index / 10) % 10;
+    let major = Math.floor(index / 100) + 1; // Start at 1 and increment
+    
+    // For the first 10 versions (index 0-9): 1.0.0, 1.0.1, 1.0.2, ..., 1.0.9
+    // For the next 10 versions (index 10-19): 1.1.0, 1.1.1, 1.1.2, ..., 1.1.9  
+    // For versions 20-29: 1.2.0, 1.2.1, ..., 1.2.9
+    // ...
+    // For versions 90-99: 1.9.0, 1.9.1, ..., 1.9.9
+    // For versions 100-109: 2.0.0, 2.0.1, ..., 2.0.9
+    // And so on...
+    
+    return `${major}.${minor}.${patch}`;
+  }
+  
   applyVersionNumbering(deploymentData) {
     if (!deploymentData || deploymentData.length === 0) {
       return deploymentData;
@@ -2214,12 +2312,9 @@ class DatabaseOperations {
     // Sort deployments by date (oldest first) to apply proper numbering
     const sortedDeployments = [...deploymentData].sort((a, b) => new Date(a.date) - new Date(b.date));
     
-    // Apply version numbers starting from 1.0.0
+    // Apply version numbers using the semantic version calculator
     const numberedDeployments = sortedDeployments.map((deployment, index) => {
-      const major = 1;
-      const minor = Math.floor(index / 10);
-      const patch = index % 10;
-      const version = `${major}.${minor}.${patch}`;
+      const version = this.calculateSemanticVersion(index);
       
       return {
         ...deployment,
