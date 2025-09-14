@@ -2265,13 +2265,15 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     display: grid;
     grid-template-columns: 1fr 1fr 2fr;
     gap: 1rem;
-    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%) !important;
     color: white !important;
     padding: 1rem;
-    font-weight: bold;
+    font-weight: bold !important;
     font-size: 16pt !important;
+    font-family: Arial, sans-serif !important;
     border-bottom: 2px solid rgba(255, 255, 255, 0.2);
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
 .version-row {
