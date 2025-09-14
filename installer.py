@@ -795,8 +795,13 @@ class PushNotificationsInstaller:
                         print(f"  File not found. Check if the Vercel API is properly deployed.")
                     return False
                 
-                # Check if response looks like an error page
-                if 'Access Denied' in response.text or 'Error' in response.text[:200]:
+                # Check if response looks like an error page (more specific checks)
+                if ('Access Denied' in response.text[:200] or 
+                    'Error 404' in response.text[:200] or 
+                    'Error 500' in response.text[:200] or
+                    'Internal Server Error' in response.text[:200] or
+                    response.text.strip().startswith('<html') or
+                    response.text.strip().startswith('<!DOCTYPE')):
                     print(f"  Server returned an error page")
                     print(f"  Response preview: {response.text[:200]}...")
                     return False
@@ -1217,7 +1222,7 @@ from datetime import datetime
 class PushNotificationsUninstaller:
     def __init__(self):
         self.install_dir = Path(__file__).parent
-        self.server_url = "{SCRIPT_URL}"
+        self.server_url = "{self.gas_script_url}"
         
     def check_protection(self):
         """Check if installation is protected"""
