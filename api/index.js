@@ -1684,6 +1684,53 @@ class DatabaseOperations {
     }
   }
 
+  async deleteUser(userId) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'User management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Check if user exists first
+      const user = await this.db.collection('users').findOne({ _id: new ObjectId(userId) });
+      if (!user) {
+        return { success: false, message: 'User not found' };
+      }
+
+      // Delete user and all associated data
+      // Using Promise.all for concurrent operations
+      await Promise.all([
+        // Delete user sessions
+        this.db.collection('sessions').deleteMany({ userId: new ObjectId(userId) }),
+        
+        // Delete security keys associated with the user
+        this.db.collection('securityKeys').deleteMany({ userId: new ObjectId(userId) }),
+        
+        // Delete download keys associated with the user
+        this.db.collection('downloadKeys').deleteMany({ userId: new ObjectId(userId) }),
+        
+        // Delete user's notifications
+        this.db.collection('notifications').deleteMany({ userId: new ObjectId(userId) }),
+        
+        // Delete user's MAC clients
+        this.db.collection('macClients').deleteMany({ userId: new ObjectId(userId) })
+      ]);
+      
+      // Finally, delete the user record itself
+      const result = await this.db.collection('users').deleteOne({ _id: new ObjectId(userId) });
+      
+      if (result.deletedCount === 0) {
+        return { success: false, message: 'Failed to delete user' };
+      }
+
+      return { success: true, message: 'User and associated data deleted successfully' };
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
   // Version History Management Methods
   async syncVersionHistory() {
     try {
@@ -2241,10 +2288,26 @@ export default async function handler(req, res) {
         result = await db.regenerateInstallationKey(params.userId || '');
         break;
 
-      // User Management Actions (Admin only - should add auth check in production)
-      case 'getAllUsers':
+      // User Management Actions (Admin only)
+      case 'getAllUsers': {
+        const getUsersAuthHeader = req.headers.authorization;
+        const getUsersToken = getUsersAuthHeader && getUsersAuthHeader.startsWith('Bearer ')
+          ? getUsersAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(getUsersToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
         result = await db.getAllUsers();
         break;
+      }
 
       case 'updateUserRole':
         result = await db.updateUserRole(
@@ -2256,6 +2319,30 @@ export default async function handler(req, res) {
       case 'deactivateUser':
         result = await db.deactivateUser(params.userId || '');
         break;
+
+      case 'deleteUser': {
+        const delAuthHeader = req.headers.authorization;
+        const delToken = delAuthHeader && delAuthHeader.startsWith('Bearer ')
+          ? delAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(delToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        if ((params.userId || '') === (validation.user?.id || validation.user?._id)) {
+          result = { success: false, message: 'You cannot delete your own account' };
+          break;
+        }
+        result = await db.deleteUser(params.userId || '');
+        break;
+      }
 
       // Version History Actions
       case 'getVersionHistory':

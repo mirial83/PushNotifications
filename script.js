@@ -3015,23 +3015,33 @@ async function handleRemoveUserAccount() {
     const userId = userSelect?.value;
     
     if (!userId) {
-        showStatus('Please select a user to remove', 'error');
+        showStatus('Please select a user to delete', 'error');
         return;
     }
     
     const username = userSelect.options[userSelect.selectedIndex].text.split(' (')[0];
     
-    if (confirm(`Are you sure you want to remove user "${username}"? This action cannot be undone and will permanently delete the user account and all associated data.`)) {
+    if (confirm(`Are you sure you want to permanently delete user "${username}"? This action cannot be undone and will permanently delete the user account and all associated data.`)) {
         try {
-            showStatus('Removing user account...', 'info');
+            showStatus('Deleting user account...', 'info');
             
-            // Call API to deactivate/remove user
-            const result = await apiCall('deactivateUser', {
-                userId: userId
+            // Get session token for authorization
+            const token = localStorage.getItem('sessionToken') || '';
+            
+            // Call API to delete user
+            const response = await fetch(`${config.API_BASE_URL}/api/index`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+                },
+                body: JSON.stringify({ action: 'deleteUser', userId })
             });
             
+            const result = await response.json();
+            
             if (result && result.success) {
-                showStatus('User account removed successfully!', 'success');
+                showStatus('User account deleted successfully!', 'success');
                 
                 // Reset the dropdown
                 userSelect.value = '';
@@ -3040,12 +3050,12 @@ async function handleRemoveUserAccount() {
                 loadAllUsers();
                 loadUsersIntoDropdowns();
             } else {
-                const errorMessage = result ? result.message : 'Failed to remove user';
-                showStatus(`Failed to remove user: ${errorMessage}`, 'error');
+                const errorMessage = result ? result.message : 'Failed to delete user';
+                showStatus(`Failed to delete user: ${errorMessage}`, 'error');
             }
         } catch (error) {
-            console.error('Error removing user:', error);
-            showStatus('Failed to remove user. Please check console for details.', 'error');
+            console.error('Error deleting user:', error);
+            showStatus('Failed to delete user. Please check console for details.', 'error');
         }
     }
 }
