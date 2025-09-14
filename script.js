@@ -4188,6 +4188,7 @@ window.handleRetrieveSecurityKey = handleRetrieveSecurityKey;
 window.handleRemoveOldActiveNotifications = handleRemoveOldActiveNotifications;
 window.handleCleanOldNotifications = handleCleanOldNotifications;
 window.handleClearOldWebsiteRequests = handleClearOldWebsiteRequests;
+window.handleClearAllNotifications = handleClearAllNotifications;
 window.handleDownloadClient = handleDownloadClient;
 window.closeModal = closeModal;
 window.showClientSelectionModal = showClientSelectionModal;
