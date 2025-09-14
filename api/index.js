@@ -2219,15 +2219,16 @@ class DatabaseOperations {
   
   
   async fetchLatestExternalVersions() {
-    // Priority order: GitHub deployments > GitHub releases > GitHub commits
-    let externalData = await this.fetchGitHubDeployments();
+    // Priority order: GitHub commits > GitHub releases > GitHub deployments
+    // Changed to prioritize commits so we get ALL development history
+    let externalData = await this.fetchGitHubCommits();
     
     if (!externalData || externalData.length === 0) {
       externalData = await this.fetchGitHubReleases();
     }
     
     if (!externalData || externalData.length === 0) {
-      externalData = await this.fetchGitHubCommits();
+      externalData = await this.fetchGitHubDeployments();
     }
     
     return externalData;
@@ -2370,6 +2371,142 @@ class DatabaseOperations {
       }
     } catch (error) {
       console.error('Error performing initial version sync:', error);
+    }
+  }
+  
+  async syncAllCommits() {
+    try {
+      console.log('🚀 Starting comprehensive commit history sync...');
+      
+      if (this.usesFallback) {
+        console.log('Cannot sync commits - using fallback storage');
+        return { success: false, message: 'Commit sync requires MongoDB connection' };
+      }
+      
+      await this.connect();
+      
+      // Get all commits from GitHub
+      console.log('📦 Fetching ALL commits from GitHub...');
+      const externalVersions = await this.fetchGitHubCommits();
+      
+      if (!externalVersions || externalVersions.length === 0) {
+        console.log('❌ No external commits found for sync');
+        return { success: true, message: 'No commits found', newCommits: 0 };
+      }
+      
+      console.log(`📊 Found ${externalVersions.length} commits from GitHub`);
+      
+      // Get existing versions from database
+      const existingVersions = await this.db.collection('versionHistory')
+        .find({})
+        .toArray();
+      
+      const existingShas = new Set(existingVersions.map(d => d.sha).filter(Boolean));
+      
+      console.log(`💾 Found ${existingVersions.length} existing versions in database`);
+      
+      // Sort external versions by date (oldest first)
+      const sortedExternalVersions = [...externalVersions].sort((a, b) => new Date(a.date) - new Date(b.date));
+      
+      // Filter out commits that already exist
+      const newCommits = sortedExternalVersions.filter(commit => {
+        // Check by SHA (most reliable for commits)
+        if (commit.sha && existingShas.has(commit.sha)) {
+          return false;
+        }
+        
+        // Check by message and date combination as fallback
+        const matchingRecord = existingVersions.find(existing => 
+          existing.message === commit.message && 
+          existing.date === commit.date
+        );
+        
+        return !matchingRecord;
+      });
+      
+      console.log(`🆕 Found ${newCommits.length} new commits to add`);
+      
+      if (newCommits.length === 0) {
+        return { 
+          success: true, 
+          message: 'No new commits found - database is up to date', 
+          newCommits: 0,
+          totalExternal: externalVersions.length,
+          totalExisting: existingVersions.length
+        };
+      }
+      
+      // Get the current highest version number
+      const highestVersionRecord = await this.db.collection('versionHistory')
+        .findOne({}, { sort: { versionNumber: -1 } });
+      
+      let nextVersionNumber = highestVersionRecord ? highestVersionRecord.versionNumber + 1 : 1;
+      
+      // Create version records for new commits
+      const newVersionRecords = [];
+      
+      for (const commit of newCommits) {
+        const semanticVersion = this.calculateSemanticVersion(nextVersionNumber - 1);
+        
+        const versionRecord = {
+          versionNumber: nextVersionNumber,
+          version: semanticVersion,
+          message: commit.message || 'No message',
+          description: commit.description || commit.message || '',
+          date: commit.date,
+          sha: commit.sha || null,
+          deploymentId: null, // Commits don't have deployment IDs
+          author: commit.author || 'Unknown',
+          source: commit.source || 'github-commits',
+          isCurrent: false, // Will be updated later
+          createdAt: new Date(),
+          url: null // Commits don't have deployment URLs
+        };
+        
+        newVersionRecords.push(versionRecord);
+        nextVersionNumber++;
+      }
+      
+      // Insert new commit records
+      if (newVersionRecords.length > 0) {
+        await this.db.collection('versionHistory').insertMany(newVersionRecords);
+        
+        // Update the current version flag - mark the highest version number as current
+        await this.db.collection('versionHistory').updateMany(
+          {},
+          { $set: { isCurrent: false } }
+        );
+        
+        const latestVersion = await this.db.collection('versionHistory')
+          .findOne({}, { sort: { versionNumber: -1 } });
+        
+        if (latestVersion) {
+          await this.db.collection('versionHistory').updateOne(
+            { _id: latestVersion._id },
+            { $set: { isCurrent: true } }
+          );
+        }
+        
+        console.log(`✅ Successfully added ${newVersionRecords.length} new commits`);
+        console.log(`📅 Version range: ${newVersionRecords[0].version} to ${newVersionRecords[newVersionRecords.length-1].version}`);
+      }
+      
+      return {
+        success: true,
+        message: `Successfully synced ${newVersionRecords.length} new commits`,
+        newCommits: newVersionRecords.length,
+        totalExternal: externalVersions.length,
+        totalExisting: existingVersions.length,
+        totalAfterSync: existingVersions.length + newVersionRecords.length,
+        versionRange: newVersionRecords.length > 0 ? {
+          first: newVersionRecords[0].version,
+          last: newVersionRecords[newVersionRecords.length-1].version
+        } : null
+      };
+      
+    } catch (error) {
+      console.error('❌ Error performing comprehensive commit sync:', error);
+      return { success: false, message: error.message };
     }
   }
   
@@ -3171,6 +3308,28 @@ export default async function handler(req, res) {
         result = await db.clearOldWebsiteRequests(
           parseInt(params.days) || 7 // Default to 7 days
         );
+        break;
+      }
+      
+      // Sync All Commits Action (Admin only)
+      case 'syncAllCommits': {
+        const syncCommitsAuthHeader = req.headers.authorization;
+        const syncCommitsToken = syncCommitsAuthHeader && syncCommitsAuthHeader.startsWith('Bearer ')
+          ? syncCommitsAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(syncCommitsToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.syncAllCommits();
         break;
       }
       
