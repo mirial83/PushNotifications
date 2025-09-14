@@ -2161,13 +2161,17 @@ class PushNotificationsClient:
             print(f"Client ID: {self.security.client_id}")
             print("Running in background with invisible Windows PowerShell...")
             
-            # Check for updates first
-            try:
-                if self._check_for_updates_and_self_update():
-                    # If an update was applied, return early; the new process will start
-                    return
-            except Exception as e:
-                print(f"Update check failed: {e}")
+            # Only check for updates at scheduled times (1pm daily or on restart)
+            # Skip update check during installation since the client is already the latest version
+            if self._should_check_for_updates():
+                try:
+                    if self._check_for_updates_and_self_update():
+                        # If an update was applied, return early; the new process will start
+                        return
+                except Exception as e:
+                    print(f"Update check failed: {e}")
+            else:
+                print("Skipping update check - not scheduled time")
             
             self.running = True
             
@@ -2243,6 +2247,66 @@ class PushNotificationsClient:
                 print(f"Error in notification check: {e}")
                 time.sleep(CLIENT_CONFIG['check_interval'])
 
+    def _should_check_for_updates(self):
+        """Determine if we should check for updates now based on schedule."""
+        try:
+            # Check if this is the first start after installation
+            startup_marker_file = self.install_dir / '.startup_check'
+            
+            # If startup marker doesn't exist, this is right after installation - skip update check
+            if not startup_marker_file.exists():
+                # Create the marker file to indicate we've done the initial startup
+                with open(startup_marker_file, 'w') as f:
+                    f.write(datetime.now().isoformat())
+                print("First startup after installation - skipping update check")
+                return False
+            
+            # Check last update check time
+            last_check_file = self.install_dir / '.last_update_check'
+            now = datetime.now()
+            
+            # Check if we're at 1pm (13:00) - allow 30-minute window (12:45 to 13:15)
+            is_1pm_window = 12.75 <= now.hour + now.minute/60 <= 13.25
+            
+            # Check if this is a system restart (client hasn't run in >2 hours)
+            is_after_restart = False
+            if last_check_file.exists():
+                try:
+                    with open(last_check_file, 'r') as f:
+                        last_check_str = f.read().strip()
+                    last_check = datetime.fromisoformat(last_check_str)
+                    
+                    # If last check was more than 2 hours ago, consider this a restart
+                    hours_since_check = (now - last_check).total_seconds() / 3600
+                    is_after_restart = hours_since_check > 2
+                except:
+                    # If we can't read the file, treat as restart
+                    is_after_restart = True
+            else:
+                # No previous check file means this could be after restart
+                is_after_restart = True
+            
+            should_check = is_1pm_window or is_after_restart
+            
+            if should_check:
+                # Update the last check time
+                with open(last_check_file, 'w') as f:
+                    f.write(now.isoformat())
+                
+                if is_1pm_window:
+                    print("Scheduled update check at 1pm")
+                elif is_after_restart:
+                    print("Update check after system restart")
+                
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            print(f"Error determining update check schedule: {e}")
+            # If we can't determine, default to not checking (safer for installation)
+            return False
+    
     def _check_for_updates_and_self_update(self):
         """Query server for updates and self-update if needed. Returns True if update applied."""
         try:
