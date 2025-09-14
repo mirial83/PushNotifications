@@ -1524,27 +1524,33 @@ function getCurrentMessageText() {
 
 // Clear all notifications functionality
 async function handleClearAllNotifications() {
-    if (!confirm('Are you sure you want to clear ALL active notifications? This action cannot be undone.')) {
-        return;
-    }
-    
-    try {
-        showStatus('Clearing all notifications...', 'info');
-        
-        const result = await apiCall('clearAllNotifications');
-        
-        if (result && result.success) {
-            showStatus('All notifications cleared successfully!', 'success');
-            
-            // Refresh notifications to show updated list
-            await refreshNotifications();
-        } else {
-            showStatus(result ? result.message : 'Failed to clear notifications', 'error');
+    // Show confirmation modal
+    showConfirmationModal({
+        title: 'Clear All Notifications',
+        message: 'Are you sure you want to clear ALL active notifications? This action cannot be undone and will permanently remove all currently active notifications from the system.',
+        confirmText: 'Clear All Notifications',
+        cancelText: 'Cancel',
+        dangerMode: true,
+        onConfirm: async () => {
+            try {
+                showStatus('Clearing all notifications...', 'info');
+                
+                const result = await apiCall('clearAllNotifications');
+                
+                if (result && result.success) {
+                    showStatus('All notifications cleared successfully!', 'success');
+                    
+                    // Refresh notifications to show updated list
+                    await refreshNotifications();
+                } else {
+                    showStatus(result ? result.message : 'Failed to clear notifications', 'error');
+                }
+            } catch (error) {
+                console.error('Error clearing all notifications:', error);
+                showStatus('Failed to clear notifications. Please try again.', 'error');
+            }
         }
-    } catch (error) {
-        console.error('Error clearing all notifications:', error);
-        showStatus('Failed to clear notifications. Please try again.', 'error');
-    }
+    });
 }
 
 // Cleanup old data functionality

@@ -2097,9 +2097,8 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
 
 .modal .modal-header {
     margin-bottom: 20px !important;
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
+    position: relative !important;
+    padding-right: 40px !important;
 }
 
 .modal .modal-header h3 {
@@ -2108,11 +2107,13 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     font-size: 24pt !important;
     font-weight: bold !important;
     font-family: Arial, sans-serif !important;
-    flex: 1 !important;
     text-align: left !important;
 }
 
 .modal .modal-close {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
     background: none !important;
     border: none !important;
     font-size: 24pt !important;
@@ -2242,12 +2243,43 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     overflow-y: auto !important;
 }
 
+.modal-header {
+    position: relative !important;
+    padding-right: 40px !important;
+    margin-bottom: 20px !important;
+}
+
 .modal-header h3 {
-    margin: 0 0 20px 0 !important;
+    margin: 0 !important;
     color: #2c5530 !important;
     font-size: 24pt !important;
     font-weight: bold !important;
     font-family: Arial, sans-serif !important;
+    text-align: left !important;
+}
+
+.modal-close {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    background: none !important;
+    border: none !important;
+    font-size: 24pt !important;
+    color: #666 !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    width: 30px !important;
+    height: 30px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    transition: all 0.15s ease-in-out !important;
+}
+
+.modal-close:hover {
+    background: rgba(0, 0, 0, 0.1) !important;
+    color: #333 !important;
 }
 
 .modal-body {
