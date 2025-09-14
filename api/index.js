@@ -786,6 +786,45 @@ class DatabaseOperations {
     }
   }
 
+  async clearOldWebsiteRequests(days = 7) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      
+      let clearedCount = 0;
+      
+      if (this.usesFallback) {
+        const originalLength = fallbackStorage.notifications.length;
+        fallbackStorage.notifications = fallbackStorage.notifications.filter(n => {
+          if (n.type === 'website_request' && new Date(n.created || n.timestamp) < cutoffDate) {
+            return false; // Remove this website request
+          }
+          return true; // Keep this notification
+        });
+        clearedCount = originalLength - fallbackStorage.notifications.length;
+      } else {
+        await this.connect();
+        const result = await this.db.collection('notifications').deleteMany({
+          type: 'website_request',
+          $or: [
+            { created: { $lt: cutoffDate.toISOString() } },
+            { timestamp: { $lt: cutoffDate } }
+          ]
+        });
+        clearedCount = result.deletedCount;
+      }
+
+      return {
+        success: true,
+        message: `Cleared ${clearedCount} old website requests older than ${days} day(s)`,
+        clearedCount,
+        cutoffDate: cutoffDate.toISOString()
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   // Security Key Management Methods
   async getSecurityKey(clientId, keyType) {
     try {
@@ -2748,6 +2787,30 @@ export default async function handler(req, res) {
         }
         
         result = await db.cleanOldNotifications(
+          parseInt(params.days) || 7 // Default to 7 days
+        );
+        break;
+      }
+
+      // Clear Old Website Requests Action (Admin only)
+      case 'clearOldWebsiteRequests': {
+        const clearWebsiteAuthHeader = req.headers.authorization;
+        const clearWebsiteToken = clearWebsiteAuthHeader && clearWebsiteAuthHeader.startsWith('Bearer ')
+          ? clearWebsiteAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(clearWebsiteToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.clearOldWebsiteRequests(
           parseInt(params.days) || 7 // Default to 7 days
         );
         break;
