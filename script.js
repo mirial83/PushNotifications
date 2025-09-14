@@ -1528,7 +1528,23 @@ async function handleClearAllNotifications() {
 
 // Cleanup old data functionality
 async function handleCleanupOldData() {
-    if (!confirm('Are you sure you want to cleanup old data? This will permanently remove old notifications and website requests.')) {
+    const confirmMessage = `Are you sure you want to cleanup old data? This will permanently remove:
+
+• Active notifications older than 48 hours
+• Regular notifications older than 7 days
+• Website requests older than 7 days
+
+This will PRESERVE:
+• All encryption keys and passwords
+• All user accounts
+• App deletion/uninstall requests
+• Custom messages
+• Unacknowledged completion notifications
+• All recent data (within the time limits above)
+
+This action cannot be undone.`;
+    
+    if (!confirm(confirmMessage)) {
         return;
     }
     
