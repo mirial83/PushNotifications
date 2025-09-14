@@ -11,7 +11,7 @@ const state = {
     dbInitialized: false,
     clientCount: 0,
     registeredClients: [],
-    refreshIntervalSetting: 60, // 1 minute (changed from 30 seconds)
+    refreshIntervalSetting: 30, // 30 seconds for page refresh
     clientMonitorSetting: 30, // 30 seconds for client monitoring
     connectionHealthSetting: 45, // 45 seconds for connection health
     currentUser: null,
