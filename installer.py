@@ -2003,7 +2003,7 @@ if __name__ == "__main__":
             print(f"[OK] Backup system configured in: {backup_dir}")
             
         except Exception as e:
-        print(f"[WARN] Could not set up monitoring system: {e}")
+            print(f"[WARN] Could not set up monitoring system: {e}")
             
         return True
     
