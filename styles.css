@@ -2266,6 +2266,14 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
+.version-table-header * {
+    color: white !important;
+    font-weight: bold !important;
+    font-size: 16pt !important;
+    font-family: Arial, sans-serif !important;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5) !important;
+}
+
 .version-row {
     display: grid;
     grid-template-columns: 1fr 1fr 2fr;
