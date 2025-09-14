@@ -2860,25 +2860,27 @@ function displayVersionHistory(deployments, totalDeployments, lastRefreshed, sou
 function showCreateUserModal() {
     // Get the username from the input field
     const username = document.getElementById('newUsername')?.value?.trim();
+    const role = document.getElementById('newUserRole')?.value || 'user';
     
     if (!username) {
         showStatus('Please enter a valid username', 'error');
         return;
     }
     
-    // Show confirmation modal
+    // Show confirmation modal with role information
+    const roleDisplay = role === 'admin' ? 'Administrator' : 'User';
     showConfirmationModal({
         title: 'Create New User',
-        message: `Create new user with username "${username}"? A random password will be generated.`,
+        message: `Create new user with username "${username}" and role "${roleDisplay}"? A random password will be generated.`,
         confirmText: 'Create User',
         cancelText: 'Cancel',
         onConfirm: () => {
-            handleCreateUser(username);
+            handleCreateUser(username, role);
         }
     });
 }
 
-async function handleCreateUser(username) {
+async function handleCreateUser(username, role) {
     try {
         showStatus('Creating new user...', 'info');
         
@@ -2889,7 +2891,7 @@ async function handleCreateUser(username) {
         const result = await apiCall('createUser', {
             username: username,
             password: password,
-            role: 'user' // Default role is 'user'
+            role: role || 'user' // Use provided role or default to 'user'
         });
         
         if (result && result.success) {

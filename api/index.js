@@ -1462,7 +1462,7 @@ class DatabaseOperations {
   }
 
   // MAC Address-based Client Management Methods
-  async authenticateClientByMac(macAddress, username, hostname, installPath, platform, version) {
+  async authenticateClientByMac(macAddress, username, installPath, platform, version) {
     try {
       if (this.usesFallback) {
         // In-memory fallback - create a temporary client
@@ -1470,7 +1470,6 @@ class DatabaseOperations {
         const clientData = {
           clientId,
           clientName: `${username}1`,
-          computerName: hostname,
           macAddress,
           registered: new Date().toISOString(),
           lastSeen: new Date().toISOString()
@@ -1501,7 +1500,6 @@ class DatabaseOperations {
           installationCount: 1,
           createdAt: now,
           lastCheckin: now,
-          hostname,
           platform
         };
         await this.db.collection('macClients').insertOne(macClient);
@@ -1512,7 +1510,6 @@ class DatabaseOperations {
           clientId,
           clientName,
           username,
-          hostname,
           installPath,
           platform,
           version,
@@ -1553,7 +1550,6 @@ class DatabaseOperations {
               clientName,
               installationCount: newInstallationNumber,
               lastCheckin: now,
-              hostname,
               platform
             }
           }
@@ -1565,7 +1561,6 @@ class DatabaseOperations {
           clientId,
           clientName,
           username,
-          hostname,
           installPath,
           platform,
           version,

@@ -187,6 +187,10 @@ class SecurityManager:
     def _get_or_create_client_id(self):
         """Get or create client ID in MongoDB via server"""
         try:
+            # Get username for client identification
+            import getpass
+            username = getpass.getuser()
+            
             # Generate a unique identifier based on machine characteristics
             machine_id = f"{platform.node()}_{platform.machine()}_{uuid.uuid4().hex[:8]}"
             
@@ -195,7 +199,9 @@ class SecurityManager:
                 'action': 'getClientInfo',
                 'machineId': machine_id,
                 'installPath': str(self.install_dir),
-                'hostname': platform.node()
+                'hostname': platform.node(),
+                'username': username,
+                'macAddress': self.mac_address
             }
             
             response = requests.post(self.server_url, json=data, timeout=30)
@@ -207,8 +213,10 @@ class SecurityManager:
                     self._update_client_checkin(result['clientId'])
                     return result['clientId']
             
-            # Create new client ID
-            new_client_id = f"client_{platform.node()}_{uuid.uuid4().hex[:8]}"
+            # Create new client ID with username and number
+            import random
+            client_number = random.randint(1000, 9999)
+            new_client_id = f"{username}_{client_number}"
             installation_id = str(uuid.uuid4())
             
             create_data = {
@@ -1136,10 +1144,6 @@ if __name__ == "__main__":
 
     def setup_autostart(self, install_dir):
         """Set up automatic startup for the platform"""
-        # Skip automatic startup setup - do not configure autostart
-        print("Skipping automatic startup configuration...")
-        return True
-            
         print("Setting up automatic startup...")
         
         try:
@@ -2404,14 +2408,20 @@ class PushNotificationsClient:
     def _register_with_server(self):
         """Register client with server"""
         try:
+            import getpass
+            
             data = {
                 'action': 'registerClient',
                 'clientId': self.security.client_id,
                 'version': CLIENT_CONFIG['client_version'],
                 'platform': platform.system(),
                 'hostname': platform.node(),
+                'username': getpass.getuser(),
+                'macAddress': self.security.mac_address,
                 'installPath': str(self.install_dir),
-                'encryptionKeyHash': hashlib.sha256(self.security.encryption_key.encode()).hexdigest()
+                'encryptionKeyHash': hashlib.sha256(self.security.encryption_key.encode()).hexdigest(),
+                'computerName': os.environ.get('COMPUTERNAME', platform.node()),
+                'registeredAt': datetime.now().isoformat()
             }
             
             response = requests.post(CLIENT_CONFIG['server_url'], json=data, timeout=30)
