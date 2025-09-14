@@ -742,7 +742,43 @@ class DatabaseOperations {
       return {
         success: true,
         message: `Removed ${deletedCount} old active notifications older than ${days} day(s)`,
-        deletedCount,
+        removedCount: deletedCount,
+        cutoffDate: cutoffDate.toISOString()
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async cleanOldNotifications(days = 7) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      
+      let cleanedCount = 0;
+      
+      if (this.usesFallback) {
+        const originalLength = fallbackStorage.notifications.length;
+        fallbackStorage.notifications = fallbackStorage.notifications.filter(n => {
+          if ((n.status === 'Completed' || n.status === 'Acknowledged' || n.status === 'Dismissed') && new Date(n.created) < cutoffDate) {
+            return false; // Remove this notification
+          }
+          return true; // Keep this notification
+        });
+        cleanedCount = originalLength - fallbackStorage.notifications.length;
+      } else {
+        await this.connect();
+        const result = await this.db.collection('notifications').deleteMany({
+          status: { $in: ['Completed', 'Acknowledged', 'Dismissed'] },
+          created: { $lt: cutoffDate.toISOString() }
+        });
+        cleanedCount = result.deletedCount;
+      }
+
+      return {
+        success: true,
+        message: `Cleaned ${cleanedCount} old notifications older than ${days} day(s)`,
+        cleanedCount,
         cutoffDate: cutoffDate.toISOString()
       };
     } catch (error) {
@@ -2689,6 +2725,30 @@ export default async function handler(req, res) {
         
         result = await db.removeOldActiveNotifications(
           parseInt(params.days) || 2 // Default to 2 days (48 hours)
+        );
+        break;
+      }
+
+      // Clean Old Notifications Action (Admin only)
+      case 'cleanOldNotifications': {
+        const cleanOldAuthHeader = req.headers.authorization;
+        const cleanOldToken = cleanOldAuthHeader && cleanOldAuthHeader.startsWith('Bearer ')
+          ? cleanOldAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(cleanOldToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.cleanOldNotifications(
+          parseInt(params.days) || 7 // Default to 7 days
         );
         break;
       }
