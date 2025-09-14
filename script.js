@@ -2240,6 +2240,7 @@ function displayClientHistoryModal(history, macAddress) {
     let historyHTML = `
         <div class="modal-header">
             <h3>Client Installation History</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
             <div class="mac-address">📱 ${escapeHtml(macAddress)}</div>
         </div>
     `;
@@ -2487,8 +2488,8 @@ function setupAdminButtonListeners() {
     document.getElementById('viewAllClients')?.addEventListener('click', loadAllClients);
     document.getElementById('deactivateAllClients')?.addEventListener('click', deactivateAllClients);
     document.getElementById('exportClientData')?.addEventListener('click', exportClientData);
-    document.getElementById('uninstallSpecificClient')?.addEventListener('click', handleUninstallSpecificClient);
-    document.getElementById('retrieveSecurityKey')?.addEventListener('click', handleRetrieveSecurityKey);
+    document.getElementById('uninstallSpecificClient')?.addEventListener('click', handleUninstallSpecificClientModal);
+    document.getElementById('retrieveSecurityKey')?.addEventListener('click', handleRetrieveSecurityKeyModal);
     
     // Data management buttons
     document.getElementById('backupDatabase')?.addEventListener('click', backupDatabase);
@@ -3492,6 +3493,7 @@ function showPasswordModal(title, options) {
     modal.innerHTML = `
         <div class="modal-header">
             <h3>${escapeHtml(title)}</h3>
+            <button class="modal-close">×</button>
         </div>
         <div class="modal-body">
             <p>${escapeHtml(message)}</p>
@@ -3513,7 +3515,7 @@ function showPasswordModal(title, options) {
             <button id="copyPasswordBtn" class="btn-copy">
                 📋 Copy Password
             </button>
-            <button id="closeModalBtn" class="btn-close">
+            <button id="closeModalBtn" class="btn-secondary">
                 Close
             </button>
         </div>
@@ -3522,6 +3524,7 @@ function showPasswordModal(title, options) {
     // Add event listeners
     const copyBtn = modal.querySelector('#copyPasswordBtn');
     const closeBtn = modal.querySelector('#closeModalBtn');
+    const closeXBtn = modal.querySelector('.modal-close');
     
     copyBtn.addEventListener('click', async () => {
         try {
@@ -3544,6 +3547,10 @@ function showPasswordModal(title, options) {
     });
     
     closeBtn.addEventListener('click', () => {
+        overlay.remove();
+    });
+    
+    closeXBtn.addEventListener('click', () => {
         overlay.remove();
     });
     
@@ -3658,6 +3665,192 @@ async function handleDownloadClient() {
     }
 }
 
+// Modal management functions
+function closeModal() {
+    const modal = document.getElementById('clientSelectionModal');
+    if (modal) {
+        modal.style.display = 'none';
+        
+        // Clear modal content
+        const modalResult = document.getElementById('modalResult');
+        if (modalResult) {
+            modalResult.innerHTML = '';
+        }
+        
+        // Reset client select
+        const clientSelect = document.getElementById('modalClientSelect');
+        if (clientSelect) {
+            clientSelect.innerHTML = '<option value="">Loading clients...</option>';
+        }
+    }
+    
+    // Also close any other modal overlays
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.remove();
+    });
+}
+
+function showClientSelectionModal(title, actionType, callback) {
+    const modal = document.getElementById('clientSelectionModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalActionBtn = document.getElementById('modalActionBtn');
+    const clientSelect = document.getElementById('modalClientSelect');
+    
+    if (!modal || !modalTitle || !modalActionBtn || !clientSelect) {
+        console.error('Modal elements not found');
+        return;
+    }
+    
+    // Set modal title
+    modalTitle.textContent = title;
+    
+    // Load clients into select
+    loadClientsIntoSelect(clientSelect);
+    
+    // Set up action button
+    modalActionBtn.textContent = actionType;
+    modalActionBtn.onclick = () => {
+        const selectedClientId = clientSelect.value;
+        if (!selectedClientId) {
+            showModalError('Please select a client');
+            return;
+        }
+        
+        if (callback) {
+            callback(selectedClientId);
+        }
+    };
+    
+    // Show modal
+    modal.style.display = 'block';
+    
+    // Add event listeners for closing
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+    
+    // Close on Escape key
+    const escapeHandler = (e) => {
+        if (e.key === 'Escape') {
+            closeModal();
+            document.removeEventListener('keydown', escapeHandler);
+        }
+    };
+    document.addEventListener('keydown', escapeHandler);
+}
+
+async function loadClientsIntoSelect(selectElement) {
+    try {
+        selectElement.innerHTML = '<option value="">Loading clients...</option>';
+        
+        const result = await apiCall('getAllMacClients');
+        
+        if (result && result.success) {
+            const clients = result.data.filter(client => client.activeClientId); // Only active clients
+            
+            selectElement.innerHTML = '<option value="">Select a client...</option>';
+            
+            if (clients.length === 0) {
+                selectElement.innerHTML = '<option value="">No active clients found</option>';
+                return;
+            }
+            
+            clients.forEach(client => {
+                const option = document.createElement('option');
+                option.value = client.activeClientId;
+                option.textContent = `${client.clientName} (${client.username}) - ${client.macAddress}`;
+                selectElement.appendChild(option);
+            });
+        } else {
+            selectElement.innerHTML = '<option value="">Failed to load clients</option>';
+        }
+    } catch (error) {
+        console.error('Error loading clients into select:', error);
+        selectElement.innerHTML = '<option value="">Error loading clients</option>';
+    }
+}
+
+function showModalError(message) {
+    const modalResult = document.getElementById('modalResult');
+    if (modalResult) {
+        modalResult.innerHTML = `<div class="error-message">${escapeHtml(message)}</div>`;
+    }
+}
+
+function showModalSuccess(message) {
+    const modalResult = document.getElementById('modalResult');
+    if (modalResult) {
+        modalResult.innerHTML = `<div class="success-message">${escapeHtml(message)}</div>`;
+    }
+}
+
+// Enhanced client management functions that use the modal
+async function handleUninstallSpecificClientModal() {
+    showClientSelectionModal('Uninstall Specific Client', 'Uninstall', async (clientId) => {
+        const reason = prompt('Please provide a reason for uninstalling this client:', 'Administrative uninstall');
+        if (!reason) return;
+        
+        if (!confirm(`Are you sure you want to uninstall this client? This action cannot be undone and will remove the software from that specific computer.`)) {
+            return;
+        }
+        
+        try {
+            showModalError('Uninstalling client...');
+            
+            const result = await apiCall('uninstallSpecificClient', {
+                clientId: clientId,
+                reason: reason
+            });
+            
+            if (result && result.success) {
+                showModalSuccess(`Uninstall command sent to client successfully!`);
+                setTimeout(() => {
+                    closeModal();
+                    loadAllClients(); // Refresh client list
+                    showStatus('Client uninstall command sent successfully!', 'success');
+                }, 2000);
+            } else {
+                showModalError(`Failed to uninstall client: ${result ? result.message : 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error uninstalling specific client:', error);
+            showModalError('Failed to uninstall client. Please try again.');
+        }
+    });
+}
+
+async function handleRetrieveSecurityKeyModal() {
+    showClientSelectionModal('Retrieve Security Key', 'Retrieve Key', async (clientId) => {
+        try {
+            showModalError('Retrieving security key...');
+            
+            const result = await apiCall('retrieveSecurityKey', {
+                clientId: clientId
+            });
+            
+            if (result && result.success) {
+                closeModal();
+                
+                // Show the security key in a dedicated modal
+                showPasswordModal('Security Key Retrieved', {
+                    username: `Client ID: ${clientId}`,
+                    password: result.securityKey,
+                    message: 'Security key for the selected client:'
+                });
+                
+                showStatus('Security key retrieved successfully!', 'success');
+            } else {
+                showModalError(`Failed to retrieve security key: ${result ? result.message : 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error retrieving security key:', error);
+            showModalError('Failed to retrieve security key. Please try again.');
+        }
+    });
+}
+
 // Export security and client management functions for global access
 window.loadClientInfo = loadClientInfo;
 window.loadSecurityKeys = loadSecurityKeys;
@@ -3674,3 +3867,7 @@ window.handleRemoveOldActiveNotifications = handleRemoveOldActiveNotifications;
 window.handleCleanOldNotifications = handleCleanOldNotifications;
 window.handleClearOldWebsiteRequests = handleClearOldWebsiteRequests;
 window.handleDownloadClient = handleDownloadClient;
+window.closeModal = closeModal;
+window.showClientSelectionModal = showClientSelectionModal;
+window.handleUninstallSpecificClientModal = handleUninstallSpecificClientModal;
+window.handleRetrieveSecurityKeyModal = handleRetrieveSecurityKeyModal;
