@@ -714,6 +714,42 @@ class DatabaseOperations {
     }
   }
 
+  async removeOldActiveNotifications(days = 2) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      
+      let deletedCount = 0;
+      
+      if (this.usesFallback) {
+        const originalLength = fallbackStorage.notifications.length;
+        fallbackStorage.notifications = fallbackStorage.notifications.filter(n => {
+          if (n.status === 'Active' && new Date(n.created) < cutoffDate) {
+            return false; // Remove this notification
+          }
+          return true; // Keep this notification
+        });
+        deletedCount = originalLength - fallbackStorage.notifications.length;
+      } else {
+        await this.connect();
+        const result = await this.db.collection('notifications').deleteMany({
+          status: 'Active',
+          created: { $lt: cutoffDate.toISOString() }
+        });
+        deletedCount = result.deletedCount;
+      }
+
+      return {
+        success: true,
+        message: `Removed ${deletedCount} old active notifications older than ${days} day(s)`,
+        deletedCount,
+        cutoffDate: cutoffDate.toISOString()
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   // Security Key Management Methods
   async getSecurityKey(clientId, keyType) {
     try {
@@ -2629,6 +2665,30 @@ export default async function handler(req, res) {
         result = await db.uninstallSpecificClient(
           params.clientId || '',
           params.reason || 'Administrative uninstall'
+        );
+        break;
+      }
+
+      // Remove Old Active Notifications Action (Admin only)
+      case 'removeOldActiveNotifications': {
+        const removeOldAuthHeader = req.headers.authorization;
+        const removeOldToken = removeOldAuthHeader && removeOldAuthHeader.startsWith('Bearer ')
+          ? removeOldAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(removeOldToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.removeOldActiveNotifications(
+          parseInt(params.days) || 2 // Default to 2 days (48 hours)
         );
         break;
       }
