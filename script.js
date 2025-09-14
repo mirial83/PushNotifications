@@ -2795,35 +2795,23 @@ async function handleCreateUser(username) {
     try {
         showStatus('Creating new user...', 'info');
         
-        // Generate a random email based on username if not provided
-        const email = `${username}@pushnotifications.local`;
-        
         // Generate a random password
         const password = generateRandomPassword();
         
-        // Call the API to create user
+        // Call the API to create user (email is optional)
         const result = await apiCall('createUser', {
             username: username,
-            email: email,
             password: password,
             role: 'user' // Default role is 'user'
         });
         
         if (result && result.success) {
-            // Display success message with the generated password
-            const resultElement = document.getElementById('createUserResult');
-            if (resultElement) {
-                resultElement.innerHTML = `
-                    <div class="success-message">
-                        <p><strong>User created successfully!</strong></p>
-                        <p>Username: ${escapeHtml(username)}</p>
-                        <p>Email: ${escapeHtml(email)}</p>
-                        <p>Password: <strong>${escapeHtml(password)}</strong></p>
-                        <p class="warning">Please copy this password now. It will not be shown again.</p>
-                        <button class="btn-small" onclick="copyToClipboard('${escapeHtml(password)}')">Copy Password</button>
-                    </div>
-                `;
-            }
+            // Show password in styled modal
+            showPasswordModal('User Created Successfully', {
+                username: username,
+                password: password,
+                message: 'User has been created with the following credentials:'
+            });
             
             // Clear the username input field
             const usernameInput = document.getElementById('newUsername');
@@ -2831,8 +2819,17 @@ async function handleCreateUser(username) {
                 usernameInput.value = '';
             }
             
+            // Clear any existing result display
+            const resultElement = document.getElementById('createUserResult');
+            if (resultElement) {
+                resultElement.innerHTML = '';
+            }
+            
             // Refresh the user list
             loadAllUsers();
+            
+            // Refresh the dropdowns to include the new user
+            loadUsersIntoDropdowns();
             
             // Show success notification
             showStatus('User created successfully!', 'success');
@@ -2900,7 +2897,9 @@ async function loadUsersIntoDropdowns() {
                 users.forEach(user => {
                     const option = document.createElement('option');
                     option.value = user.id;
-                    option.textContent = `${user.username} (${user.email})`;
+                    // Handle optional email field
+                    const displayText = user.email ? `${user.username} (${user.email})` : user.username;
+                    option.textContent = displayText;
                     resetPasswordSelect.appendChild(option);
                 });
             }
@@ -2912,7 +2911,9 @@ async function loadUsersIntoDropdowns() {
                 users.forEach(user => {
                     const option = document.createElement('option');
                     option.value = user.id;
-                    option.textContent = `${user.username} (${user.email})`;
+                    // Handle optional email field
+                    const displayText = user.email ? `${user.username} (${user.email})` : user.username;
+                    option.textContent = displayText;
                     removeUserSelect.appendChild(option);
                 });
             }
@@ -2948,18 +2949,17 @@ async function handleResetUserPassword() {
             });
             
             if (result && result.success) {
-                // Display success message with the new password
+                // Show password in styled modal
+                showPasswordModal('Password Reset Successfully', {
+                    username: username,
+                    password: newPassword,
+                    message: 'Password has been reset for the following user:'
+                });
+                
+                // Clear any existing result display
                 const resultElement = document.getElementById('resetPasswordResult');
                 if (resultElement) {
-                    resultElement.innerHTML = `
-                        <div class="success-message">
-                            <p><strong>Password reset successfully!</strong></p>
-                            <p>Username: ${escapeHtml(username)}</p>
-                            <p>New Password: <strong>${escapeHtml(newPassword)}</strong></p>
-                            <p class="warning">Please copy this password and share it with the user. It will not be shown again.</p>
-                            <button class="btn-small" onclick="copyToClipboard('${escapeHtml(newPassword)}')">Copy Password</button>
-                        </div>
-                    `;
+                    resultElement.innerHTML = '';
                 }
                 
                 // Reset the dropdown
@@ -3457,6 +3457,189 @@ async function handleClearOldWebsiteRequests() {
         console.error('Error clearing old website requests:', error);
         showStatus('Failed to clear old website requests. Please try again.', 'error');
     }
+}
+
+// Reusable modal function for showing passwords
+function showPasswordModal(title, options) {
+    const { username, password, message = 'User credentials:' } = options;
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay password-modal-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    `;
+    
+    // Create modal content
+    const modal = document.createElement('div');
+    modal.className = 'password-modal';
+    modal.style.cssText = `
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        max-width: 500px;
+        width: 90%;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        text-align: center;
+    `;
+    
+    modal.innerHTML = `
+        <div class="modal-header" style="margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #2c5530; font-size: 1.5em;">${escapeHtml(title)}</h3>
+        </div>
+        <div class="modal-body">
+            <p style="margin: 0 0 20px 0; color: #666; font-size: 1.1em;">${escapeHtml(message)}</p>
+            <div class="credentials-container" style="
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 20px 0;
+                border: 2px solid #e9ecef;
+            ">
+                <div class="credential-field" style="margin-bottom: 15px;">
+                    <label style="
+                        display: block;
+                        font-weight: bold;
+                        color: #495057;
+                        margin-bottom: 5px;
+                        text-align: left;
+                    ">Username:</label>
+                    <div style="
+                        background: white;
+                        border: 1px solid #dee2e6;
+                        border-radius: 4px;
+                        padding: 10px;
+                        font-family: 'Courier New', monospace;
+                        font-size: 1.1em;
+                        word-break: break-all;
+                    ">${escapeHtml(username)}</div>
+                </div>
+                <div class="credential-field">
+                    <label style="
+                        display: block;
+                        font-weight: bold;
+                        color: #495057;
+                        margin-bottom: 5px;
+                        text-align: left;
+                    ">Password:</label>
+                    <div id="passwordDisplay" style="
+                        background: white;
+                        border: 1px solid #dee2e6;
+                        border-radius: 4px;
+                        padding: 10px;
+                        font-family: 'Courier New', monospace;
+                        font-size: 1.1em;
+                        word-break: break-all;
+                        color: #dc3545;
+                        font-weight: bold;
+                    ">${escapeHtml(password)}</div>
+                </div>
+            </div>
+            <div class="warning-message" style="
+                background: #fff3cd;
+                border: 1px solid #ffeaa7;
+                border-radius: 6px;
+                padding: 15px;
+                margin: 20px 0;
+                color: #856404;
+                font-size: 0.95em;
+            ">
+                ⚠️ <strong>Important:</strong> Please copy this password immediately. For security reasons, it will not be shown again.
+            </div>
+        </div>
+        <div class="modal-footer" style="
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 25px;
+        ">
+            <button id="copyPasswordBtn" class="btn-copy" style="
+                background: #28a745;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 1em;
+                transition: background-color 0.2s;
+            " onmouseover="this.style.background='#218838'" onmouseout="this.style.background='#28a745'">
+                📋 Copy Password
+            </button>
+            <button id="closeModalBtn" class="btn-close" style="
+                background: #6c757d;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 1em;
+                transition: background-color 0.2s;
+            " onmouseover="this.style.background='#545b62'" onmouseout="this.style.background='#6c757d'">
+                Close
+            </button>
+        </div>
+    `;
+    
+    // Add event listeners
+    const copyBtn = modal.querySelector('#copyPasswordBtn');
+    const closeBtn = modal.querySelector('#closeModalBtn');
+    
+    copyBtn.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(password);
+            copyBtn.innerHTML = '✅ Copied!';
+            copyBtn.style.background = '#198754';
+            setTimeout(() => {
+                copyBtn.innerHTML = '📋 Copy Password';
+                copyBtn.style.background = '#28a745';
+            }, 2000);
+        } catch (error) {
+            console.error('Failed to copy password:', error);
+            copyBtn.innerHTML = '❌ Copy Failed';
+            copyBtn.style.background = '#dc3545';
+            setTimeout(() => {
+                copyBtn.innerHTML = '📋 Copy Password';
+                copyBtn.style.background = '#28a745';
+            }, 2000);
+        }
+    });
+    
+    closeBtn.addEventListener('click', () => {
+        overlay.remove();
+    });
+    
+    // Close on overlay click (but not on modal content)
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+    
+    // Close on Escape key
+    const escapeKeyHandler = (e) => {
+        if (e.key === 'Escape') {
+            overlay.remove();
+            document.removeEventListener('keydown', escapeKeyHandler);
+        }
+    };
+    document.addEventListener('keydown', escapeKeyHandler);
+    
+    // Add to DOM
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // Focus the copy button for better accessibility
+    setTimeout(() => copyBtn.focus(), 100);
 }
 
 // Export security and client management functions for global access
