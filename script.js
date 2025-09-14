@@ -3584,6 +3584,149 @@ function showPasswordModal(title, options) {
     setTimeout(() => copyBtn.focus(), 100);
 }
 
+// Installation Key Modal - similar to password modal but with download functionality
+function showInstallationKeyModal(installationKey) {
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    
+    // Create modal content
+    const modal = document.createElement('div');
+    modal.className = 'password-modal installation-key-modal';
+    
+    modal.innerHTML = `
+        <div class="modal-header">
+            <h3>🔑 Installation Key Generated</h3>
+            <button class="modal-close">×</button>
+        </div>
+        <div class="modal-body">
+            <p>Your installation key has been generated successfully:</p>
+            <div class="credentials-container">
+                <div class="credential-field">
+                    <label>Installation Key:</label>
+                    <div id="installationKeyDisplay" style="background: #f8f9fa; padding: 15px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 16pt; word-break: break-all; margin: 10px 0; color: #dc3545; font-weight: bold; border: 2px solid #e9ecef;">${escapeHtml(installationKey)}</div>
+                </div>
+            </div>
+            <div class="warning-message">
+                ⚠️ <strong>Important:</strong> This key expires in 24 hours. Copy it now and use it during installation.
+            </div>
+            <div class="installation-instructions">
+                <h4>Installation Steps:</h4>
+                <ol>
+                    <li>Download the client installer</li>
+                    <li>Run the installer file</li>
+                    <li>Enter this installation key when prompted</li>
+                </ol>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="downloadClientBtn" class="btn-primary">
+                📥 Download Client
+            </button>
+            <button id="copyKeyBtn" class="btn-copy">
+                📋 Copy Key
+            </button>
+            <button id="closeKeyModalBtn" class="btn-secondary">
+                Close
+            </button>
+        </div>
+    `;
+    
+    // Add event listeners
+    const downloadBtn = modal.querySelector('#downloadClientBtn');
+    const copyBtn = modal.querySelector('#copyKeyBtn');
+    const closeBtn = modal.querySelector('#closeKeyModalBtn');
+    const closeXBtn = modal.querySelector('.modal-close');
+    
+    // Download functionality
+    downloadBtn.addEventListener('click', () => {
+        try {
+            // Initiate download
+            const downloadUrl = `${config.API_BASE_URL}/api/download?file=client`;
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = 'installer.py';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Update button to show success
+            downloadBtn.innerHTML = '✅ Download Started!';
+            downloadBtn.style.background = '#198754';
+            downloadBtn.disabled = true;
+            
+            setTimeout(() => {
+                downloadBtn.innerHTML = '📥 Download Client';
+                downloadBtn.style.background = '#007bff';
+                downloadBtn.disabled = false;
+            }, 3000);
+            
+            showStatus('Client download started! The file will be saved as "installer.py"', 'success');
+        } catch (error) {
+            console.error('Download error:', error);
+            downloadBtn.innerHTML = '❌ Download Failed';
+            downloadBtn.style.background = '#dc3545';
+            setTimeout(() => {
+                downloadBtn.innerHTML = '📥 Download Client';
+                downloadBtn.style.background = '#007bff';
+            }, 3000);
+        }
+    });
+    
+    // Copy key functionality
+    copyBtn.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(installationKey);
+            copyBtn.innerHTML = '✅ Copied!';
+            copyBtn.style.background = '#198754';
+            setTimeout(() => {
+                copyBtn.innerHTML = '📋 Copy Key';
+                copyBtn.style.background = '#28a745';
+            }, 2000);
+        } catch (error) {
+            console.error('Failed to copy key:', error);
+            copyBtn.innerHTML = '❌ Copy Failed';
+            copyBtn.style.background = '#dc3545';
+            setTimeout(() => {
+                copyBtn.innerHTML = '📋 Copy Key';
+                copyBtn.style.background = '#28a745';
+            }, 2000);
+        }
+    });
+    
+    // Close functionality
+    closeBtn.addEventListener('click', () => {
+        overlay.remove();
+    });
+    
+    closeXBtn.addEventListener('click', () => {
+        overlay.remove();
+    });
+    
+    // Close on overlay click (but not on modal content)
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+    
+    // Close on Escape key
+    const escapeKeyHandler = (e) => {
+        if (e.key === 'Escape') {
+            overlay.remove();
+            document.removeEventListener('keydown', escapeKeyHandler);
+        }
+    };
+    document.addEventListener('keydown', escapeKeyHandler);
+    
+    // Add to DOM
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // Focus the download button for better user experience
+    setTimeout(() => downloadBtn.focus(), 100);
+}
+
 // Client Administration Page Initialization
 function initializeClientAdministration() {
     console.log('Initializing client administration page...');
@@ -3626,9 +3769,6 @@ async function handleDownloadClient() {
 // User download client function (with key generation)
 async function handleUserDownloadClient() {
     const downloadButton = document.getElementById('downloadClient');
-    const keySection = document.getElementById('installationKeySection');
-    const keyDisplay = document.getElementById('installationKeyDisplay');
-    const copyKeyButton = document.getElementById('copyInstallationKey');
     
     if (!downloadButton) return;
     
@@ -3645,41 +3785,10 @@ async function handleUserDownloadClient() {
         if (result && result.success) {
             const installationKey = result.installationKey;
             
-            // Show the key section
-            if (keySection) {
-                keySection.style.display = 'block';
-            }
+            // Show installation key in popup modal (similar to password modal)
+            showInstallationKeyModal(installationKey);
             
-            // Display the key
-            if (keyDisplay) {
-                keyDisplay.textContent = installationKey;
-            }
-            
-            // Setup copy button
-            if (copyKeyButton) {
-                copyKeyButton.onclick = () => copyToClipboard(installationKey);
-            }
-            
-            // Update button for download
-            downloadButton.textContent = 'Download Client Now';
-            downloadButton.disabled = false;
-            
-            // Change button action to actual download
-            downloadButton.onclick = () => {
-                // Initiate download
-                const downloadUrl = `${config.API_BASE_URL}/api/download?file=client`;
-                const link = document.createElement('a');
-                link.href = downloadUrl;
-                link.download = 'installer.py';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-                // Show instructions
-                showDownloadInstructions(installationKey);
-            };
-            
-            showStatus('Installation key generated! Click "Download Client Now" to download.', 'success');
+            showStatus('Installation key generated! Use it when prompted during installation.', 'success');
             
         } else {
             throw new Error(result ? result.message : 'Failed to generate download key');
@@ -3687,7 +3796,7 @@ async function handleUserDownloadClient() {
     } catch (error) {
         console.error('Download key generation error:', error);
         showStatus('Failed to generate download key: ' + error.message, 'error');
-        
+    } finally {
         // Reset button
         downloadButton.disabled = false;
         downloadButton.textContent = 'Download Client';
