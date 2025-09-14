@@ -606,6 +606,61 @@ class DatabaseOperations {
     }
   }
 
+  async uninstallSpecificClient(clientId, reason = 'Administrative uninstall') {
+    try {
+      if (!clientId) {
+        return { success: false, message: 'Client ID is required' };
+      }
+
+      // Check if the client exists
+      let clientExists = false;
+      
+      if (this.usesFallback) {
+        clientExists = fallbackStorage.clients.some(c => c.clientId === clientId);
+      } else {
+        await this.connect();
+        // Check both clients and macClients collections
+        const client = await this.db.collection('clients').findOne({ clientId });
+        const macClient = await this.db.collection('macClients').findOne({ 
+          $or: [{ clientId }, { activeClientId: clientId }] 
+        });
+        clientExists = client || macClient;
+      }
+
+      if (!clientExists) {
+        return { success: false, message: `Client with ID "${clientId}" not found` };
+      }
+
+      // Create special uninstall notification for the specific client
+      const uninstallNotification = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        message: '__UNINSTALL_SPECIFIC_COMMAND__',
+        clientId: clientId,
+        status: 'Active',
+        type: 'uninstall_command',
+        reason: reason,
+        allowBrowserUsage: false,
+        allowedWebsites: '',
+        created: new Date().toISOString()
+      };
+
+      if (this.usesFallback) {
+        fallbackStorage.notifications.push(uninstallNotification);
+      } else {
+        await this.connect();
+        await this.db.collection('notifications').insertOne(uninstallNotification);
+      }
+
+      return {
+        success: true,
+        message: `Uninstall command sent to client "${clientId}"`,
+        clientId
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   async getActiveNotifications() {
     try {
       let notifications;
@@ -2514,6 +2569,31 @@ export default async function handler(req, res) {
         }
         
         result = await db.uninstallAllClients(
+          params.reason || 'Administrative uninstall'
+        );
+        break;
+      }
+
+      // Uninstall Specific Client Action (Admin only)
+      case 'uninstallSpecificClient': {
+        const uninstallSpecificAuthHeader = req.headers.authorization;
+        const uninstallSpecificToken = uninstallSpecificAuthHeader && uninstallSpecificAuthHeader.startsWith('Bearer ')
+          ? uninstallSpecificAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(uninstallSpecificToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.uninstallSpecificClient(
+          params.clientId || '',
           params.reason || 'Administrative uninstall'
         );
         break;
