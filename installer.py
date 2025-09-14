@@ -2296,10 +2296,26 @@ def is_client_mode():
     
     if current_path == install_dir:
         protection_file = install_dir / '.protection'
-        security_db = install_dir / '.security.db'
+        installer_file = install_dir / 'installer.py'
         
-        if protection_file.exists() and security_db.exists():
-            return True
+        # Only run in client mode if we have a complete installation
+        # (protection file exists AND installer.py exists AND it's not the first run)
+        if (protection_file.exists() and 
+            installer_file.exists() and 
+            installer_file.stat().st_size > 1000):  # Ensure it's not empty/truncated
+            
+            # Additional check: verify it's not the installer we just downloaded
+            try:
+                with open(installer_file, 'r', encoding='utf-8') as f:
+                    content = f.read(200)  # Read first 200 chars
+                    # If it starts with our version header, it's a downloaded installer
+                    if '# Downloaded Version:' in content:
+                        return True
+                    # If it contains proper client code, it's ready to run as client
+                    elif 'PushNotificationsClient' in content:
+                        return True
+            except Exception:
+                pass
     
     return False
 
