@@ -417,9 +417,6 @@ class DatabaseOperations {
       // Check for GitHub token (optional for public repos, but recommended for higher rate limits)
       const githubToken = process.env.GITHUB_TOKEN;
       
-      // Build API URL for GitHub deployments API
-      const apiUrl = 'https://api.github.com/repos/mirial83/PushNotifications/deployments?per_page=100';
-      
       const headers = {
         'Accept': 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28'
@@ -429,23 +426,60 @@ class DatabaseOperations {
         headers['Authorization'] = `Bearer ${githubToken}`;
       }
       
-      const response = await fetch(apiUrl, { headers });
+      // Fetch ALL deployments using pagination
+      const allDeployments = [];
+      let page = 1;
+      const perPage = 100;
+      let hasMorePages = true;
       
-      if (!response.ok) {
-        throw new Error(`GitHub API error: ${response.status} - ${response.statusText}`);
+      console.log('Fetching all GitHub deployments...');
+      
+      while (hasMorePages && page <= 10) { // Safety limit of 10 pages (1000 deployments max)
+        const apiUrl = `https://api.github.com/repos/mirial83/PushNotifications/deployments?per_page=${perPage}&page=${page}`;
+        
+        const response = await fetch(apiUrl, { headers });
+        
+        if (!response.ok) {
+          throw new Error(`GitHub API error: ${response.status} - ${response.statusText}`);
+        }
+        
+        const deployments = await response.json();
+        
+        if (!deployments || deployments.length === 0) {
+          hasMorePages = false;
+          break;
+        }
+        
+        allDeployments.push(...deployments);
+        
+        // Check if we got less than the requested amount (indicates last page)
+        if (deployments.length < perPage) {
+          hasMorePages = false;
+        } else {
+          page++;
+        }
+        
+        console.log(`Fetched page ${page - 1}: ${deployments.length} deployments (total: ${allDeployments.length})`);
       }
       
-      const deployments = await response.json();
-      
-      if (!deployments || deployments.length === 0) {
+      if (allDeployments.length === 0) {
         console.log('No GitHub deployments found');
         return null;
       }
       
+      console.log(`Total deployments fetched: ${allDeployments.length}`);
+      
       // Get deployments with successful deployment status AND passing Vercel checks
       const validDeployments = [];
+      let processedCount = 0;
       
-      for (const deployment of deployments.slice(0, 20)) { // Limit to 20 to avoid rate limits
+      for (const deployment of allDeployments) {
+        processedCount++;
+        
+        if (processedCount % 10 === 0) {
+          console.log(`Processing deployment ${processedCount}/${allDeployments.length}: ${deployment.id}`);
+        }
+        
         try {
           // Check deployment status
           const statusResponse = await fetch(`https://api.github.com/repos/mirial83/PushNotifications/deployments/${deployment.id}/statuses`, {
@@ -470,6 +504,9 @@ class DatabaseOperations {
             headers
           });
           
+          let hasVercelChecks = false;
+          let vercelChecksPassed = true;
+          
           if (checksResponse.ok) {
             const checksData = await checksResponse.json();
             
@@ -481,13 +518,9 @@ class DatabaseOperations {
               )
             ) || [];
             
-            // If there are Vercel checks, ensure they all passed
             if (vercelChecks.length > 0) {
-              const allVercelChecksPassed = vercelChecks.every(check => check.state === 'success');
-              if (!allVercelChecksPassed) {
-                console.log(`Deployment ${deployment.id} has failing Vercel checks`);
-                continue;
-              }
+              hasVercelChecks = true;
+              vercelChecksPassed = vercelChecks.every(check => check.state === 'success');
             }
             
             // Also check GitHub check runs (newer API)
@@ -507,28 +540,53 @@ class DatabaseOperations {
                 )
               ) || [];
               
-              // If there are Vercel check runs, ensure they all passed
               if (vercelCheckRuns.length > 0) {
+                hasVercelChecks = true;
                 const allVercelCheckRunsPassed = vercelCheckRuns.every(checkRun => 
                   checkRun.conclusion === 'success' || checkRun.conclusion === 'neutral'
                 );
-                if (!allVercelCheckRunsPassed) {
-                  console.log(`Deployment ${deployment.id} has failing Vercel check runs`);
-                  continue;
-                }
+                vercelChecksPassed = vercelChecksPassed && allVercelCheckRunsPassed;
               }
             }
           }
           
-          // If we get here, the deployment is successful and Vercel checks passed
-          validDeployments.push({
-            ...deployment,
-            status: latestStatus
-          });
+          // Only include deployments that have Vercel checks and they passed
+          if (hasVercelChecks && vercelChecksPassed) {
+            // Get commit info for better messages
+            let commitMessage = deployment.description || deployment.payload?.description || `Deployment ${deployment.id}`;
+            let commitAuthor = deployment.creator?.login || 'Unknown';
+            
+            if (deployment.sha) {
+              try {
+                const commitResponse = await fetch(`https://api.github.com/repos/mirial83/PushNotifications/commits/${deployment.sha}`, {
+                  headers
+                });
+                
+                if (commitResponse.ok) {
+                  const commitData = await commitResponse.json();
+                  commitMessage = commitData.commit.message.split('\n')[0]; // First line only
+                  commitAuthor = commitData.commit.author.name;
+                }
+              } catch (commitError) {
+                // Use deployment info if commit fetch fails
+              }
+            }
+            
+            validDeployments.push({
+              ...deployment,
+              status: latestStatus,
+              commitMessage: commitMessage,
+              commitAuthor: commitAuthor
+            });
+          }
+          
+          // Add a small delay to avoid rate limiting
+          if (processedCount % 20 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
           
         } catch (checkError) {
           console.log(`Failed to check Vercel status for deployment ${deployment.id}:`, checkError.message);
-          // Skip this deployment if we can't verify Vercel checks
           continue;
         }
       }
@@ -538,20 +596,23 @@ class DatabaseOperations {
         return null;
       }
       
-      console.log(`Found ${validDeployments.length} deployments with passing Vercel checks`);
+      console.log(`Found ${validDeployments.length} deployments with passing Vercel checks out of ${allDeployments.length} total deployments`);
+      
+      // Sort by date (oldest first) to maintain chronological order
+      validDeployments.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       
       // Convert to our format
       return validDeployments.map((deployment, index) => ({
-        version: null, // Will be set by applyVersionNumbering
-        message: deployment.description || deployment.payload?.description || `Deployment ${deployment.id}`,
-        description: deployment.description || deployment.payload?.description || '',
+        version: null, // Will be set by version numbering
+        message: deployment.commitMessage,
+        description: deployment.commitMessage,
         date: deployment.created_at,
         deploymentId: deployment.id.toString(),
         sha: deployment.sha ? deployment.sha.substring(0, 8) : null,
         url: deployment.status?.target_url || deployment.status?.environment_url || null,
         source: 'github-deployments',
-        isCurrent: index === 0,
-        author: deployment.creator?.login || 'Unknown',
+        isCurrent: false, // Will be set later
+        author: deployment.commitAuthor,
         environment: deployment.environment || 'production'
       }));
       
@@ -2251,6 +2312,147 @@ class DatabaseOperations {
     }
   }
   
+  async syncAllDeployments() {
+    try {
+      console.log('Starting comprehensive deployment sync...');
+      
+      if (this.usesFallback) {
+        console.log('Cannot sync deployments - using fallback storage');
+        return { success: false, message: 'Deployment sync requires MongoDB connection' };
+      }
+      
+      await this.connect();
+      
+      // Get all deployments from GitHub
+      const externalVersions = await this.fetchGitHubDeployments();
+      
+      if (!externalVersions || externalVersions.length === 0) {
+        console.log('No external deployments found for sync');
+        return { success: true, message: 'No deployments found', newDeployments: 0 };
+      }
+      
+      console.log(`Found ${externalVersions.length} verified deployments from GitHub`);
+      
+      // Get existing deployments from database
+      const existingDeployments = await this.db.collection('versionHistory')
+        .find({})
+        .toArray();
+      
+      const existingDeploymentIds = new Set(existingDeployments.map(d => d.deploymentId).filter(Boolean));
+      const existingShas = new Set(existingDeployments.map(d => d.sha).filter(Boolean));
+      
+      console.log(`Found ${existingDeployments.length} existing deployments in database`);
+      
+      // Sort external versions by date (oldest first)
+      const sortedExternalVersions = [...externalVersions].sort((a, b) => new Date(a.date) - new Date(b.date));
+      
+      // Filter out deployments that already exist
+      const newDeployments = sortedExternalVersions.filter(deployment => {
+        // Check by deployment ID first (most reliable)
+        if (deployment.deploymentId && existingDeploymentIds.has(deployment.deploymentId)) {
+          return false;
+        }
+        
+        // Check by SHA as fallback
+        if (deployment.sha && existingShas.has(deployment.sha)) {
+          return false;
+        }
+        
+        // Check by message and date combination
+        const matchingRecord = existingDeployments.find(existing => 
+          existing.message === deployment.message && 
+          existing.date === deployment.date
+        );
+        
+        return !matchingRecord;
+      });
+      
+      console.log(`Found ${newDeployments.length} new deployments to add`);
+      
+      if (newDeployments.length === 0) {
+        return { 
+          success: true, 
+          message: 'No new deployments found - database is up to date', 
+          newDeployments: 0,
+          totalExternal: externalVersions.length,
+          totalExisting: existingDeployments.length
+        };
+      }
+      
+      // Get the current highest version number
+      const highestVersionRecord = await this.db.collection('versionHistory')
+        .findOne({}, { sort: { versionNumber: -1 } });
+      
+      let nextVersionNumber = highestVersionRecord ? highestVersionRecord.versionNumber + 1 : 1;
+      
+      // Create version records for new deployments
+      const newVersionRecords = [];
+      
+      for (const deployment of newDeployments) {
+        const semanticVersion = this.calculateSemanticVersion(nextVersionNumber - 1);
+        
+        const versionRecord = {
+          versionNumber: nextVersionNumber,
+          version: semanticVersion,
+          message: deployment.message || 'No message',
+          description: deployment.description || deployment.message || '',
+          date: deployment.date,
+          sha: deployment.sha || null,
+          deploymentId: deployment.deploymentId || null,
+          author: deployment.author || 'Unknown',
+          source: deployment.source || 'github-deployments',
+          isCurrent: false, // Will be updated later
+          createdAt: new Date(),
+          url: deployment.url || null
+        };
+        
+        newVersionRecords.push(versionRecord);
+        nextVersionNumber++;
+      }
+      
+      // Insert new deployment records
+      if (newVersionRecords.length > 0) {
+        await this.db.collection('versionHistory').insertMany(newVersionRecords);
+        
+        // Update the current version flag - mark the highest version number as current
+        await this.db.collection('versionHistory').updateMany(
+          {},
+          { $set: { isCurrent: false } }
+        );
+        
+        const latestVersion = await this.db.collection('versionHistory')
+          .findOne({}, { sort: { versionNumber: -1 } });
+        
+        if (latestVersion) {
+          await this.db.collection('versionHistory').updateOne(
+            { _id: latestVersion._id },
+            { $set: { isCurrent: true } }
+          );
+        }
+        
+        console.log(`Successfully added ${newVersionRecords.length} new deployments`);
+        console.log(`New version range: ${newVersionRecords[0].version} to ${newVersionRecords[newVersionRecords.length-1].version}`);
+      }
+      
+      return {
+        success: true,
+        message: `Successfully synced ${newVersionRecords.length} new deployments`,
+        newDeployments: newVersionRecords.length,
+        totalExternal: externalVersions.length,
+        totalExisting: existingDeployments.length,
+        totalAfterSync: existingDeployments.length + newVersionRecords.length,
+        versionRange: newVersionRecords.length > 0 ? {
+          first: newVersionRecords[0].version,
+          last: newVersionRecords[newVersionRecords.length-1].version
+        } : null
+      };
+      
+    } catch (error) {
+      console.error('Error performing comprehensive deployment sync:', error);
+      return { success: false, message: error.message };
+    }
+  }
+  
   formatVersionHistoryResponse(versions) {
     const currentVersion = process.env.npm_package_version || '1.1.9';
     
@@ -2908,6 +3110,28 @@ export default async function handler(req, res) {
         result = await db.clearOldWebsiteRequests(
           parseInt(params.days) || 7 // Default to 7 days
         );
+        break;
+      }
+      
+      // Sync All Deployments Action (Admin only)
+      case 'syncAllDeployments': {
+        const syncAuthHeader = req.headers.authorization;
+        const syncToken = syncAuthHeader && syncAuthHeader.startsWith('Bearer ')
+          ? syncAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(syncToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.syncAllDeployments();
         break;
       }
         
