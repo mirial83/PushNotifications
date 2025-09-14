@@ -2323,32 +2323,62 @@ if __name__ == "__main__":
         return True
     
     def register_client_with_installation_key(self, install_dir):
-        """Register or update the client with installation key details"""
-        print("Registering client with installation key details...")
+        """Register or update the client with all validation information in database"""
+        print("Registering client with complete installation details...")
         
         try:
             if not hasattr(self, 'installation_key_data'):
                 print("[WARN] No installation key data available for registration")
                 return False
             
-            # Get or create security manager to get client ID
+            # Get or create security manager to get client ID and security details
             security = SecurityManager(install_dir)
             
-            # Prepare registration data with installation key details
+            # Get additional system information
+            import getpass
+            
+            # Prepare comprehensive registration data with all client information
             data = {
-                'action': 'registerClientWithInstallationKey',
+                'action': 'registerClientComplete',
+                
+                # Core client identification
                 'clientId': security.client_id,
+                'clientName': security.client_id,  # Use client_id as name for now
+                'installPath': str(install_dir),
+                'installationId': security.client_id,
+                
+                # System information
+                'hostname': platform.node(),
+                'computerName': os.environ.get('COMPUTERNAME', platform.node()),
+                'platform': platform.system(),
+                'macAddress': security.mac_address,
+                'username': getpass.getuser(),
+                
+                # Security information
+                'encryptionKey': security.encryption_key,
+                'encryptionKeyHash': hashlib.sha256(security.encryption_key.encode()).hexdigest(),
+                'securityKeyType': 'ENCRYPTION_KEY',
+                
+                # Installation key validation details
                 'installationKey': self.installation_key_data['installationKey'],
                 'validatedUser': self.installation_key_data['validatedUser'],
                 'validatedAt': self.installation_key_data['validatedAt'],
-                'installPath': str(install_dir),
-                'hostname': platform.node(),
-                'platform': platform.system(),
+                
+                # Version and timestamps
                 'version': CLIENT_CONFIG['client_version'],
-                'registeredAt': datetime.now().isoformat()
+                'versionNumber': VERSION_NUMBER,
+                'createdAt': datetime.now().isoformat(),
+                'registeredAt': datetime.now().isoformat(),
+                'lastCheckin': datetime.now().isoformat(),
+                'lastUsed': datetime.now().isoformat(),
+                
+                # Protection status
+                'protectionEnabled': True,
+                'folderProtected': True,
+                'status': 'installed'
             }
             
-            # Send registration to server
+            # Send comprehensive registration to server
             response = requests.post(f"{self.gas_script_url}/api/index", json=data, timeout=30)
             
             if response.status_code == 200:
@@ -2356,10 +2386,13 @@ if __name__ == "__main__":
                 
                 if result.get('success'):
                     user_info = self.installation_key_data['validatedUser']
-                    print(f"✓ Client registered successfully with installation key!")
+                    print(f"✓ Client registered successfully with complete details!")
                     print(f"  Client ID: {security.client_id}")
+                    print(f"  MAC Address: {security.mac_address}")
+                    print(f"  Encryption Key: {security.encryption_key[:16]}...")
                     print(f"  User: {user_info.get('username', 'Unknown')}")
                     print(f"  Role: {user_info.get('role', 'Unknown')}")
+                    print(f"  Installation Key: {self.installation_key_data['installationKey'][:8]}...")
                     print()
                     return True
                 else:
@@ -2368,6 +2401,7 @@ if __name__ == "__main__":
                     
             else:
                 print(f"✗ Server error during registration: HTTP {response.status_code}")
+                print(f"Response: {response.text[:200]}...") # Show some of the error response
                 
         except requests.exceptions.RequestException as e:
             print(f"✗ Network error during client registration: {e}")
