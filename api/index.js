@@ -2246,6 +2246,40 @@ export default async function handler(req, res) {
         );
         break;
 
+      case 'retrieveSecurityKey': {
+        const retrieveAuthHeader = req.headers.authorization;
+        const retrieveToken = retrieveAuthHeader && retrieveAuthHeader.startsWith('Bearer ')
+          ? retrieveAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(retrieveToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        const keyResult = await db.getSecurityKey(
+          params.clientId || '',
+          params.keyType || 'ENCRYPTION_KEY'
+        );
+        
+        if (keyResult.success) {
+          result = {
+            success: true,
+            securityKey: keyResult.key,
+            clientId: params.clientId
+          };
+        } else {
+          result = keyResult;
+        }
+        break;
+      }
+
       case 'createSecurityKey':
         result = await db.createSecurityKey(
           params.clientId || '',
