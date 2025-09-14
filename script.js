@@ -2884,14 +2884,18 @@ function generateRandomPassword() {
 
 // Load users into dropdown selects
 async function loadUsersIntoDropdowns() {
+    console.log('loadUsersIntoDropdowns called');
     try {
         const result = await apiCall('getAllUsers');
+        console.log('getAllUsers result:', result);
         
         if (result && result.success) {
             const users = result.data;
+            console.log('Users data:', users);
             
             // Update reset password dropdown
             const resetPasswordSelect = document.getElementById('resetPasswordUser');
+            console.log('resetPasswordSelect element:', resetPasswordSelect);
             if (resetPasswordSelect) {
                 resetPasswordSelect.innerHTML = '<option value="">Select a user...</option>';
                 users.forEach(user => {
@@ -2901,11 +2905,15 @@ async function loadUsersIntoDropdowns() {
                     const displayText = user.email ? `${user.username} (${user.email})` : user.username;
                     option.textContent = displayText;
                     resetPasswordSelect.appendChild(option);
+                    console.log('Added user to reset dropdown:', displayText);
                 });
+            } else {
+                console.warn('resetPasswordUser element not found');
             }
             
             // Update remove user dropdown
             const removeUserSelect = document.getElementById('removeUser');
+            console.log('removeUserSelect element:', removeUserSelect);
             if (removeUserSelect) {
                 removeUserSelect.innerHTML = '<option value="">Select a user...</option>';
                 users.forEach(user => {
@@ -2915,8 +2923,13 @@ async function loadUsersIntoDropdowns() {
                     const displayText = user.email ? `${user.username} (${user.email})` : user.username;
                     option.textContent = displayText;
                     removeUserSelect.appendChild(option);
+                    console.log('Added user to remove dropdown:', displayText);
                 });
+            } else {
+                console.warn('removeUser element not found');
             }
+        } else {
+            console.error('Failed to get users or no success:', result);
         }
     } catch (error) {
         console.error('Error loading users into dropdowns:', error);
