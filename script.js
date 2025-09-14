@@ -707,35 +707,49 @@ async function acknowledgeNotification(notificationId) {
 }
 
 async function snoozeNotification(notificationId) {
-    const minutes = prompt('Snooze for how many minutes?', '15');
-    if (!minutes || isNaN(minutes)) return;
-    
-    try {
-        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                action: 'snoozeNotification',
+    showConfirmationModal({
+        title: 'Snooze Notification',
+        message: 'How many minutes would you like to snooze this notification?',
+        confirmText: 'Snooze',
+        cancelText: 'Cancel',
+        inputType: 'text',
+        inputLabel: 'Minutes:',
+        inputPlaceholder: 'Enter number of minutes',
+        inputValue: '15',
+        onConfirm: async (minutes) => {
+            if (!minutes || isNaN(minutes) || minutes <= 0) {
+                showStatus('Please enter a valid number of minutes', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${config.API_BASE_URL}/api/index`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'snoozeNotification',
+                        
+                        notificationId: notificationId,
+                        minutes: parseInt(minutes)
+                    })
+                });
                 
-                notificationId: notificationId,
-                minutes: parseInt(minutes)
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showStatus(`Notification snoozed for ${minutes} minutes!`, 'success');
-            refreshNotifications();
-        } else {
-            showStatus(`Failed to snooze notification: ${result.error}`, 'error');
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus(`Notification snoozed for ${minutes} minutes!`, 'success');
+                    refreshNotifications();
+                } else {
+                    showStatus(`Failed to snooze notification: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error snoozing notification:', error);
+                showStatus('Failed to snooze notification.', 'error');
+            }
         }
-    } catch (error) {
-        console.error('Error snoozing notification:', error);
-        showStatus('Failed to snooze notification.', 'error');
-    }
+    });
 }
 
 async function approveWebsiteRequest(requestId) {
@@ -795,67 +809,87 @@ async function denyWebsiteRequest(requestId) {
 }
 
 async function approveUninstallRequest(requestId) {
-    if (!confirm('Are you sure you want to approve this uninstall request? This will permanently remove the client from the user\'s computer.')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                action: 'approveUninstallRequest',
+    showConfirmationModal({
+        title: 'Approve Uninstall Request',
+        message: 'Are you sure you want to approve this uninstall request? This will permanently remove the client from the user\'s computer.',
+        confirmText: 'Approve',
+        cancelText: 'Cancel',
+        dangerMode: true,
+        onConfirm: async () => {
+            try {
+                const response = await fetch(`${config.API_BASE_URL}/api/index`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'approveUninstallRequest',
+                        
+                        requestId: requestId
+                    })
+                });
                 
-                requestId: requestId
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showStatus('Uninstall request approved!', 'success');
-            refreshNotifications();
-        } else {
-            showStatus(`Failed to approve uninstall request: ${result.error}`, 'error');
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('Uninstall request approved!', 'success');
+                    refreshNotifications();
+                } else {
+                    showStatus(`Failed to approve uninstall request: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error approving uninstall request:', error);
+                showStatus('Failed to approve uninstall request.', 'error');
+            }
         }
-    } catch (error) {
-        console.error('Error approving uninstall request:', error);
-        showStatus('Failed to approve uninstall request.', 'error');
-    }
+    });
 }
 
 async function denyUninstallRequest(requestId) {
-    const reason = prompt('Why are you denying this uninstall request?', 'Request denied by administrator');
-    if (!reason) return;
-    
-    try {
-        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                action: 'denyUninstallRequest',
+    showConfirmationModal({
+        title: 'Deny Uninstall Request',
+        message: 'Why are you denying this uninstall request?',
+        confirmText: 'Deny Request',
+        cancelText: 'Cancel',
+        inputType: 'text',
+        inputLabel: 'Reason:',
+        inputPlaceholder: 'Enter reason for denial',
+        inputValue: 'Request denied by administrator',
+        dangerMode: true,
+        onConfirm: async (reason) => {
+            if (!reason) {
+                showStatus('A reason is required to deny the request', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${config.API_BASE_URL}/api/index`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'denyUninstallRequest',
+                        
+                        requestId: requestId,
+                        reason: reason
+                    })
+                });
                 
-                requestId: requestId,
-                reason: reason
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showStatus('Uninstall request denied!', 'success');
-            refreshNotifications();
-        } else {
-            showStatus(`Failed to deny uninstall request: ${result.error}`, 'error');
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('Uninstall request denied!', 'success');
+                    refreshNotifications();
+                } else {
+                    showStatus(`Failed to deny uninstall request: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error denying uninstall request:', error);
+                showStatus('Failed to deny uninstall request.', 'error');
+            }
         }
-    } catch (error) {
-        console.error('Error denying uninstall request:', error);
-        showStatus('Failed to deny uninstall request.', 'error');
-    }
+    });
 }
 
 async function handleUninstallAllClients() {
@@ -1862,7 +1896,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     const resetUserPasswordBtn = document.getElementById('resetUserPassword');
     if (resetUserPasswordBtn) {
-        resetUserPasswordBtn.addEventListener('click', handleResetUserPassword);
+        resetUserPasswordBtn.addEventListener('click', showResetPasswordModal);
     }
     
     const removeUserAccountBtn = document.getElementById('removeUserAccount');
@@ -2989,8 +3023,8 @@ async function loadUsersIntoDropdowns() {
     }
 }
 
-// Handle reset user password
-async function handleResetUserPassword() {
+// Show reset password modal
+function showResetPasswordModal() {
     const userSelect = document.getElementById('resetPasswordUser');
     const userId = userSelect?.value;
     
@@ -3001,54 +3035,69 @@ async function handleResetUserPassword() {
     
     const username = userSelect.options[userSelect.selectedIndex].text.split(' (')[0];
     
-    if (confirm(`Reset password for user "${username}"? A new random password will be generated.`)) {
-        try {
-            showStatus('Resetting user password...', 'info');
-            
-            // Generate new password
-            const newPassword = generateRandomPassword();
-            
-            // Call API to reset password (this would need to be implemented in the API)
-            const result = await apiCall('resetUserPassword', {
-                userId: userId,
-                newPassword: newPassword
+    // Show confirmation modal
+    showConfirmationModal({
+        title: 'Reset User Password',
+        message: `Reset password for user "${username}"? A new random password will be generated.`,
+        confirmText: 'Reset Password',
+        cancelText: 'Cancel',
+        onConfirm: () => {
+            handleResetUserPassword(userId, username);
+        }
+    });
+}
+
+// Handle reset user password
+async function handleResetUserPassword(userId, username) {
+    try {
+        showStatus('Resetting user password...', 'info');
+        
+        // Generate new password
+        const newPassword = generateRandomPassword();
+        
+        // Call API to reset password (this would need to be implemented in the API)
+        const result = await apiCall('resetUserPassword', {
+            userId: userId,
+            newPassword: newPassword
+        });
+        
+        if (result && result.success) {
+            // Show password in styled modal
+            showPasswordModal('Password Reset Successfully', {
+                username: username,
+                password: newPassword,
+                message: 'Password has been reset for the following user:'
             });
             
-            if (result && result.success) {
-                // Show password in styled modal
-                showPasswordModal('Password Reset Successfully', {
-                    username: username,
-                    password: newPassword,
-                    message: 'Password has been reset for the following user:'
-                });
-                
-                // Clear any existing result display
-                const resultElement = document.getElementById('resetPasswordResult');
-                if (resultElement) {
-                    resultElement.innerHTML = '';
-                }
-                
-                // Reset the dropdown
-                userSelect.value = '';
-                
-                showStatus('Password reset successfully!', 'success');
-            } else {
-                const errorMessage = result ? result.message : 'Failed to reset password';
-                showStatus(`Failed to reset password: ${errorMessage}`, 'error');
-                
-                const resultElement = document.getElementById('resetPasswordResult');
-                if (resultElement) {
-                    resultElement.innerHTML = `<div class="error-message">${escapeHtml(errorMessage)}</div>`;
-                }
+            // Clear any existing result display
+            const resultElement = document.getElementById('resetPasswordResult');
+            if (resultElement) {
+                resultElement.innerHTML = '';
             }
-        } catch (error) {
-            console.error('Error resetting password:', error);
-            showStatus('Failed to reset password. Please check console for details.', 'error');
+            
+            // Reset the dropdown
+            const userSelect = document.getElementById('resetPasswordUser');
+            if (userSelect) {
+                userSelect.value = '';
+            }
+            
+            showStatus('Password reset successfully!', 'success');
+        } else {
+            const errorMessage = result ? result.message : 'Failed to reset password';
+            showStatus(`Failed to reset password: ${errorMessage}`, 'error');
             
             const resultElement = document.getElementById('resetPasswordResult');
             if (resultElement) {
-                resultElement.innerHTML = `<div class="error-message">Error: ${escapeHtml(error.message)}</div>`;
+                resultElement.innerHTML = `<div class="error-message">${escapeHtml(errorMessage)}</div>`;
             }
+        }
+    } catch (error) {
+        console.error('Error resetting password:', error);
+        showStatus('Failed to reset password. Please check console for details.', 'error');
+        
+        const resultElement = document.getElementById('resetPasswordResult');
+        if (resultElement) {
+            resultElement.innerHTML = `<div class="error-message">Error: ${escapeHtml(error.message)}</div>`;
         }
     }
 }
