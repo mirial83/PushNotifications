@@ -601,6 +601,98 @@ class PushNotificationsInstaller:
             return Path.home() / "PushNotifications"
         else:
             return Path.home() / "PushNotifications"
+    
+    def validate_installation_key(self):
+        """Prompt for and validate installation key"""
+        print("\nInstallation Key Required")
+        print("=" * 50)
+        print("To install PushNotifications, you need a valid installation key.")
+        print("If you don't have one, please contact your administrator or")
+        print("generate one from the web interface.")
+        print()
+        
+        max_attempts = 3
+        attempt = 1
+        
+        while attempt <= max_attempts:
+            if GUI_AVAILABLE:
+                try:
+                    root = tk.Tk()
+                    root.withdraw()
+                    installation_key = simpledialog.askstring(
+                        "Installation Key Required",
+                        f"Please enter your installation key:\n\n(Attempt {attempt} of {max_attempts})",
+                        show='*'  # Hide the key as it's typed
+                    )
+                    root.destroy()
+                    
+                    if installation_key is None:  # User cancelled
+                        print("Installation cancelled by user.")
+                        return False
+                        
+                except Exception:
+                    # Fallback to console input
+                    installation_key = input(f"Enter installation key (attempt {attempt}/{max_attempts}): ").strip()
+            else:
+                # Console-only input
+                installation_key = input(f"Enter installation key (attempt {attempt}/{max_attempts}): ").strip()
+            
+            if not installation_key:
+                print("Installation key cannot be empty.")
+                attempt += 1
+                continue
+                
+            print("Validating installation key...")
+            
+            try:
+                # Call API to validate the installation key
+                data = {
+                    'action': 'validateInstallationKey',
+                    'installationKey': installation_key
+                }
+                
+                response = requests.post(f"{self.gas_script_url}/api/index", json=data, timeout=30)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    
+                    if result.get('success'):
+                        user_info = result.get('user', {})
+                        print(f"✓ Installation key validated successfully!")
+                        print(f"  User: {user_info.get('username', 'Unknown')}")
+                        print(f"  Role: {user_info.get('role', 'Unknown')}")
+                        print()
+                        return True
+                    else:
+                        error_msg = result.get('message', 'Invalid installation key')
+                        print(f"✗ {error_msg}")
+                        
+                        if 'expired' in error_msg.lower():
+                            print("  Please generate a new installation key from the web interface.")
+                        elif 'used' in error_msg.lower():
+                            print("  This installation key has already been used.")
+                            print("  Please generate a new installation key.")
+                        else:
+                            print("  Please check your installation key and try again.")
+                else:
+                    print(f"✗ Server error: HTTP {response.status_code}")
+                    print("  Unable to validate installation key. Please try again later.")
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"✗ Network error: {e}")
+                print("  Please check your internet connection and try again.")
+            except Exception as e:
+                print(f"✗ Validation error: {e}")
+                print("  Please try again.")
+            
+            attempt += 1
+            if attempt <= max_attempts:
+                print(f"\nPlease try again ({max_attempts - attempt + 1} attempts remaining)...")
+                print()
+        
+        print("\n✗ Installation key validation failed after maximum attempts.")
+        print("Please contact your administrator for assistance.")
+        return False
 
     def install_dependencies(self):
         """Install required Python dependencies"""
@@ -1391,6 +1483,10 @@ To uninstall:
         
     def run_fresh_install(self):
         """Run fresh installation process"""
+        # Validate installation key before proceeding
+        if not self.validate_installation_key():
+            return False
+        
         # Get installation directory
         install_dir = self.get_install_directory()
         install_dir.mkdir(parents=True, exist_ok=True)
