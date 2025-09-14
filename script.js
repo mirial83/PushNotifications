@@ -169,6 +169,15 @@ function initializeAdmin() {
     
     // Setup admin panel
     setupAdminPanel();
+    
+    // If this is the standalone account-admin page, load dropdowns directly
+    if (window.location.pathname.endsWith('account-admin.html')) {
+        console.log('Standalone account-admin page detected, loading user dropdowns');
+        // Add a small delay to ensure DOM is fully loaded
+        setTimeout(() => {
+            loadUsersIntoDropdowns();
+        }, 500);
+    }
 }
 
 // Session validation
