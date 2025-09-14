@@ -318,10 +318,7 @@ class DatabaseOperations {
 
       await this.connect();
       
-      // First, try to sync new versions from external sources
-      await this.syncVersionHistory();
-      
-      // Then fetch from database
+      // Just fetch from database - don't auto-sync (use syncAllCommits action instead)
       const versions = await this.db.collection('versionHistory')
         .find({})
         .sort({ versionNumber: -1 }) // Sort by version number descending (newest first)
@@ -378,17 +375,87 @@ class DatabaseOperations {
 
   async fetchGitHubCommits() {
     try {
-      const response = await fetch('https://api.github.com/repos/mirial83/PushNotifications/commits?per_page=100');
-      if (!response.ok) {
-        throw new Error(`GitHub API error: ${response.status}`);
+      // Check for GitHub token (optional for public repos, but recommended for higher rate limits)
+      const githubToken = process.env.GITHUB_TOKEN;
+      
+      const headers = {
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'PushNotifications-API'
+      };
+      
+      if (githubToken) {
+        headers['Authorization'] = `Bearer ${githubToken}`;
       }
       
-      const commits = await response.json();
+      // Fetch ALL commits using pagination
+      const allCommits = [];
+      let page = 1;
+      const perPage = 100;
+      let hasMorePages = true;
       
-      // Reverse the commits array so oldest is first, then map with proper versioning
-      const reversedCommits = commits.reverse();
+      console.log('🚀 Fetching ALL GitHub commits with comprehensive pagination...');
       
-      return reversedCommits.map((commit, index) => {
+      while (hasMorePages && page <= 50) { // Increased limit to 50 pages (5000 commits max)
+        const apiUrl = `https://api.github.com/repos/mirial83/PushNotifications/commits?per_page=${perPage}&page=${page}`;
+        
+        console.log(`📄 Fetching commits page ${page}...`);
+        const response = await fetch(apiUrl, { headers });
+        
+        if (!response.ok) {
+          console.log(`❌ GitHub API error on page ${page}: ${response.status} - ${response.statusText}`);
+          if (response.status === 404) {
+            // Repo not found or no more pages
+            hasMorePages = false;
+            break;
+          } else if (response.status === 403) {
+            // Rate limited, wait and try again
+            console.log('⏱️ Rate limited, waiting 60 seconds...');
+            await new Promise(resolve => setTimeout(resolve, 60000));
+            continue;
+          } else {
+            throw new Error(`GitHub API error: ${response.status} - ${response.statusText}`);
+          }
+        }
+        
+        const commits = await response.json();
+        
+        if (!commits || commits.length === 0) {
+          console.log(`📄 Page ${page} returned no commits, stopping pagination`);
+          hasMorePages = false;
+          break;
+        }
+        
+        allCommits.push(...commits);
+        
+        // Check if we got less than the requested amount (indicates last page)
+        if (commits.length < perPage) {
+          console.log(`📄 Page ${page} returned ${commits.length} commits (less than ${perPage}), this is the last page`);
+          hasMorePages = false;
+        } else {
+          page++;
+        }
+        
+        console.log(`   ✅ Got ${commits.length} commits (total so far: ${allCommits.length})`);
+        
+        // Add delay between pages to avoid rate limiting
+        if (page <= 50) {
+          await new Promise(resolve => setTimeout(resolve, 500)); // Shorter delay for commits
+        }
+      }
+      
+      if (allCommits.length === 0) {
+        console.log('❌ No GitHub commits found at all');
+        return null;
+      }
+      
+      console.log(`📦 Total commits fetched from GitHub: ${allCommits.length}`);
+      
+      // Sort commits by date (oldest first) for proper version numbering
+      const sortedCommits = allCommits.sort((a, b) => new Date(a.commit.committer.date) - new Date(b.commit.committer.date));
+      
+      // Map commits to our format with proper versioning
+      const formattedCommits = sortedCommits.map((commit, index) => {
         // Calculate version number: start at 1.0.0 and increment
         const major = 1;
         const minor = Math.floor(index / 10);
@@ -405,9 +472,15 @@ class DatabaseOperations {
           isCurrent: false, // Will be set later in getVersionHistory
           source: 'github-commits'
         };
-      }).reverse(); // Reverse back so newest is first for display
+      });
+      
+      // Return sorted by date (newest first) for display
+      console.log(`📅 Commit date range: ${formattedCommits[0]?.date} to ${formattedCommits[formattedCommits.length - 1]?.date}`);
+      return formattedCommits.reverse();
+      
     } catch (error) {
-      console.log('GitHub commits fetch failed:', error.message);
+      console.log('❌ GitHub commits fetch failed:', error.message);
+      console.log('Stack trace:', error.stack);
       return null;
     }
   }
