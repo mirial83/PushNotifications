@@ -1867,7 +1867,7 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
 
 /* Modal Button Styles */
 .btn-copy, .btn-close, .modal button {
-    background: #28a745 !important;
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%) !important;
     color: white !important;
     border: none !important;
     padding: 12px 24px !important;
@@ -1876,28 +1876,18 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     font-size: 16pt !important;
     font-weight: bold !important;
     font-family: Arial, sans-serif !important;
-    transition: background-color 0.2s !important;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.15s ease-in-out !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
-.btn-copy:hover {
-    background: #218838 !important;
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3) !important;
-    transform: translateY(-1px) !important;
-}
-
-.btn-close {
-    background: #6c757d !important;
-}
-
-.btn-close:hover {
-    background: #545b62 !important;
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3) !important;
-    transform: translateY(-1px) !important;
+.btn-copy:hover, .btn-close:hover, .modal button:hover {
+    background: linear-gradient(135deg, #1a5e6b 0%, #3d1538 100%) !important;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4) !important;
+    transform: translateY(-2px) !important;
 }
 
 .btn-small {
-    background: #4a1a4a !important;
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%) !important;
     color: white !important;
     border: none !important;
     padding: 10px 20px !important;
@@ -1907,13 +1897,13 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     font-weight: bold !important;
     font-family: Arial, sans-serif !important;
     transition: all 0.15s ease-in-out !important;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
 .btn-small:hover {
-    background: #3d1538 !important;
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3) !important;
-    transform: translateY(-1px) !important;
+    background: linear-gradient(135deg, #1a5e6b 0%, #3d1538 100%) !important;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4) !important;
+    transform: translateY(-2px) !important;
 }
 
 /* Security Key Modal Specific Styles */
