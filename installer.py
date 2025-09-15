@@ -1325,10 +1325,11 @@ if __name__ == "__main__":
         with open(client_path, 'w', encoding='utf-8') as f:
             f.write(client_script)
         
-        # Create batch wrapper to run Python script invisibly
+        # Create batch wrapper to run Python script invisibly with proper process name
         batch_wrapper = f'''@echo off
 REM PushNotifications Client Launcher
 cd /d "{self.install_path}"
+title Push Notifications
 pythonw.exe "{client_path}" %*
 '''
         
@@ -1339,7 +1340,7 @@ pythonw.exe "{client_path}" %*
         # Create executable wrapper (simulates .exe functionality)
         exe_wrapper_script = f'''
 #!/usr/bin/env python3
-# Client.exe Wrapper - Simulates Windows EXE behavior
+# Push Notifications Client - Windows Service
 import subprocess
 import sys
 import os
@@ -1348,6 +1349,13 @@ from pathlib import Path
 if __name__ == "__main__":
     script_dir = Path(__file__).parent
     client_script = script_dir / "Client.py"
+    
+    # Set process title for Task Manager
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetConsoleTitleW("Push Notifications")
+    except:
+        pass
     
     # Run with hidden window on Windows
     if os.name == "nt":
@@ -1982,7 +1990,19 @@ class PushNotificationsClient:
                 image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
                 dc = ImageDraw.Draw(image)
                 dc.ellipse([10, 10, width-10, height-10], fill='#007bff')
-                dc.text((width//2-8, height//2-8), "P", fill='white', font_size=24)
+                # Draw "PN" text for "Push Notifications"
+                try:
+                    from PIL import ImageFont
+                    font = ImageFont.load_default()
+                    bbox = font.getbbox("PN")
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    x = (width - text_width) // 2
+                    y = (height - text_height) // 2
+                    dc.text((x, y), "PN", fill='white', font=font)
+                except:
+                    # Fallback if font loading fails
+                    dc.text((width//2-10, height//2-8), "PN", fill='white')
                 return image
             
             menu = pystray.Menu(
