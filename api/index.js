@@ -3224,6 +3224,48 @@ export default async function handler(req, res) {
         );
         break;
 
+      // Installation Reporting Actions
+      case 'reportInstallation':
+        result = await db.reportInstallation(
+          params.keyId || '',
+          params.macAddress || '',
+          params.installPath || '',
+          params.version || '',
+          params.status || 'completed',
+          params.timestamp || new Date().toISOString(),
+          // Pass any additional parameters as additional data
+          Object.fromEntries(
+            Object.entries(params).filter(([key]) => 
+              !['action', 'keyId', 'macAddress', 'installPath', 'version', 'status', 'timestamp'].includes(key)
+            )
+          )
+        );
+        break;
+
+      case 'getInstallationReports': {
+        const reportsAuthHeader = req.headers.authorization;
+        const reportsToken = reportsAuthHeader && reportsAuthHeader.startsWith('Bearer ')
+          ? reportsAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(reportsToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.getInstallationReports(
+          parseInt(params.limit) || 50,
+          params.macAddress || null
+        );
+        break;
+      }
+
       // MAC Address-based Security Key Management Actions
       case 'createSecurityKeyForMac':
         result = await db.createSecurityKeyForMac(

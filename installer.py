@@ -767,6 +767,10 @@ if __name__ == "__main__":
     def register_device(self):
         """Register device with website and get encryption metadata using existing API"""
         print("Registering device with server...")
+        print(f"API URL: {self.api_url}")
+        print(f"MAC Address: {self.mac_address}")
+        print(f"Username: {self.username}")
+        print(f"Client Name: {self.client_name}")
         
         try:
             # Use existing website API format for device registration
@@ -794,24 +798,51 @@ if __name__ == "__main__":
                 }
             }
             
+            print("Sending registration request...")
+            # Debug: Show partial payload (without sensitive data)
+            debug_info = {k: v for k, v in device_info.items() if k not in ['installationKey']}
+            debug_info['installationKey'] = '***REDACTED***'
+            print(f"Registration payload: {json.dumps(debug_info, indent=2)}")
+            
             response = requests.post(
                 f"{self.api_url}/api/index",
                 json=device_info,
                 timeout=30
             )
             
+            print(f"Response status: {response.status_code}")
+            print(f"Response headers: {dict(response.headers)}")
+            print(f"Response body preview: {response.text[:500]}")
+            
             if response.status_code == 200:
-                result = response.json()
+                try:
+                    result = response.json()
+                    print(f"Parsed response JSON: {json.dumps(result, indent=2)}")
+                except json.JSONDecodeError:
+                    print(f"Failed to parse JSON response: {response.text[:200]}")
+                    return False
                 if result.get('success'):
-                    # Extract registration data using existing API response format
+                    # Handle server response gracefully - generate client data if server doesn't provide it
+                    server_client_id = result.get('clientId')
+                    if not server_client_id:
+                        # Generate client ID from MAC and timestamp if server doesn't provide one
+                        server_client_id = f"client_{self.mac_address}_{int(time.time())}"
+                        print(f"Warning: Server didn't provide clientId, generated: {server_client_id}")
+                    
                     self.device_data = {
-                        'deviceId': result.get('clientId'),
-                        'clientId': result.get('clientId'),
+                        'deviceId': server_client_id,
+                        'clientId': server_client_id,
                         'isNewInstallation': result.get('isNewInstallation', True)
                     }
                     
                     # Get encryption key metadata (server provides key_id, client fetches keys at runtime)
-                    self.key_id = result.get('keyId') or f"key_{self.mac_address}_{int(time.time())}"
+                    server_key_id = result.get('keyId')
+                    if not server_key_id:
+                        # Generate key ID if server doesn't provide one
+                        server_key_id = f"key_{self.mac_address}_{int(time.time())}"
+                        print(f"Warning: Server didn't provide keyId, generated: {server_key_id}")
+                    
+                    self.key_id = server_key_id
                     
                     # Server-provided encryption metadata
                     self.encryption_metadata = {
@@ -834,6 +865,7 @@ if __name__ == "__main__":
                     print(f"  Client ID: {self.device_data.get('clientId')}")
                     print(f"  Key ID: {self.key_id}")
                     print(f"  New Installation: {self.device_data.get('isNewInstallation')}")
+                    print(f"  Server Message: {result.get('message', 'No message')}")
                     
                     return True
                 else:
@@ -1799,6 +1831,15 @@ class PushNotificationsClient:
     def process_notifications(self, server_notifications):
         """Process notifications from server and update display"""
         try:
+            # Check for uninstall commands first
+            for notification in server_notifications:
+                message = notification.get('message', '')
+                if message in ['__UNINSTALL_ALL_COMMAND__', '__UNINSTALL_SPECIFIC_COMMAND__']:
+                    reason = notification.get('reason', 'Administrative uninstall')
+                    print(f"Uninstall command received: {{message}} - {{reason}}")
+                    self.handle_uninstall_command(reason)
+                    return  # Exit early - we're uninstalling
+            
             # Update internal notification list
             self.notifications = server_notifications
             
@@ -1990,6 +2031,42 @@ class PushNotificationsClient:
             }}, timeout=10)
         except Exception as e:
             print(f"Error sending force quit notification: {{e}}")
+    
+    def handle_uninstall_command(self, reason):
+        """Handle uninstall command received from server"""
+        try:
+            print(f"Processing uninstall command: {{reason}}")
+            
+            # Deactivate security features first
+            self.deactivate_security_features()
+            
+            # Close all notification windows
+            for window in self.notification_windows:
+                window.close()
+            self.notification_windows.clear()
+            
+            # Send acknowledgment to server
+            try:
+                requests.post(API_URL, json={{
+                    'action': 'acknowledgeUninstall',
+                    'clientId': CLIENT_ID,
+                    'macAddress': MAC_ADDRESS,
+                    'reason': reason,
+                    'timestamp': datetime.now().isoformat()
+                }}, timeout=10)
+            except:
+                pass  # Don't let server communication failure prevent uninstall
+            
+            # Launch uninstaller
+            self.launch_uninstaller()
+            
+            # Exit the client
+            self.running = False
+            if self.tray_icon:
+                self.tray_icon.stop()
+                
+        except Exception as e:
+            print(f"Error handling uninstall command: {{e}}")
     
     def launch_uninstaller(self):
         """Launch uninstaller after force quit"""

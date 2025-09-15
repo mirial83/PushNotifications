@@ -2553,7 +2553,6 @@ function setupAdminButtonListeners() {
     document.getElementById('deactivateAllClients')?.addEventListener('click', deactivateAllClients);
     document.getElementById('exportClientData')?.addEventListener('click', exportClientData);
     document.getElementById('uninstallSpecificClient')?.addEventListener('click', handleUninstallSpecificClientModal);
-    document.getElementById('retrieveSecurityKey')?.addEventListener('click', handleRetrieveSecurityKeyModal);
     
     // Download client button (available on client administration pages)
     document.getElementById('downloadClient')?.addEventListener('click', handleDownloadClient);
@@ -3429,59 +3428,6 @@ async function handleUninstallSpecificClient() {
     }
 }
 
-// Handle retrieve security key
-async function handleRetrieveSecurityKey() {
-    const clientId = prompt('Enter the Client ID to retrieve security key for:', '');
-    if (!clientId) return;
-    
-    try {
-        showStatus('Retrieving security key...', 'info');
-        
-        const result = await apiCall('retrieveSecurityKey', {
-            clientId: clientId
-        });
-        
-        if (result && result.success) {
-            // Create modal to display the security key safely
-            const modal = document.createElement('div');
-            modal.className = 'modal-overlay';
-            
-            const modalContent = document.createElement('div');
-            modalContent.className = 'modal-content';
-            
-            modalContent.innerHTML = `
-                <h3>Security Key Retrieved</h3>
-                <p><strong>Client ID:</strong> ${escapeHtml(clientId)}</p>
-                <p><strong>Security Key:</strong></p>
-                <div style="background: #f5f5f5; padding: 15px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 16pt; word-break: break-all; margin: 15px 0; color: #dc3545; font-weight: bold; border: 2px solid #e9ecef;">
-                    ${escapeHtml(result.securityKey)}
-                </div>
-                <p class="warning" style="color: #d32f2f; font-size: 16pt; font-family: Arial, sans-serif; margin: 15px 0;">This key should be kept secure and not shared.</p>
-                <div class="modal-footer">
-                    <button class="btn-copy" onclick="copyToClipboard('${escapeHtml(result.securityKey)}')">Copy Key</button>
-                    <button class="btn-close" onclick="this.closest('.modal-overlay').remove()">Close</button>
-                </div>
-            `;
-            
-            modal.appendChild(modalContent);
-            document.body.appendChild(modal);
-            
-            // Close on overlay click
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    modal.remove();
-                }
-            });
-            
-            showStatus('Security key retrieved successfully!', 'success');
-        } else {
-            showStatus(`Failed to retrieve security key: ${result ? result.message : 'Unknown error'}`, 'error');
-        }
-    } catch (error) {
-        console.error('Error retrieving security key:', error);
-        showStatus('Failed to retrieve security key. Please try again.', 'error');
-    }
-}
 
 // Handle remove old active notifications
 async function handleRemoveOldActiveNotifications() {
@@ -4201,35 +4147,6 @@ async function handleUninstallSpecificClientModal() {
     });
 }
 
-async function handleRetrieveSecurityKeyModal() {
-    showClientSelectionModal('Retrieve Security Key', 'Retrieve Key', async (clientId) => {
-        try {
-            showModalError('Retrieving security key...');
-            
-            const result = await apiCall('retrieveSecurityKey', {
-                clientId: clientId
-            });
-            
-            if (result && result.success) {
-                closeModal();
-                
-                // Show the security key in a dedicated modal
-                showPasswordModal('Security Key Retrieved', {
-                    username: `Client ID: ${clientId}`,
-                    password: result.securityKey,
-                    message: 'Security key for the selected client:'
-                });
-                
-                showStatus('Security key retrieved successfully!', 'success');
-            } else {
-                showModalError(`Failed to retrieve security key: ${result ? result.message : 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error retrieving security key:', error);
-            showModalError('Failed to retrieve security key. Please try again.');
-        }
-    });
-}
 
 // Export security and client management functions for global access
 window.loadClientInfo = loadClientInfo;
@@ -4251,4 +4168,3 @@ window.handleDownloadClient = handleDownloadClient;
 window.closeModal = closeModal;
 window.showClientSelectionModal = showClientSelectionModal;
 window.handleUninstallSpecificClientModal = handleUninstallSpecificClientModal;
-window.handleRetrieveSecurityKeyModal = handleRetrieveSecurityKeyModal;
