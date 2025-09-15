@@ -948,11 +948,21 @@ if __name__ == "__main__":
                 
                 # Method 1: Try PowerShell Start-Process with -Verb RunAs (most reliable on Windows 10)
                 try:
-                    # Escape arguments properly for PowerShell
-                    script_path = sys.argv[0].replace('"', '`"')
-                    args = ' '.join([f'\"{arg}\"' for arg in sys.argv[1:]]) if len(sys.argv) > 1 else ''
+                    # Build PowerShell command with proper escaping
+                    script_path = os.path.abspath(sys.argv[0])
                     
-                    powershell_cmd = f'Start-Process -FilePath \"{sys.executable}\" -ArgumentList \"\"{script_path}\" {args}\" -Verb RunAs -WindowStyle Hidden'
+                    # Create argument list for PowerShell
+                    if len(sys.argv) > 1:
+                        # Escape each argument properly
+                        escaped_args = []
+                        escaped_args.append(f"'{script_path}'")
+                        for arg in sys.argv[1:]:
+                            escaped_args.append(f"'{arg}'")
+                        arg_list = ', '.join(escaped_args)
+                    else:
+                        arg_list = f"'{script_path}'"
+                    
+                    powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList {arg_list} -Verb RunAs'
                     
                     result = subprocess.run([
                         'powershell.exe', '-Command', powershell_cmd
