@@ -1373,12 +1373,20 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         try:
             import win32security
             import ntsecuritycon
+            import win32api
             
-            # Get current user SID
-            user_sid = win32security.GetTokenInformation(
-                win32security.GetCurrentProcessToken(),
-                win32security.TokenUser
-            )[0]
+            # Get current user SID - use GetCurrentProcess instead
+            try:
+                # Try the newer API first
+                token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32security.TOKEN_QUERY)
+                user_sid = win32security.GetTokenInformation(token, win32security.TokenUser)[0]
+                win32api.CloseHandle(token)
+            except AttributeError:
+                # Fallback for older pywin32 versions
+                import win32process
+                token = win32security.OpenProcessToken(win32process.GetCurrentProcess(), win32security.TOKEN_QUERY)
+                user_sid = win32security.GetTokenInformation(token, win32security.TokenUser)[0]
+                win32api.CloseHandle(token)
             
             # Create DACL that allows read/write but DENIES deletion
             dacl = win32security.ACL()
@@ -2886,6 +2894,7 @@ Embedded within installer - requests approval from website
 import os
 import sys
 import json
+import time
 import shutil
 import subprocess
 import winreg
@@ -2898,7 +2907,7 @@ except ImportError:
     subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'requests'])
     import requests
 
-API_URL = "{self.api_url}"
+API_URL = "{self.api_url}/api/index"
 MAC_ADDRESS = "{self.mac_address}"
 CLIENT_ID = "{self.device_data.get('clientId')}"
 KEY_ID = "{self.key_id}"
