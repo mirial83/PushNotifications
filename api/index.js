@@ -1859,7 +1859,8 @@ class DatabaseOperations {
           installationCount: 1,
           createdAt: now,
           lastCheckin: now,
-          platform
+          platform,
+          isActiveRegistration: true
         };
         await this.db.collection('macClients').insertOne(macClient);
 
@@ -2025,9 +2026,9 @@ class DatabaseOperations {
 
       await this.connect();
       
-      // Get all MAC clients with their active client details
+      // Get only MAC clients with active registrations
       const macClients = await this.db.collection('macClients')
-        .find({})
+        .find({ isActiveRegistration: { $ne: false } }) // Only get active registrations
         .sort({ lastCheckin: -1 })
         .toArray();
 
@@ -2160,6 +2161,62 @@ class DatabaseOperations {
       return {
         success: true,
         message: 'Client deactivated successfully',
+        deactivated: result.modifiedCount > 0
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async deactivateMacClient(macAddress, reason = 'Manual deactivation') {
+    try {
+      if (this.usesFallback) {
+        const clientIndex = fallbackStorage.clients.findIndex(c => c.macAddress === macAddress);
+        if (clientIndex >= 0) {
+          fallbackStorage.clients.splice(clientIndex, 1);
+        }
+        return { success: true, message: 'MAC client deactivated in memory' };
+      }
+
+      await this.connect();
+      const now = new Date();
+
+      // Find the MAC client record
+      const macClient = await this.db.collection('macClients').findOne({ macAddress });
+      if (!macClient) {
+        return { success: false, message: 'MAC client not found' };
+      }
+
+      // Mark the MAC client registration as inactive
+      const result = await this.db.collection('macClients').updateOne(
+        { macAddress },
+        {
+          $set: {
+            isActiveRegistration: false,
+            deactivatedAt: now,
+            deactivationReason: reason
+          }
+        }
+      );
+
+      // Also deactivate any active client history record for this MAC address
+      if (macClient.activeClientId) {
+        await this.db.collection('clientHistory').updateOne(
+          { clientId: macClient.activeClientId, isActive: true },
+          {
+            $set: {
+              isActive: false,
+              deactivatedAt: now,
+              deactivationReason: reason
+            }
+          }
+        );
+      }
+
+      return {
+        success: true,
+        message: `MAC client registration for ${macAddress} deactivated successfully`,
+        macAddress,
         deactivated: result.modifiedCount > 0
       };
     } catch (error) {
@@ -3822,6 +3879,13 @@ export default async function handler(req, res) {
       case 'deactivateClient':
         result = await db.deactivateClient(
           params.clientId || '',
+          params.reason || 'Manual deactivation'
+        );
+        break;
+
+      case 'deactivateMacClient':
+        result = await db.deactivateMacClient(
+          params.macAddress || '',
           params.reason || 'Manual deactivation'
         );
         break;
