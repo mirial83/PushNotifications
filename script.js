@@ -2417,6 +2417,9 @@ async function loadUserInstallationKey() {
     if (downloadSection) {
         downloadSection.style.display = 'block';
     }
+    
+    // Load and update the version information
+    await loadAndUpdateVersion();
 }
 
 async function handleDownloadClient() {
@@ -2519,6 +2522,42 @@ async function copyToClipboard(text) {
         if (keyDisplay) {
             keyDisplay.select();
         }
+    }
+}
+
+// Function to load and update version information on download buttons
+async function loadAndUpdateVersion() {
+    try {
+        const result = await apiCall('get_version', {}, false); // No auth required for version check
+        
+        if (result && result.success && result.currentVersion) {
+            const currentVersion = result.currentVersion;
+            console.log('Loaded current version:', currentVersion);
+            
+            // Update all download buttons with version text
+            const versionTextElements = document.querySelectorAll('.version-text');
+            versionTextElements.forEach(element => {
+                element.textContent = `v${currentVersion}`;
+            });
+            
+            // Update version badges if they exist
+            const versionBadges = document.querySelectorAll('.version-badge');
+            versionBadges.forEach(badge => {
+                badge.textContent = `Current Version: ${currentVersion}`;
+            });
+            
+            console.log(`Updated ${versionTextElements.length} version text elements and ${versionBadges.length} version badges`);
+        } else {
+            console.warn('Failed to load version info:', result);
+            // Fall back to a default version if API call fails
+            const versionTextElements = document.querySelectorAll('.version-text');
+            versionTextElements.forEach(element => {
+                element.textContent = 'v2.1.0'; // Keep existing fallback
+            });
+        }
+    } catch (error) {
+        console.error('Error loading version information:', error);
+        // Fall back to existing version on error
     }
 }
 
