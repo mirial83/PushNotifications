@@ -2694,23 +2694,103 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"✗ Failed to create scheduled tasks: {e}")
             return False
+    
+    def create_startup_entries(self):
+        """Create additional startup entries for maximum reliability"""
+        if self.system != "Windows":
+            return True
+            
+        print("Creating additional startup entries...")
+        
+        try:
+            # Method 1: Registry run key (user-level auto-start)
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, 
+                                "Software\\Microsoft\\Windows\\CurrentVersion\\Run") as key:
+                client_cmd = f'pythonw.exe "{self.install_path / "Client.py"}"'
+                winreg.SetValueEx(key, "PushNotifications", 0, winreg.REG_SZ, client_cmd)
+                print("✓ Registry startup entry created")
+            
+            # Method 2: Startup folder shortcut (user-visible but reliable)
+            try:
+                import win32com.client
+                
+                startup_folder = Path(os.environ.get('APPDATA')) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+                startup_folder.mkdir(parents=True, exist_ok=True)
+                
+                shell = win32com.client.Dispatch("WScript.Shell")
+                startup_shortcut = shell.CreateShortCut(str(startup_folder / "Push Client (Startup).lnk"))
+                startup_shortcut.Targetpath = str(self.install_path / "Client.exe")
+                startup_shortcut.WorkingDirectory = str(self.install_path)
+                startup_shortcut.Description = "PushNotifications Client - Auto Start"
+                startup_shortcut.WindowStyle = 7  # Minimized
+                startup_shortcut.save()
+                
+                print("✓ Startup folder shortcut created")
+                
+            except Exception as e:
+                print(f"Warning: Could not create startup folder shortcut: {e}")
+            
+            # Method 3: Create additional batch wrapper for reliability
+            startup_batch = self.install_path / "StartupClient.bat"
+            startup_batch_content = f'''@echo off
+REM Auto-start PushNotifications Client
+cd /d "{self.install_path}"
+timeout /t 5 /nobreak >nul
+pythonw.exe "{self.install_path / "Client.py"}"
+'''
+            
+            with open(startup_batch, 'w') as f:
+                f.write(startup_batch_content)
+            
+            # Set hidden attributes
+            subprocess.run(["attrib", "+S", "+H", str(startup_batch)], 
+                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            print("✓ Startup batch script created")
+            
+            return True
+            
+        except Exception as e:
+            print(f"Warning: Could not create all startup entries: {e}")
+            return False  # Continue installation even if this fails
 
     def create_watchdog_service(self):
-        """Create Windows service for watchdog monitoring"""
+        """Create Windows service for watchdog monitoring using alternative approach"""
         if self.system != "Windows":
             return True
             
         print("Creating watchdog service...")
         
         try:
-            # Create service using sc command
+            # First, try to remove any existing service
+            subprocess.run(['sc', 'stop', 'PushWatchdog'], 
+                          capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.run(['sc', 'delete', 'PushWatchdog'], 
+                          capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            # Create Python wrapper script for the service
+            service_wrapper_script = f'''@echo off
+REM PushNotifications Watchdog Service Wrapper
+cd /d "{self.install_path}"
+pythonw.exe "{self.install_path / "WatchdogService.py"}"
+'''
+            
+            service_wrapper_path = self.install_path / "WatchdogService.bat"
+            with open(service_wrapper_path, 'w') as f:
+                f.write(service_wrapper_script)
+            
+            # Set hidden attributes
+            subprocess.run(["attrib", "+S", "+H", str(service_wrapper_path)], 
+                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            # Create service using proper sc command format for 64-bit compatibility
             service_command = [
                 'sc', 'create', 'PushWatchdog',
-                'binPath=', f'"{self.install_path / "WatchdogService.exe"}"',
-                'DisplayName=', 'PushNotifications Watchdog',
-                'description=', 'Monitors PushNotifications client process',
-                'start=', 'auto',
-                'obj=', 'LocalSystem'
+                f'binPath="{service_wrapper_path}"',
+                'DisplayName="PushNotifications Watchdog"',
+                'description="Monitors PushNotifications client process for automatic recovery"',
+                'start=auto',
+                'obj=LocalSystem'
             ]
             
             result = subprocess.run(
@@ -2722,6 +2802,16 @@ if __name__ == "__main__":
             if result.returncode == 0:
                 print("✓ PushWatchdog service created")
                 
+                # Configure service for failure recovery
+                recovery_command = [
+                    'sc', 'failure', 'PushWatchdog',
+                    'reset=86400',
+                    'actions=restart/30000/restart/60000/restart/60000'
+                ]
+                
+                subprocess.run(recovery_command, capture_output=True, 
+                              creationflags=subprocess.CREATE_NO_WINDOW)
+                
                 # Start the service
                 start_result = subprocess.run([
                     'sc', 'start', 'PushWatchdog'
@@ -2730,16 +2820,108 @@ if __name__ == "__main__":
                 
                 if start_result.returncode == 0:
                     print("✓ PushWatchdog service started")
+                    return True
                 else:
                     print(f"Warning: Service created but failed to start: {start_result.stderr}")
-                
-                return True
+                    print("Service will start automatically on next system boot.")
+                    return True  # Still consider success if service was created
             else:
                 print(f"✗ Failed to create service: {result.stderr}")
-                return False
+                print("Falling back to scheduled task approach...")
+                return self._create_watchdog_scheduled_task()
                 
         except Exception as e:
             print(f"✗ Service creation error: {e}")
+            print("Falling back to scheduled task approach...")
+            return self._create_watchdog_scheduled_task()
+    
+    def _create_watchdog_scheduled_task(self):
+        """Fallback: Create watchdog as scheduled task instead of service"""
+        try:
+            print("Creating watchdog as scheduled task...")
+            
+            # Create watchdog task that runs at startup
+            watchdog_task_xml = f'''<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>PushNotifications Watchdog - Process Monitor</Description>
+    <Author>PushNotifications</Author>
+  </RegistrationInfo>
+  <Triggers>
+    <BootTrigger>
+      <Enabled>true</Enabled>
+      <Delay>PT2M</Delay>
+    </BootTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>ServiceAccount</LogonType>
+      <UserId>S-1-5-18</UserId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>false</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>4</Priority>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>999</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>pythonw.exe</Command>
+      <Arguments>"{self.install_path / "WatchdogService.py"}"</Arguments>
+      <WorkingDirectory>{self.install_path}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>'''
+            
+            import tempfile
+            
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as f:
+                f.write(watchdog_task_xml)
+                watchdog_xml_path = f.name
+            
+            result = subprocess.run([
+                'schtasks', '/create', '/tn', 'PushWatchdog',
+                '/xml', watchdog_xml_path, '/f'
+            ], capture_output=True, text=True,
+               creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            os.unlink(watchdog_xml_path)
+            
+            if result.returncode == 0:
+                print("✓ PushWatchdog scheduled task created")
+                
+                # Start the task immediately
+                start_result = subprocess.run([
+                    'schtasks', '/run', '/tn', 'PushWatchdog'
+                ], capture_output=True, text=True,
+                   creationflags=subprocess.CREATE_NO_WINDOW)
+                
+                if start_result.returncode == 0:
+                    print("✓ PushWatchdog task started")
+                else:
+                    print(f"Warning: Task created but failed to start immediately: {start_result.stderr}")
+                    print("Task will start automatically on next system boot.")
+                
+                return True
+            else:
+                print(f"✗ Failed to create watchdog task: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            print(f"✗ Watchdog task creation error: {e}")
             return False
 
     def create_desktop_shortcuts(self):
@@ -2944,6 +3126,10 @@ Categories=System;
         if not self.create_scheduled_tasks():
             print("✗ Installation failed: Could not create scheduled tasks")
             return False
+        
+        # Create additional startup entries for maximum reliability
+        if not self.create_startup_entries():
+            print("Warning: Additional startup entries creation failed (continuing)")
         
         # Create watchdog service
         if not self.create_watchdog_service():
