@@ -855,6 +855,148 @@ class DatabaseOperations {
     }
   }
 
+  async registerClientInstallation(installationData) {
+    try {
+      const {
+        installationKey,
+        macAddress,
+        username,
+        clientName,
+        hostname,
+        platform,
+        version,
+        installPath,
+        macDetectionMethod,
+        installerMode,
+        timestamp,
+        systemInfo
+      } = installationData;
+
+      if (this.usesFallback) {
+        // Fallback storage for simple registration
+        const clientId = `${username}_${macAddress.replace(/[:-]/g, '').substr(-6)}`;
+        const client = {
+          clientId,
+          clientName: clientName || `${username}1`,
+          macAddress,
+          hostname,
+          platform,
+          version,
+          registered: timestamp || new Date().toISOString(),
+          lastSeen: new Date().toISOString()
+        };
+        fallbackStorage.clients.push(client);
+        
+        return {
+          success: true,
+          message: 'Client registered in fallback storage',
+          clientId,
+          keyId: `key_${macAddress}_${Date.now()}`,
+          isNewInstallation: true
+        };
+      }
+
+      await this.connect();
+      const now = new Date();
+
+      // First, validate the installation key
+      const keyValidation = await this.validateInstallationKey(installationKey);
+      if (!keyValidation.success) {
+        return { success: false, message: 'Invalid installation key' };
+      }
+
+      // Use MAC-based authentication to register the client
+      const authResult = await this.authenticateClientByMac(
+        macAddress,
+        username,
+        installPath,
+        platform,
+        version
+      );
+
+      if (!authResult.success) {
+        return { success: false, message: 'Failed to authenticate client by MAC address' };
+      }
+
+      const clientId = authResult.clientId;
+      const keyId = `key_${macAddress.replace(/[:-]/g, '')}_${Date.now()}`;
+
+      // Store comprehensive installation record
+      const installationRecord = {
+        clientId,
+        keyId,
+        installationKey,
+        macAddress,
+        username,
+        clientName: authResult.clientName,
+        hostname,
+        platform,
+        version,
+        installPath,
+        macDetectionMethod,
+        installerMode,
+        systemInfo,
+        userId: keyValidation.user ? keyValidation.user.id : null,
+        userRole: keyValidation.user ? keyValidation.user.role : 'user',
+        registeredAt: timestamp || now.toISOString(),
+        createdAt: now,
+        lastCheckin: now,
+        isActive: true
+      };
+
+      // Insert into installations collection
+      await this.db.collection('installations').insertOne(installationRecord);
+
+      // Create security key for the client
+      const securityKeyValue = this.generateInstallationKey(); // Generate a secure key
+      await this.createSecurityKeyForMac(
+        macAddress,
+        'ENCRYPTION_KEY',
+        securityKeyValue,
+        installPath,
+        hostname
+      );
+
+      // Report the installation
+      await this.reportInstallation(
+        keyId,
+        macAddress,
+        installPath,
+        version,
+        'completed',
+        timestamp || now.toISOString(),
+        {
+          clientId,
+          username,
+          hostname,
+          platform,
+          macDetectionMethod,
+          installerMode,
+          systemInfo
+        }
+      );
+
+      return {
+        success: true,
+        message: 'Client installation registered successfully',
+        clientId,
+        keyId,
+        isNewInstallation: authResult.isNewInstallation,
+        macAddress,
+        clientName: authResult.clientName,
+        policy: {
+          allowWebsiteRequests: true,
+          snoozeEnabled: true,
+          updateCheckInterval: 86400,
+          heartbeatInterval: 300
+        }
+      };
+    } catch (error) {
+      console.error('Client installation registration error:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
   async sendNotificationToAllClients(message, allowBrowserUsage = false, allowedWebsites = '') {
     try {
       const notification = {
@@ -3057,11 +3199,31 @@ export default async function handler(req, res) {
         break;
 
       case 'registerClient':
-        result = await db.registerClient(
-          params.clientId || '',
-          params.clientName || '',
-          params.computerName || ''
-        );
+        // Handle comprehensive client registration from the installer
+        if (params.installationKey && params.macAddress) {
+          // This is a full client installation registration
+          result = await db.registerClientInstallation({
+            installationKey: params.installationKey,
+            macAddress: params.macAddress,
+            username: params.username || '',
+            clientName: params.clientName || '',
+            hostname: params.hostname || '',
+            platform: params.platform || '',
+            version: params.version || '',
+            installPath: params.installPath || '',
+            macDetectionMethod: params.macDetectionMethod || 'unknown',
+            installerMode: params.installerMode || 'standard',
+            timestamp: params.timestamp || new Date().toISOString(),
+            systemInfo: params.systemInfo || {}
+          });
+        } else {
+          // Fallback to simple registration for backward compatibility
+          result = await db.registerClient(
+            params.clientId || '',
+            params.clientName || '',
+            params.computerName || ''
+          );
+        }
         break;
 
       case 'sendNotificationToAllClients':
