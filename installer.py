@@ -2121,9 +2121,22 @@ class PushNotificationsClient:
         self.security_active = False
         self.force_quit_detected = False
         
+        # Set proper process title for Task Manager
+        self._set_process_title()
+        
         # Initialize Tkinter root
         self.root = tk.Tk()
         self.root.withdraw()  # Hide main window
+        self.root.title("Push Notifications")
+    
+    def _set_process_title(self):
+        """Set proper process title for Task Manager"""
+        try:
+            import ctypes
+            # Set console window title to show "Push Notifications" in Task Manager
+            ctypes.windll.kernel32.SetConsoleTitleW("Push Notifications")
+        except Exception as e:
+            print(f"Warning: Could not set process title: {{e}}")
         
     def create_tray_icon(self):
         """Create system tray icon with enhanced quick actions menu"""
