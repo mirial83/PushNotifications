@@ -3102,17 +3102,12 @@ pythonw.exe "{self.install_path / "WatchdogService.py"}"
                           check=False, creationflags=subprocess.CREATE_NO_WINDOW)
             
             # Create service using proper sc command format for 64-bit compatibility
-            service_command = [
-                'sc', 'create', 'PushWatchdog',
-                f'binPath="{service_wrapper_path}"',
-                'DisplayName="PushNotifications Watchdog"',
-                'description="Monitors PushNotifications client process for automatic recovery"',
-                'start=auto',
-                'obj=LocalSystem'
-            ]
+            # Use single command string instead of array to avoid path escaping issues
+            service_command_str = f'sc create PushWatchdog binPath= "{service_wrapper_path}" DisplayName= "PushNotifications Watchdog" description= "Monitors PushNotifications client process for automatic recovery" start= auto obj= LocalSystem'
             
             result = subprocess.run(
-                service_command,
+                service_command_str,
+                shell=True,
                 capture_output=True, text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
