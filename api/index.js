@@ -1056,7 +1056,9 @@ class DatabaseOperations {
         reason: reason,
         allowBrowserUsage: false,
         allowedWebsites: '',
-        created: new Date().toISOString()
+        created: new Date().toISOString(),
+        autoExpire: true, // Mark for automatic cleanup
+        expireAfter: new Date(Date.now() + 10 * 60 * 1000) // Auto-expire after 10 minutes
       };
 
       if (this.usesFallback) {
@@ -1066,10 +1068,16 @@ class DatabaseOperations {
         await this.db.collection('notifications').insertOne(uninstallNotification);
       }
 
+      // Schedule automatic cleanup of this command notification after 10 minutes
+      setTimeout(async () => {
+        await this.cleanupExpiredUninstallCommands();
+      }, 10 * 60 * 1000);
+
       return {
         success: true,
         message: `Uninstall command sent to ${clientCount} active client(s)`,
-        clientCount
+        clientCount,
+        notificationId: uninstallNotification.id
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -1136,16 +1144,19 @@ class DatabaseOperations {
       let notifications;
       
       if (this.usesFallback) {
-        // Filter out uninstall requests from regular notifications
+        // Filter out uninstall requests and uninstall commands from regular notifications
         notifications = fallbackStorage.notifications.filter(n => 
-          n.status !== 'Completed' && n.type !== 'uninstall_request'
+          n.status !== 'Completed' && 
+          n.type !== 'uninstall_request' && 
+          n.type !== 'uninstall_command'
         );
       } else {
         await this.connect();
         notifications = await this.db.collection('notifications')
           .find({ 
             status: { $ne: 'Completed' },
-            type: { $ne: 'uninstall_request' }
+            type: { $ne: 'uninstall_request' },
+            type: { $ne: 'uninstall_command' }
           })
           .toArray();
       }
@@ -2724,6 +2735,49 @@ class DatabaseOperations {
 
       return { success: true, message: 'User deactivated successfully' };
     } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async cleanupExpiredUninstallCommands() {
+    try {
+      const now = new Date();
+      let cleanedCount = 0;
+      
+      if (this.usesFallback) {
+        const originalLength = fallbackStorage.notifications.length;
+        fallbackStorage.notifications = fallbackStorage.notifications.filter(n => {
+          // Remove uninstall command notifications that have auto-expire set and are past their expiration
+          if (n.type === 'uninstall_command' && n.autoExpire && n.expireAfter) {
+            const expireDate = new Date(n.expireAfter);
+            if (now > expireDate) {
+              return false; // Remove this notification
+            }
+          }
+          return true; // Keep this notification
+        });
+        cleanedCount = originalLength - fallbackStorage.notifications.length;
+      } else {
+        await this.connect();
+        const result = await this.db.collection('notifications').deleteMany({
+          type: 'uninstall_command',
+          autoExpire: true,
+          expireAfter: { $lt: now }
+        });
+        cleanedCount = result.deletedCount;
+      }
+
+      if (cleanedCount > 0) {
+        console.log(`Cleaned up ${cleanedCount} expired uninstall command notifications`);
+      }
+      
+      return {
+        success: true,
+        message: `Cleaned ${cleanedCount} expired uninstall command notifications`,
+        cleanedCount
+      };
+    } catch (error) {
+      console.error('Error cleaning expired uninstall commands:', error);
       return { success: false, message: error.message };
     }
   }
