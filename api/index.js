@@ -3209,6 +3209,82 @@ class DatabaseOperations {
     return 'PNS_' + Math.random().toString(36).substr(2, 32) + '_' + Date.now().toString(36);
   }
 
+  // Installation Reporting Methods
+  async reportInstallation(keyId, macAddress, installPath, version, status, timestamp, additionalData = {}) {
+    try {
+      const installationReport = {
+        keyId,
+        macAddress,
+        installPath,
+        version,
+        status,
+        timestamp: timestamp || new Date().toISOString(),
+        reportedAt: new Date(),
+        ...additionalData
+      };
+
+      if (this.usesFallback) {
+        // In fallback mode, just log the installation report
+        console.log('Installation report (fallback):', installationReport);
+        return { success: true, message: 'Installation reported in fallback mode' };
+      }
+
+      await this.connect();
+      
+      // Store installation report in database
+      await this.db.collection('installationReports').insertOne(installationReport);
+      
+      return {
+        success: true,
+        message: 'Installation reported successfully',
+        reportId: installationReport._id?.toString()
+      };
+    } catch (error) {
+      console.error('Installation reporting error:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getInstallationReports(limit = 50, macAddress = null) {
+    try {
+      if (this.usesFallback) {
+        return { success: true, data: [] };
+      }
+
+      await this.connect();
+      
+      const query = macAddress ? { macAddress } : {};
+      const reports = await this.db.collection('installationReports')
+        .find(query)
+        .sort({ reportedAt: -1 })
+        .limit(limit)
+        .toArray();
+
+      const processedReports = reports.map(report => ({
+        _id: report._id.toString(),
+        keyId: report.keyId,
+        macAddress: report.macAddress,
+        installPath: report.installPath,
+        version: report.version,
+        status: report.status,
+        timestamp: report.timestamp,
+        reportedAt: report.reportedAt,
+        clientId: report.clientId,
+        username: report.username,
+        hostname: report.hostname,
+        platform: report.platform,
+        macDetectionMethod: report.macDetectionMethod,
+        installerMode: report.installerMode,
+        systemInfo: report.systemInfo
+      }));
+
+      return { success: true, data: processedReports };
+    } catch (error) {
+      console.error('Get installation reports error:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
   async close() {
     if (this.client) {
       await this.client.close();

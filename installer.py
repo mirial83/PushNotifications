@@ -1087,6 +1087,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         """Validate installation key with website API"""
         print("Installation Key Validation")
         print("=" * 50)
+        print(f"API URL: {self.api_url}")
         
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
@@ -1188,15 +1189,34 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             debug_info['installationKey'] = '***REDACTED***'
             print(f"Registration payload: {json.dumps(debug_info, indent=2)}")
             
-            response = requests.post(
-                f"{self.api_url}/api/index",
-                json=device_info,
-                timeout=30
-            )
+            print(f"Making POST request to: {self.api_url}/api/index")
+            print(f"Request timeout: 30 seconds")
+            print(f"Request Content-Type: application/json")
+            
+            try:
+                response = requests.post(
+                    f"{self.api_url}/api/index",
+                    json=device_info,
+                    timeout=30,
+                    headers={'Content-Type': 'application/json'}
+                )
+                print(f"✓ Request completed successfully")
+            except requests.exceptions.ConnectTimeout as e:
+                print(f"✗ Connection timeout: {e}")
+                return False
+            except requests.exceptions.ReadTimeout as e:
+                print(f"✗ Read timeout: {e}")
+                return False
+            except Exception as e:
+                print(f"✗ Request failed with exception: {type(e).__name__}: {e}")
+                return False
             
             print(f"Response status: {response.status_code}")
             print(f"Response headers: {dict(response.headers)}")
-            print(f"Response body preview: {response.text[:500]}")
+            print(f"Response content length: {len(response.text)} characters")
+            print(f"Response body (first 1000 chars): {response.text[:1000]}")
+            if len(response.text) > 1000:
+                print(f"Response body (last 200 chars): ...{response.text[-200:]}")
             
             if response.status_code == 200:
                 try:
