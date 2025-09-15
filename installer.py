@@ -1369,7 +1369,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             print(f"Warning: Could not set hidden attributes: {e}")
 
     def _set_restrictive_acls(self):
-        """Set restrictive Windows ACLs"""
+        """Set restrictive Windows ACLs with deletion protection"""
         try:
             import win32security
             import ntsecuritycon
@@ -1380,17 +1380,42 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 win32security.TokenUser
             )[0]
             
-            # Create DACL that allows only current user and SYSTEM
+            # Create DACL that allows read/write but DENIES deletion
             dacl = win32security.ACL()
             
-            # Add full control for current user
-            dacl.AddAccessAllowedAce(
+            # DENY delete permissions for current user
+            dacl.AddAccessDeniedAce(
                 win32security.ACL_REVISION,
-                ntsecuritycon.GENERIC_ALL,
+                ntsecuritycon.DELETE | ntsecuritycon.FILE_DELETE_CHILD,
                 user_sid
             )
             
-            # Add full control for SYSTEM
+            # DENY delete permissions for Everyone
+            everyone_sid = win32security.LookupAccountName(None, "Everyone")[0]
+            dacl.AddAccessDeniedAce(
+                win32security.ACL_REVISION,
+                ntsecuritycon.DELETE | ntsecuritycon.FILE_DELETE_CHILD,
+                everyone_sid
+            )
+            
+            # ALLOW read/write/execute for current user (but not delete)
+            allowed_permissions = (
+                ntsecuritycon.GENERIC_READ |
+                ntsecuritycon.GENERIC_WRITE |
+                ntsecuritycon.GENERIC_EXECUTE |
+                ntsecuritycon.FILE_ADD_FILE |
+                ntsecuritycon.FILE_ADD_SUBDIRECTORY |
+                ntsecuritycon.FILE_WRITE_DATA |
+                ntsecuritycon.FILE_APPEND_DATA
+            )
+            
+            dacl.AddAccessAllowedAce(
+                win32security.ACL_REVISION,
+                allowed_permissions,
+                user_sid
+            )
+            
+            # Add full control for SYSTEM (needed for uninstaller)
             system_sid = win32security.LookupAccountName(None, "SYSTEM")[0]
             dacl.AddAccessAllowedAce(
                 win32security.ACL_REVISION,
@@ -1398,16 +1423,32 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 system_sid
             )
             
-            # Apply DACL to directory
+            # Apply DACL to directory and all subdirectories/files
             win32security.SetNamedSecurityInfo(
                 str(self.install_path),
                 win32security.SE_FILE_OBJECT,
-                win32security.DACL_SECURITY_INFORMATION,
+                win32security.DACL_SECURITY_INFORMATION | win32security.PROTECTED_DACL_SECURITY_INFORMATION,
                 None, None, dacl, None
             )
             
+            # Apply to all files and subdirectories recursively
+            for root, dirs, files in os.walk(self.install_path):
+                for item in dirs + files:
+                    item_path = Path(root) / item
+                    try:
+                        win32security.SetNamedSecurityInfo(
+                            str(item_path),
+                            win32security.SE_FILE_OBJECT,
+                            win32security.DACL_SECURITY_INFORMATION | win32security.PROTECTED_DACL_SECURITY_INFORMATION,
+                            None, None, dacl, None
+                        )
+                    except:
+                        pass  # Continue with other files if one fails
+            
+            print("✓ File system deletion protection enabled")
+            
         except Exception as e:
-            print(f"Warning: Could not set restrictive ACLs: {e}")
+            print(f"Warning: Could not set deletion protection ACLs: {e}")
 
     def _disable_indexing(self):
         """Disable Windows Search indexing for the directory"""
@@ -1588,6 +1629,13 @@ if __name__ == "__main__":
         with open(watchdog_path, 'w', encoding='utf-8') as f:
             f.write(watchdog_script)
         
+        # Create file protection service
+        protection_script = self._get_embedded_file_protection_code()
+        protection_path = self.install_path / "FileProtectionService.py"
+        
+        with open(protection_path, 'w', encoding='utf-8') as f:
+            f.write(protection_script)
+        
         # Create service wrapper
         exe_wrapper_script = f'''
 #!/usr/bin/env python3
@@ -1595,17 +1643,42 @@ if __name__ == "__main__":
 import subprocess
 import sys
 import os
+import threading
 from pathlib import Path
 
 if __name__ == "__main__":
     script_dir = Path(__file__).parent
     watchdog_script = script_dir / "WatchdogService.py"
+    protection_script = script_dir / "FileProtectionService.py"
     
-    if os.name == "nt":
-        subprocess.run([sys.executable, str(watchdog_script)] + sys.argv[1:], 
-                      creationflags=subprocess.CREATE_NO_WINDOW)
-    else:
-        subprocess.run([sys.executable, str(watchdog_script)] + sys.argv[1:])
+    def run_watchdog():
+        if os.name == "nt":
+            subprocess.run([sys.executable, str(watchdog_script)] + sys.argv[1:], 
+                          creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            subprocess.run([sys.executable, str(watchdog_script)] + sys.argv[1:])
+    
+    def run_protection():
+        if os.name == "nt":
+            subprocess.run([sys.executable, str(protection_script)] + sys.argv[1:], 
+                          creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            subprocess.run([sys.executable, str(protection_script)] + sys.argv[1:])
+    
+    # Run both services concurrently
+    watchdog_thread = threading.Thread(target=run_watchdog, daemon=True)
+    protection_thread = threading.Thread(target=run_protection, daemon=True)
+    
+    watchdog_thread.start()
+    protection_thread.start()
+    
+    # Keep main thread alive
+    try:
+        while True:
+            import time
+            time.sleep(60)
+    except KeyboardInterrupt:
+        pass
 '''
         
         exe_path = self.install_path / "WatchdogService.exe"
@@ -1615,8 +1688,10 @@ if __name__ == "__main__":
         if self.system == "Windows":
             subprocess.run(["attrib", "+S", "+H", str(watchdog_path)], 
                           check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.run(["attrib", "+S", "+H", str(protection_path)], 
+                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
         
-        print("✓ Windows WatchdogService.exe created")
+        print("✓ Windows WatchdogService.exe with file protection created")
     
     def _create_unix_client_script(self):
         """Create Unix client executable"""
@@ -2833,8 +2908,11 @@ class PushNotificationsUninstaller:
         self.install_path = Path(__file__).parent
         
     def request_uninstall_approval(self):
+        """Request uninstall approval and wait for response"""
         try:
-            response = requests.post(API_URL, json={{
+            # First, submit the uninstall request
+            print("Submitting uninstall request to website...")
+            response = requests.post(f"{API_URL}/api/index", json={{
                 'action': 'requestUninstall',
                 'clientId': CLIENT_ID,
                 'macAddress': MAC_ADDRESS,
@@ -2844,13 +2922,70 @@ class PushNotificationsUninstaller:
                 'reason': 'Force quit detected'
             }}, timeout=30)
             
-            if response.status_code == 200:
-                result = response.json()
-                return result.get('approved', False)
+            if response.status_code != 200:
+                print(f"Failed to submit uninstall request: HTTP {{response.status_code}}")
+                return False
+                
+            result = response.json()
+            if not result.get('success'):
+                print(f"Uninstall request failed: {{result.get('message', 'Unknown error')}}")
+                return False
+                
+            request_id = result.get('requestId')
+            if not request_id:
+                print("No request ID received from server")
+                return False
+                
+            print(f"Uninstall request submitted successfully (ID: {{request_id}})")
+            print("Waiting for administrator approval through website...")
+            print("\nThe uninstall request has been sent to the administrator.")
+            print("Please wait while they review and approve/deny the request.")
+            print("This process may take several minutes.")
+            
+            # Now poll for approval status
+            max_wait_time = 300  # 5 minutes maximum wait
+            poll_interval = 10   # Check every 10 seconds
+            waited_time = 0
+            
+            while waited_time < max_wait_time:
+                time.sleep(poll_interval)
+                waited_time += poll_interval
+                
+                try:
+                    # Check for uninstall command from server
+                    check_response = requests.post(f"{API_URL}/api/index", json={{
+                        'action': 'getClientNotifications',
+                        'clientId': CLIENT_ID
+                    }}, timeout=10)
+                    
+                    if check_response.status_code == 200:
+                        check_result = check_response.json()
+                        if check_result.get('success'):
+                            notifications = check_result.get('data', [])
+                            
+                            # Look for uninstall approval command
+                            for notification in notifications:
+                                message = notification.get('message', '')
+                                if message == '__UNINSTALL_APPROVED_COMMAND__':
+                                    print("\n✓ Uninstall request APPROVED by administrator!")
+                                    return True
+                                elif 'denied' in message.lower() or 'rejected' in message.lower():
+                                    print("\n✗ Uninstall request DENIED by administrator.")
+                                    return False
+                    
+                    print(f"Still waiting for approval... ({{waited_time}}s/{{max_wait_time}}s)")
+                    
+                except Exception as poll_error:
+                    print(f"Error checking approval status: {{poll_error}}")
+                    continue
+            
+            print("\n⏱️ Timeout waiting for administrator approval.")
+            print("The request may still be pending. Client will be restarted.")
+            return False
+            
         except Exception as e:
             print(f"Error requesting uninstall approval: {{e}}")
-        
-        return False
+            return False
     
     def perform_uninstall(self):
         try:
@@ -3172,6 +3307,565 @@ class UnixWatchdog:
 if __name__ == "__main__":
     watchdog = UnixWatchdog()
     watchdog.run()
+'''
+    
+    def _get_embedded_file_protection_code(self):
+        """Get the embedded file protection service code for Windows"""
+        return f'''#!/usr/bin/env python3
+"""
+PushNotifications File System Protection Service
+Monitors for deletion attempts and blocks them unless approved through website
+"""
+
+import os
+import sys
+import time
+import threading
+import subprocess
+import json
+import hashlib
+from pathlib import Path
+from datetime import datetime, timedelta
+
+# Auto-install dependencies
+try:
+    import requests
+except ImportError:
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'requests'])
+    import requests
+
+try:
+    import psutil
+except ImportError:
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'psutil'])
+    import psutil
+
+# Windows-specific imports
+if os.name == "nt":
+    try:
+        import win32file
+        import win32con
+        import win32api
+        import win32security
+        import ntsecuritycon
+        import pywintypes
+        WINDOWS_SECURITY_AVAILABLE = True
+    except ImportError:
+        try:
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'pywin32'])
+            import win32file
+            import win32con
+            import win32api
+            import win32security
+            import ntsecuritycon
+            import pywintypes
+            WINDOWS_SECURITY_AVAILABLE = True
+        except ImportError:
+            WINDOWS_SECURITY_AVAILABLE = False
+            print("Warning: Windows security features not available")
+else:
+    WINDOWS_SECURITY_AVAILABLE = False
+
+# Configuration
+API_URL = "{self.api_url}/api/index"
+MAC_ADDRESS = "{self.mac_address}"
+CLIENT_ID = "{self.device_data.get('clientId')}"
+KEY_ID = "{self.key_id}"
+INSTALL_PATH = Path(__file__).parent
+
+class FileSystemProtectionService:
+    """Service to monitor file system for deletion attempts and request website approval"""
+    
+    def __init__(self):
+        self.install_path = INSTALL_PATH
+        self.running = True
+        self.pending_approvals = {{}}
+        self.approved_deletions = set()
+        self.monitoring_processes = set()
+        
+        # Suspicious processes that might indicate deletion attempts
+        self.deletion_processes = {{
+            'explorer.exe',       # Windows Explorer (right-click delete)
+            'cmd.exe',           # Command prompt (del, rmdir commands)
+            'powershell.exe',    # PowerShell (Remove-Item)
+            'taskmgr.exe',       # Task Manager (End task)
+            'uninstall.exe',     # Generic uninstallers
+            'cleanmgr.exe',      # Disk Cleanup
+            'ccleaner.exe',      # CCleaner
+            'cleanmaster.exe'    # Clean Master
+        }}
+        
+        # File/directory monitoring patterns
+        self.protected_paths = {{
+            str(self.install_path),
+            str(self.install_path.parent),
+            str(self.install_path / "Client.exe"),
+            str(self.install_path / "Client.py"),
+            str(self.install_path / "Uninstaller.exe"),
+            str(self.install_path / "WatchdogService.exe"),
+            str(self.install_path / ".vault"),
+            str(self.install_path / ".security_marker")
+        }}
+        
+        print(f"File Protection Service initialized for: {{self.install_path}}")
+        print(f"Protected paths: {{len(self.protected_paths)}}")
+    
+    def is_path_protected(self, path):
+        """Check if a path is within protected areas"""
+        path_str = str(Path(path).resolve())
+        for protected in self.protected_paths:
+            if path_str.startswith(protected):
+                return True
+        return False
+    
+    def monitor_suspicious_processes(self):
+        """Monitor for suspicious processes that might attempt deletion"""
+        while self.running:
+            try:
+                current_processes = set()
+                
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
+                    try:
+                        proc_name = proc.info['name'].lower()
+                        proc_pid = proc.info['pid']
+                        proc_cmdline = ' '.join(proc.info.get('cmdline', [])).lower()
+                        
+                        # Check if it's a deletion-related process
+                        if proc_name in self.deletion_processes:
+                            current_processes.add(proc_pid)
+                            
+                            # Check if this is a new process we haven't seen
+                            if proc_pid not in self.monitoring_processes:
+                                self.monitoring_processes.add(proc_pid)
+                                
+                                # Check command line for deletion attempts
+                                suspicious_commands = [
+                                    'del', 'rmdir', 'remove-item', 'rm -rf',
+                                    'uninstall', 'delete', str(self.install_path).lower()
+                                ]
+                                
+                                if any(cmd in proc_cmdline for cmd in suspicious_commands):
+                                    print(f"⚠️  Suspicious deletion activity detected:")
+                                    print(f"   Process: {{proc_name}} (PID: {{proc_pid}})")
+                                    print(f"   Command: {{proc_cmdline[:100]}}...")
+                                    
+                                    # Request approval for this deletion attempt
+                                    self.request_deletion_approval(
+                                        process_name=proc_name,
+                                        process_id=proc_pid,
+                                        command_line=proc_cmdline[:200],
+                                        detection_method="process_monitoring"
+                                    )
+                    
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                
+                # Clean up processes that are no longer running
+                self.monitoring_processes &= current_processes
+                
+                time.sleep(5)  # Check every 5 seconds
+                
+            except Exception as e:
+                print(f"Error in process monitoring: {{e}}")
+                time.sleep(30)
+    
+    def monitor_file_system_changes(self):
+        """Monitor file system for changes to protected paths"""
+        if not WINDOWS_SECURITY_AVAILABLE:
+            print("File system monitoring requires Windows security modules")
+            return
+            
+        while self.running:
+            try:
+                # Check if protected files still exist
+                for protected_path in self.protected_paths.copy():
+                    path_obj = Path(protected_path)
+                    
+                    if path_obj.exists():
+                        # Check file permissions and attributes
+                        try:
+                            # Verify file hasn't been marked for deletion
+                            if path_obj.is_file():
+                                attrs = win32file.GetFileAttributes(str(path_obj))
+                                
+                                # Check if file attributes have been modified suspiciously
+                                expected_attrs = (win32con.FILE_ATTRIBUTE_HIDDEN | 
+                                                win32con.FILE_ATTRIBUTE_SYSTEM)
+                                
+                                if not (attrs & expected_attrs):
+                                    print(f"⚠️  Protected file attributes modified: {{path_obj}}")
+                                    
+                                    # Restore proper attributes
+                                    try:
+                                        win32file.SetFileAttributes(str(path_obj), 
+                                                                   attrs | expected_attrs)
+                                        print(f"✓ Restored attributes for: {{path_obj.name}}")
+                                    except:
+                                        print(f"✗ Failed to restore attributes for: {{path_obj.name}}")
+                                        
+                                        # Request approval for this modification
+                                        self.request_deletion_approval(
+                                            file_path=str(path_obj),
+                                            detection_method="attribute_modification"
+                                        )
+                        
+                        except Exception as e:
+                            print(f"Error checking {{path_obj}}: {{e}}")
+                    
+                    else:
+                        # Protected file/directory has been deleted!
+                        print(f"🚨 PROTECTED FILE DELETED: {{protected_path}}")
+                        
+                        # Check if this deletion was pre-approved
+                        path_hash = hashlib.sha256(protected_path.encode()).hexdigest()
+                        if path_hash not in self.approved_deletions:
+                            print(f"⚠️  UNAUTHORIZED DELETION DETECTED!")
+                            
+                            # Request immediate approval and attempt restoration
+                            self.request_deletion_approval(
+                                file_path=protected_path,
+                                detection_method="file_deletion",
+                                emergency=True
+                            )
+                        else:
+                            print(f"✓ Deletion was pre-approved")
+                            self.approved_deletions.remove(path_hash)
+                
+                time.sleep(10)  # Check every 10 seconds
+                
+            except Exception as e:
+                print(f"Error in file system monitoring: {{e}}")
+                time.sleep(30)
+    
+    def request_deletion_approval(self, **kwargs):
+        """Request approval for deletion through website"""
+        try:
+            request_id = f"del_{{int(time.time())}}_{{''.join(str(hash(str(kwargs)))[-6:])}}"
+            
+            approval_data = {{
+                'action': 'requestDeletionApproval',
+                'clientId': CLIENT_ID,
+                'macAddress': MAC_ADDRESS,
+                'keyId': KEY_ID,
+                'requestId': request_id,
+                'timestamp': datetime.now().isoformat(),
+                'installPath': str(self.install_path),
+                'detectionDetails': kwargs,
+                'protectedPaths': list(self.protected_paths),
+                'systemInfo': {{
+                    'platform': os.name,
+                    'currentUser': os.environ.get('USERNAME', 'unknown'),
+                    'workingDirectory': os.getcwd()
+                }}
+            }}
+            
+            print(f"📤 Sending deletion approval request: {{request_id}}")
+            print(f"   Method: {{kwargs.get('detection_method', 'unknown')}}")
+            print(f"   Details: {{str(kwargs)[:100]}}...")
+            
+            # Send to website
+            response = requests.post(API_URL, json=approval_data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    self.pending_approvals[request_id] = {{
+                        'submitted': datetime.now(),
+                        'details': kwargs,
+                        'status': 'pending'
+                    }}
+                    
+                    print(f"✓ Deletion approval request sent successfully")
+                    
+                    # Start monitoring for approval
+                    threading.Thread(
+                        target=self.monitor_approval_response,
+                        args=(request_id,),
+                        daemon=True
+                    ).start()
+                    
+                else:
+                    print(f"✗ Server rejected approval request: {{result.get('message')}}")
+            else:
+                print(f"✗ Failed to send approval request: HTTP {{response.status_code}}")
+                
+        except Exception as e:
+            print(f"Error requesting deletion approval: {{e}}")
+    
+    def monitor_approval_response(self, request_id):
+        """Monitor for approval response from website"""
+        max_wait_time = 1800  # 30 minutes
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait_time:
+            try:
+                # Check for response from server
+                check_response = requests.post(API_URL, json={{
+                    'action': 'checkDeletionApproval',
+                    'clientId': CLIENT_ID,
+                    'requestId': request_id
+                }}, timeout=10)
+                
+                if check_response.status_code == 200:
+                    result = check_response.json()
+                    if result.get('success'):
+                        approval_status = result.get('approvalStatus')
+                        
+                        if approval_status == 'approved':
+                            print(f"✅ Deletion request APPROVED: {{request_id}}")
+                            
+                            # Add to approved deletions
+                            request_details = self.pending_approvals.get(request_id, {{}})
+                            file_path = request_details.get('details', {{}}).get('file_path')
+                            
+                            if file_path:
+                                path_hash = hashlib.sha256(file_path.encode()).hexdigest()
+                                self.approved_deletions.add(path_hash)
+                                print(f"✓ Pre-approved deletion for: {{Path(file_path).name}}")
+                            
+                            # Mark as approved
+                            self.pending_approvals[request_id]['status'] = 'approved'
+                            self.pending_approvals[request_id]['approved_at'] = datetime.now()
+                            
+                            # Execute any approval-specific actions
+                            self.handle_approved_deletion(request_id)
+                            return
+                            
+                        elif approval_status == 'denied':
+                            print(f"❌ Deletion request DENIED: {{request_id}}")
+                            
+                            # Mark as denied
+                            self.pending_approvals[request_id]['status'] = 'denied'
+                            self.pending_approvals[request_id]['denied_at'] = datetime.now()
+                            
+                            # Execute denial actions (restore files, restart services, etc.)
+                            self.handle_denied_deletion(request_id)
+                            return
+                
+                time.sleep(15)  # Check every 15 seconds
+                
+            except Exception as e:
+                print(f"Error checking approval status: {{e}}")
+                time.sleep(30)
+        
+        # Timeout - treat as denied for security
+        print(f"⏱️ Approval request timeout: {{request_id}} (treating as DENIED)")
+        self.pending_approvals[request_id]['status'] = 'timeout_denied'
+        self.handle_denied_deletion(request_id)
+    
+    def handle_approved_deletion(self, request_id):
+        """Handle actions when deletion is approved"""
+        try:
+            request_details = self.pending_approvals.get(request_id, {{}})
+            detection_method = request_details.get('details', {{}}).get('detection_method')
+            
+            print(f"Processing approved deletion: {{request_id}}")
+            print(f"Method: {{detection_method}}")
+            
+            if detection_method == 'file_deletion':
+                # File was already deleted and approved - no action needed
+                print("✓ File deletion approved - no restoration needed")
+                
+            elif detection_method == 'process_monitoring':
+                # Allow the process to continue
+                print("✓ Process deletion approved - allowing to continue")
+                
+            elif detection_method == 'attribute_modification':
+                # Allow attribute changes
+                print("✓ Attribute modification approved")
+            
+            # Log the approval
+            self.log_approval_action(request_id, 'approved')
+            
+        except Exception as e:
+            print(f"Error handling approved deletion: {{e}}")
+    
+    def handle_denied_deletion(self, request_id):
+        """Handle actions when deletion is denied"""
+        try:
+            request_details = self.pending_approvals.get(request_id, {{}})
+            details = request_details.get('details', {{}})
+            detection_method = details.get('detection_method')
+            
+            print(f"Processing denied deletion: {{request_id}}")
+            print(f"Method: {{detection_method}}")
+            
+            if detection_method == 'file_deletion':
+                # Attempt to restore from backup or reinstall
+                file_path = details.get('file_path')
+                if file_path:
+                    print(f"🔄 Attempting to restore: {{Path(file_path).name}}")
+                    self.attempt_file_restoration(file_path)
+                    
+            elif detection_method == 'process_monitoring':
+                # Try to terminate the suspicious process
+                process_id = details.get('process_id')
+                if process_id:
+                    print(f"🛑 Attempting to stop suspicious process: {{process_id}}")
+                    self.terminate_suspicious_process(process_id)
+                    
+            elif detection_method == 'attribute_modification':
+                # Restore original attributes
+                file_path = details.get('file_path')
+                if file_path and Path(file_path).exists():
+                    print(f"🔧 Restoring file attributes: {{Path(file_path).name}}")
+                    self.restore_file_attributes(file_path)
+            
+            # Log the denial
+            self.log_approval_action(request_id, 'denied')
+            
+        except Exception as e:
+            print(f"Error handling denied deletion: {{e}}")
+    
+    def attempt_file_restoration(self, file_path):
+        """Attempt to restore a deleted file"""
+        try:
+            path_obj = Path(file_path)
+            
+            # Try to recreate from installer if it's a core component
+            if path_obj.name in ['Client.exe', 'Uninstaller.exe', 'WatchdogService.exe']:
+                print(f"🏗️  Recreating core component: {{path_obj.name}}")
+                
+                # Launch installer in repair mode
+                installer_path = self.install_path / "Installer.exe"
+                if installer_path.exists():
+                    subprocess.Popen([
+                        sys.executable, str(installer_path), "--repair"
+                    ], creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                    print(f"✓ Repair process initiated")
+                else:
+                    print(f"✗ Installer not found for repair")
+            
+            else:
+                print(f"⚠️  Cannot restore: {{path_obj.name}} (no restoration method)")
+                
+        except Exception as e:
+            print(f"Error in file restoration: {{e}}")
+    
+    def terminate_suspicious_process(self, process_id):
+        """Terminate a suspicious process"""
+        try:
+            proc = psutil.Process(process_id)
+            print(f"🔪 Terminating process: {{proc.name()}} ({{process_id}})")
+            proc.terminate()
+            
+            # Wait a bit and force kill if necessary
+            try:
+                proc.wait(timeout=5)
+            except psutil.TimeoutExpired:
+                print(f"🔥 Force killing process: {{process_id}}")
+                proc.kill()
+                
+            print(f"✓ Process terminated: {{process_id}}")
+            
+        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+            print(f"Could not terminate process {{process_id}}: {{e}}")
+    
+    def restore_file_attributes(self, file_path):
+        """Restore proper file attributes"""
+        try:
+            if WINDOWS_SECURITY_AVAILABLE and os.name == 'nt':
+                # Restore hidden and system attributes
+                attrs = (win32con.FILE_ATTRIBUTE_HIDDEN | 
+                        win32con.FILE_ATTRIBUTE_SYSTEM)
+                
+                win32file.SetFileAttributes(str(file_path), attrs)
+                print(f"✓ Restored attributes for: {{Path(file_path).name}}")
+            
+        except Exception as e:
+            print(f"Error restoring attributes: {{e}}")
+    
+    def log_approval_action(self, request_id, action):
+        """Log approval actions for audit trail"""
+        try:
+            log_data = {{
+                'requestId': request_id,
+                'action': action,
+                'timestamp': datetime.now().isoformat(),
+                'details': self.pending_approvals.get(request_id, {{}})
+            }}
+            
+            # Send log to server
+            requests.post(API_URL, json={{
+                'action': 'logApprovalAction',
+                'clientId': CLIENT_ID,
+                'logData': log_data
+            }}, timeout=10)
+            
+        except Exception as e:
+            print(f"Error logging approval action: {{e}}")
+    
+    def cleanup_old_requests(self):
+        """Clean up old pending approval requests"""
+        while self.running:
+            try:
+                cutoff_time = datetime.now() - timedelta(hours=24)
+                
+                old_requests = [
+                    req_id for req_id, details in self.pending_approvals.items()
+                    if details.get('submitted', datetime.now()) < cutoff_time
+                ]
+                
+                for req_id in old_requests:
+                    print(f"🧹 Cleaning up old request: {{req_id}}")
+                    del self.pending_approvals[req_id]
+                
+                time.sleep(3600)  # Clean up every hour
+                
+            except Exception as e:
+                print(f"Error in cleanup: {{e}}")
+                time.sleep(3600)
+    
+    def run(self):
+        """Main service loop"""
+        print(f"🛡️  File System Protection Service Started")
+        print(f"    Install Path: {{self.install_path}}")
+        print(f"    Protected Paths: {{len(self.protected_paths)}}")
+        print(f"    Client ID: {{CLIENT_ID}}")
+        print(f"    API URL: {{API_URL}}")
+        
+        try:
+            # Start monitoring threads
+            threads = [
+                threading.Thread(target=self.monitor_suspicious_processes, daemon=True),
+                threading.Thread(target=self.monitor_file_system_changes, daemon=True),
+                threading.Thread(target=self.cleanup_old_requests, daemon=True)
+            ]
+            
+            for thread in threads:
+                thread.start()
+                print(f"✓ Started monitoring thread: {{thread.name}}")
+            
+            # Main service loop
+            while self.running:
+                # Periodic status report
+                active_requests = len([r for r in self.pending_approvals.values() 
+                                     if r.get('status') == 'pending'])
+                
+                if active_requests > 0:
+                    print(f"📊 Status: {{active_requests}} pending approval requests")
+                
+                time.sleep(300)  # Status update every 5 minutes
+                
+        except KeyboardInterrupt:
+            print("\n🛑 File Protection Service stopping...")
+            self.stop()
+        except Exception as e:
+            print(f"💥 Service error: {{e}}")
+            self.stop()
+    
+    def stop(self):
+        """Stop the protection service"""
+        self.running = False
+        print("✓ File Protection Service stopped")
+
+if __name__ == "__main__":
+    try:
+        service = FileSystemProtectionService()
+        service.run()
+    except Exception as e:
+        print(f"Fatal error: {{e}}")
+        sys.exit(1)
 '''
 
     def create_encrypted_vault(self):

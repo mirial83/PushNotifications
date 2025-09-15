@@ -1136,11 +1136,17 @@ class DatabaseOperations {
       let notifications;
       
       if (this.usesFallback) {
-        notifications = fallbackStorage.notifications.filter(n => n.status !== 'Completed');
+        // Filter out uninstall requests from regular notifications
+        notifications = fallbackStorage.notifications.filter(n => 
+          n.status !== 'Completed' && n.type !== 'uninstall_request'
+        );
       } else {
         await this.connect();
         notifications = await this.db.collection('notifications')
-          .find({ status: { $ne: 'Completed' } })
+          .find({ 
+            status: { $ne: 'Completed' },
+            type: { $ne: 'uninstall_request' }
+          })
           .toArray();
       }
 
@@ -1315,6 +1321,206 @@ class DatabaseOperations {
         message: `Cleared all ${clearedCount} active notifications successfully`,
         clearedCount
       };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Uninstall Request Management Methods
+  async requestUninstall(clientId, macAddress, keyId, installPath, timestamp, reason = 'Force quit detected') {
+    try {
+      const uninstallRequest = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        clientId,
+        macAddress,
+        keyId,
+        installPath,
+        reason,
+        status: 'pending',
+        type: 'uninstall_request',
+        requestedAt: timestamp || new Date().toISOString(),
+        created: new Date().toISOString()
+      };
+
+      if (this.usesFallback) {
+        // Add to in-memory storage in a separate uninstall requests collection
+        if (!fallbackStorage.uninstallRequests) {
+          fallbackStorage.uninstallRequests = [];
+        }
+        fallbackStorage.uninstallRequests.push(uninstallRequest);
+      } else {
+        await this.connect();
+        await this.db.collection('uninstallRequests').insertOne(uninstallRequest);
+      }
+
+      return {
+        success: true,
+        message: 'Uninstall request submitted successfully',
+        requestId: uninstallRequest.id
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getUninstallRequests() {
+    try {
+      let requests;
+      
+      if (this.usesFallback) {
+        if (!fallbackStorage.uninstallRequests) {
+          fallbackStorage.uninstallRequests = [];
+        }
+        requests = fallbackStorage.uninstallRequests.filter(req => req.status === 'pending');
+      } else {
+        await this.connect();
+        requests = await this.db.collection('uninstallRequests')
+          .find({ status: 'pending' })
+          .sort({ requestedAt: -1 })
+          .toArray();
+      }
+
+      return { success: true, data: requests };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async approveUninstallRequest(requestId, adminUsername) {
+    try {
+      if (this.usesFallback) {
+        if (!fallbackStorage.uninstallRequests) {
+          return { success: false, message: 'Uninstall request not found' };
+        }
+        
+        const request = fallbackStorage.uninstallRequests.find(req => req.id === requestId);
+        if (!request) {
+          return { success: false, message: 'Uninstall request not found' };
+        }
+        
+        // Update the request status
+        request.status = 'approved';
+        request.approvedBy = adminUsername;
+        request.approvedAt = new Date().toISOString();
+        
+        // Create an uninstall command notification for the client
+        const uninstallNotification = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          message: '__UNINSTALL_APPROVED_COMMAND__',
+          clientId: request.clientId,
+          status: 'Active',
+          type: 'uninstall_command',
+          reason: `Uninstall approved: ${request.reason}`,
+          allowBrowserUsage: false,
+          allowedWebsites: '',
+          created: new Date().toISOString()
+        };
+        
+        fallbackStorage.notifications.push(uninstallNotification);
+        
+        return {
+          success: true,
+          message: `Uninstall request approved and uninstall command sent to client ${request.clientId}`,
+          clientId: request.clientId
+        };
+      } else {
+        await this.connect();
+        
+        // Find and update the request
+        const request = await this.db.collection('uninstallRequests').findOne({ id: requestId, status: 'pending' });
+        if (!request) {
+          return { success: false, message: 'Uninstall request not found or already processed' };
+        }
+        
+        // Update the request status
+        await this.db.collection('uninstallRequests').updateOne(
+          { id: requestId },
+          {
+            $set: {
+              status: 'approved',
+              approvedBy: adminUsername,
+              approvedAt: new Date().toISOString()
+            }
+          }
+        );
+        
+        // Create an uninstall command notification for the client
+        const uninstallNotification = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          message: '__UNINSTALL_APPROVED_COMMAND__',
+          clientId: request.clientId,
+          status: 'Active',
+          type: 'uninstall_command',
+          reason: `Uninstall approved: ${request.reason}`,
+          allowBrowserUsage: false,
+          allowedWebsites: '',
+          created: new Date().toISOString()
+        };
+        
+        await this.db.collection('notifications').insertOne(uninstallNotification);
+        
+        return {
+          success: true,
+          message: `Uninstall request approved and uninstall command sent to client ${request.clientId}`,
+          clientId: request.clientId
+        };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async denyUninstallRequest(requestId, reason, adminUsername) {
+    try {
+      if (this.usesFallback) {
+        if (!fallbackStorage.uninstallRequests) {
+          return { success: false, message: 'Uninstall request not found' };
+        }
+        
+        const request = fallbackStorage.uninstallRequests.find(req => req.id === requestId);
+        if (!request) {
+          return { success: false, message: 'Uninstall request not found' };
+        }
+        
+        // Update the request status
+        request.status = 'denied';
+        request.deniedBy = adminUsername;
+        request.deniedAt = new Date().toISOString();
+        request.denialReason = reason;
+        
+        return {
+          success: true,
+          message: `Uninstall request denied for client ${request.clientId}`,
+          clientId: request.clientId
+        };
+      } else {
+        await this.connect();
+        
+        // Find and update the request
+        const request = await this.db.collection('uninstallRequests').findOne({ id: requestId, status: 'pending' });
+        if (!request) {
+          return { success: false, message: 'Uninstall request not found or already processed' };
+        }
+        
+        // Update the request status
+        await this.db.collection('uninstallRequests').updateOne(
+          { id: requestId },
+          {
+            $set: {
+              status: 'denied',
+              deniedBy: adminUsername,
+              deniedAt: new Date().toISOString(),
+              denialReason: reason
+            }
+          }
+        );
+        
+        return {
+          success: true,
+          message: `Uninstall request denied for client ${request.clientId}`,
+          clientId: request.clientId
+        };
+      }
     } catch (error) {
       return { success: false, message: error.message };
     }
@@ -4020,6 +4226,88 @@ export default async function handler(req, res) {
         }
         
         result = await db.syncAllDeployments();
+        break;
+      }
+      
+      // Client Uninstall Request Actions
+      case 'requestUninstall':
+        result = await db.requestUninstall(
+          params.clientId || '',
+          params.macAddress || '',
+          params.keyId || '',
+          params.installPath || '',
+          params.timestamp || new Date().toISOString(),
+          params.reason || 'Force quit detected'
+        );
+        break;
+        
+      case 'getUninstallRequests': {
+        const uninstallAuthHeader = req.headers.authorization;
+        const uninstallToken = uninstallAuthHeader && uninstallAuthHeader.startsWith('Bearer ')
+          ? uninstallAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(uninstallToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.getUninstallRequests();
+        break;
+      }
+      
+      case 'approveUninstallRequest': {
+        const approveAuthHeader = req.headers.authorization;
+        const approveToken = approveAuthHeader && approveAuthHeader.startsWith('Bearer ')
+          ? approveAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(approveToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.approveUninstallRequest(
+          params.requestId || '',
+          validation.user.username || 'Admin'
+        );
+        break;
+      }
+      
+      case 'denyUninstallRequest': {
+        const denyAuthHeader = req.headers.authorization;
+        const denyToken = denyAuthHeader && denyAuthHeader.startsWith('Bearer ')
+          ? denyAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(denyToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.denyUninstallRequest(
+          params.requestId || '',
+          params.reason || 'Request denied by administrator',
+          validation.user.username || 'Admin'
+        );
         break;
       }
         
