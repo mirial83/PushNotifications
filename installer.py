@@ -170,6 +170,247 @@ INSTALLER_VERSION = "3.0.0"
 REGISTRY_KEY = r"HKEY_CURRENT_USER\Software\PushNotifications"
 DEFAULT_API_URL = "https://push-notifications-phi.vercel.app"
 
+# Embedded Documentation
+DOCUMENTATION = {
+    'installer_improvements': '''
+# PushNotifications Installer Improvements
+
+## Summary
+
+The PushNotifications installer has been significantly enhanced with intelligent dependency checking and automatic client startup functionality.
+
+## Key Improvements
+
+### 1. Smart Dependency Detection
+- **Comprehensive Package Checking**: The installer now checks for dependencies in multiple ways:
+  - Direct import testing for each package
+  - Special handling for packages with different import names (e.g., `pillow` imports as `PIL`, `pywin32` imports as `win32api`)
+  - Fallback to `pip list` command to verify installation
+  - Multiple name variant checking (handles dashes, underscores, etc.)
+
+### 2. Efficient Installation Process
+- **Skip Already Installed Packages**: Dependencies that are already present are skipped, significantly reducing installation time
+- **Installation Summary**: Clear reporting of:
+  - Already installed packages (skipped)
+  - Successfully installed packages
+  - Failed package installations
+- **Robust Error Handling**: Continues installation even if some packages fail
+
+### 3. Automatic Client Startup
+- **No User Prompts**: Client automatically starts after successful installation
+- **Background Operation**: Client starts without requiring user interaction
+- **Platform-Specific Startup**: Uses appropriate startup method for Windows
+- **Error Recovery**: Provides manual startup instructions if automatic startup fails
+
+### 4. Enhanced User Experience
+- **Progress Feedback**: Clear visual indicators (✓, ✗, ⚠) for all operations
+- **Detailed Logging**: Comprehensive status messages for each installation step
+- **Graceful Fallbacks**: Alternative approaches when primary methods fail
+
+## Installation Flow
+
+1. **Python Compatibility Check**: Verify Python version and architecture
+2. **Administrator Privileges**: Request elevation if needed
+3. **Intelligent Dependency Management**:
+   - Check each package individually
+   - Skip already installed packages
+   - Install only missing dependencies
+   - Report comprehensive results
+4. **Installation Key Validation**: Secure key entry with GUI/console fallback
+5. **Directory Creation**: Create installation directory with proper permissions
+6. **File Creation**: Generate client, configuration, and utility files
+7. **Automatic Startup**: Launch client immediately after installation
+
+## Benefits
+
+- **Faster Installations**: Skip reinstalling existing packages
+- **Better User Experience**: No unnecessary prompts, automatic startup
+- **More Reliable**: Robust dependency checking across different environments
+- **Comprehensive Reporting**: Clear feedback on installation status
+- **Cross-Environment Support**: Works with various Python installations and package managers
+''',
+    'deployment_guide': '''
+# PushNotifications Deployment Guide
+
+This guide will walk you through deploying the PushNotifications application to Vercel with MongoDB as the backend database.
+
+## Prerequisites
+
+- [Vercel CLI](https://vercel.com/cli) installed globally
+- [MongoDB Atlas](https://www.mongodb.com/atlas) account (or self-hosted MongoDB instance)
+- [Git](https://git-scm.com/) for version control
+- A GitHub, GitLab, or Bitbucket account (for Vercel integration)
+
+## Setup Instructions
+
+### 1. MongoDB Database Setup
+
+#### MongoDB Atlas (Recommended)
+
+1. **Create MongoDB Atlas Account**
+   - Go to [MongoDB Atlas](https://www.mongodb.com/atlas)
+   - Sign up for a free account
+   - Create a new cluster (M0 Sandbox is free)
+
+2. **Configure Database Access**
+   - Go to "Database Access" in the Atlas dashboard
+   - Click "Add New Database User"
+   - Create a user with "Read and write to any database" permissions
+   - Note down the username and password
+
+3. **Configure Network Access**
+   - Go to "Network Access" in the Atlas dashboard
+   - Click "Add IP Address"
+   - Select "Allow access from anywhere" (0.0.0.0/0) for Vercel deployment
+
+4. **Get Connection String**
+   - Go to "Clusters" and click "Connect"
+   - Choose "Connect your application"
+   - Copy the connection string
+
+### 2. Environment Variables Setup
+
+```env
+# MongoDB Configuration
+MONGODB_URI=mongodb+srv://username:password@cluster.xxx.mongodb.net/
+DATABASE_NAME=pushnotifications
+
+# Application Settings
+CLIENT_VERSION=3.0.0
+AUTO_UPDATE_ENABLED=true
+FORCE_UPDATE=true
+
+# Optional: Custom Settings
+REFRESH_INTERVAL=30
+MAX_NOTIFICATIONS=100
+```
+
+### 3. Vercel Deployment
+
+1. **Login to Vercel:**
+   ```bash
+   vercel login
+   ```
+
+2. **Deploy the Application:**
+   ```bash
+   vercel
+   ```
+
+3. **Set Environment Variables:**
+   ```bash
+   vercel env add MONGODB_URI
+   vercel env add DATABASE_NAME
+   vercel env add CLIENT_VERSION
+   ```
+
+4. **Deploy to Production:**
+   ```bash
+   vercel --prod
+   ```
+
+### 4. Post-Deployment Configuration
+
+1. **Verify Deployment:**
+   - Visit your Vercel URL
+   - Check that the application loads without errors
+   - Test the database initialization
+
+2. **Update Python Client Configuration:**
+   - Update any existing Python clients to use the new Vercel URL
+   - The client should automatically download from the deployment URL
+
+## Monitoring and Maintenance
+
+### Database Monitoring
+- Monitor database usage, connections, and performance
+- Set up alerts for high usage or errors
+- MongoDB Atlas provides automatic backups
+
+### Application Monitoring
+- Enable Vercel Analytics in your project settings
+- Monitor application performance and usage
+- Check Vercel function logs for errors
+
+### Updates and Maintenance
+- Code updates automatically redeploy on git push
+- Update environment variables in Vercel dashboard
+- Update CLIENT_VERSION for client auto-updates
+
+## Security Considerations
+
+1. **Environment Variables:**
+   - Never commit sensitive data to version control
+   - Use strong passwords for database users
+   - Regularly rotate database credentials
+
+2. **Network Security:**
+   - Consider restricting MongoDB network access
+   - Use MongoDB Atlas built-in security features
+   - Enable MongoDB Atlas encryption at rest
+
+3. **Application Security:**
+   - Keep dependencies updated
+   - Regularly review authorized user lists
+   - Monitor for unusual API usage patterns
+''',
+    'mongodb_setup': '''
+# MongoDB Atlas Setup Guide
+
+## MongoDB Atlas Credentials
+
+For your PushNotifications deployment, you'll need to configure MongoDB Atlas.
+
+## Step 1: Enable MongoDB Data API
+
+1. Go to [https://cloud.mongodb.com](https://cloud.mongodb.com)
+2. Navigate to your "PushNotifications" project
+3. In the left sidebar, look for **"App Services"** and click it
+4. If you don't have an app yet:
+   - Click **"Create a New App"**
+   - Name: `PushNotificationsAPI`
+   - Link to Data Source: `pushnotifications` (your cluster)
+   - Click **"Create App"**
+
+## Step 2: Enable Data API
+
+1. In your App Services application, look in the left sidebar for **"Data API"**
+2. Click **"Data API"**
+3. Toggle **"Enable Data API"** to ON
+4. **Copy the Data API Base URL** that appears:
+   ```
+   https://data.mongodb-api.com/app/YOUR-APP-ID/endpoint/data/v1
+   ```
+
+## Step 3: Create API Key
+
+1. In App Services, go to **"Authentication"** → **"API Keys"**
+2. Click **"Create API Key"**
+3. Name: `WebAPIKey`
+4. **Copy the generated API key** (you won't be able to see it again!)
+
+## Step 4: Set Environment Variables
+
+Add these to your deployment environment:
+
+```
+MONGODB_DATA_API_URL=https://data.mongodb-api.com/app/YOUR-ACTUAL-APP-ID/endpoint/data/v1
+MONGODB_DATA_API_KEY=your-generated-api-key-here
+MONGODB_DATA_SOURCE=pushnotifications
+DATABASE_NAME=pushnotifications
+```
+
+## Test Your Setup
+
+After configuring environment variables:
+1. Deploy your application
+2. Test the connection endpoint
+3. Verify database connectivity
+
+The API will automatically use MongoDB when configured, or fall back to simple storage otherwise.
+'''
+}
+
 # Version comparison utilities
 def parse_version(version_string):
     """Parse version string into comparable tuple (major, minor, patch)"""
@@ -3241,6 +3482,97 @@ Categories=System;
         return True
 
 
+def show_help():
+    """Display comprehensive help information"""
+    print(f"""PushNotifications Universal Installer v{INSTALLER_VERSION}
+{"=" * 60}
+
+🌐 UNIVERSAL PYTHON INSTALLER
+- Single .py file runs on Windows, macOS, Linux
+- Windows: Auto-converts to .exe with admin privileges
+- No external dependencies required for basic installation
+- Automatically detects OS and adapts functionality
+
+🪟 WINDOWS ENTERPRISE FEATURES
+- Auto-conversion to executable with embedded admin escalation
+- Hidden encrypted installation with AES-256-GCM vault encryption
+- Real MAC address detection and transmission
+- Admin privilege escalation without UAC prompts
+- Multi-monitor 25% grey overlay system
+- Force-minimize window restrictions during active notifications
+- Website allowlist enforcement and request system
+- Automatic uninstaller on force-quit detection
+
+USAGE:
+  python installer.py [OPTIONS] [API_URL]
+
+OPTIONS:
+  --help, -h              Show this help message
+  --repair, -r            Run in repair mode (preserve existing settings)
+  --update, -u            Check for and install updates
+  --update-check          Check for updates only (exit code 2 if available)
+  --docs                  Show embedded documentation menu
+  --deployment-guide      Show deployment guide
+  --mongodb-setup         Show MongoDB Atlas setup guide
+  --installer-guide       Show installer improvements documentation
+  
+EXAMPLES:
+  python installer.py                                    # Standard installation
+  python installer.py --repair                           # Repair existing installation
+  python installer.py --update                           # Check and install updates
+  python installer.py --docs                             # Show documentation menu
+  python installer.py https://your-api.vercel.app        # Use custom API URL
+  
+NOTE: Administrator privileges are required for installation.
+      The installer will automatically request elevation if needed.
+""")
+
+def show_documentation_menu():
+    """Show interactive documentation menu"""
+    while True:
+        print(f"""\nPushNotifications Documentation Menu
+{"=" * 50}
+
+1. Installer Improvements Guide
+2. Deployment Guide (Vercel + MongoDB)
+3. MongoDB Atlas Setup Guide
+4. Return to Main Menu
+5. Exit
+
+Enter your choice (1-5): """)
+        
+        try:
+            choice = input().strip()
+            
+            if choice == '1':
+                print("\n" + DOCUMENTATION['installer_improvements'])
+            elif choice == '2':
+                print("\n" + DOCUMENTATION['deployment_guide'])
+            elif choice == '3':
+                print("\n" + DOCUMENTATION['mongodb_setup'])
+            elif choice == '4':
+                return
+            elif choice == '5':
+                sys.exit(0)
+            else:
+                print("Invalid choice. Please enter 1-5.")
+                continue
+                
+            input("\nPress Enter to continue...")
+        except KeyboardInterrupt:
+            print("\n\nExiting documentation menu.")
+            sys.exit(0)
+
+def show_specific_documentation(doc_type):
+    """Show specific documentation section"""
+    if doc_type in DOCUMENTATION:
+        print("\n" + DOCUMENTATION[doc_type])
+        print("\n" + "=" * 60)
+        input("Press Enter to exit...")
+    else:
+        print(f"Documentation section '{doc_type}' not found.")
+        sys.exit(1)
+
 def main():
     """Main installer entry point"""
     try:
@@ -3249,16 +3581,38 @@ def main():
         repair_mode = False
         update_mode = False
         check_only = False
+        show_docs_menu = False
+        show_specific_doc = None
         
         for arg in sys.argv[1:]:
             if arg.startswith('http'):
                 api_url = arg
+            elif arg in ['--help', '-h', '/help', '/?']:
+                show_help()
+                return
             elif arg in ['--repair', '-r', '/repair']:
                 repair_mode = True
             elif arg in ['--update', '-u', '/update']:
                 update_mode = True
             elif arg in ['--update-check', '--check-updates', '/update-check']:
                 check_only = True
+            elif arg in ['--docs', '--documentation', '/docs']:
+                show_docs_menu = True
+            elif arg in ['--deployment-guide', '/deployment-guide']:
+                show_specific_doc = 'deployment_guide'
+            elif arg in ['--mongodb-setup', '/mongodb-setup']:
+                show_specific_doc = 'mongodb_setup'
+            elif arg in ['--installer-guide', '/installer-guide']:
+                show_specific_doc = 'installer_improvements'
+        
+        # Handle documentation requests
+        if show_docs_menu:
+            show_documentation_menu()
+            return
+        
+        if show_specific_doc:
+            show_specific_documentation(show_specific_doc)
+            return
         
         # Handle special modes
         if check_only:
