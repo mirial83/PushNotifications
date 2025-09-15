@@ -2239,6 +2239,90 @@ class DatabaseOperations {
     }
   }
 
+  async generateUpdateInstallationKey(clientId, macAddress) {
+    try {
+      if (this.usesFallback) {
+        // In fallback mode, generate a simple update key
+        return {
+          success: true,
+          installationKey: this.generateInstallationKey(),
+          message: 'Update key generated (fallback mode)'
+        };
+      }
+
+      await this.connect();
+      
+      // Try to find an existing client to get user context
+      let user = null;
+      if (macAddress) {
+        const macClient = await this.db.collection('macClients').findOne({ macAddress });
+        if (macClient && macClient.activeClientId) {
+          // Try to find the client installation record to get user info
+          const installation = await this.db.collection('installations').findOne({
+            clientId: macClient.activeClientId
+          });
+          if (installation && installation.userId) {
+            user = await this.db.collection('users').findOne({
+              _id: installation.userId,
+              isActive: true
+            });
+          }
+        }
+      }
+      
+      // If we can't find user context, create a generic update key
+      if (!user) {
+        console.log(`Creating generic update key for client ${clientId}`);
+        
+        // Generate update-specific installation key
+        const updateKey = this.generateInstallationKey();
+        
+        // Store as a special update key with shorter expiration (2 hours)
+        await this.db.collection('updateKeys').insertOne({
+          clientId,
+          macAddress,
+          installationKey: updateKey,
+          type: 'update',
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours
+          used: false
+        });
+        
+        return {
+          success: true,
+          installationKey: updateKey,
+          message: 'Update installation key generated successfully'
+        };
+      }
+      
+      // Generate update key with user context
+      const updateKey = this.generateInstallationKey();
+      
+      // Store the update key with user context and shorter expiration
+      await this.db.collection('downloadKeys').insertOne({
+        userId: user._id,
+        username: user.username,
+        role: user.role,
+        installationKey: updateKey,
+        clientId,
+        macAddress,
+        type: 'update',
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours for updates
+        used: false
+      });
+
+      return {
+        success: true,
+        installationKey: updateKey,
+        message: 'Update installation key generated successfully'
+      };
+    } catch (error) {
+      console.error('Error generating update installation key:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
   async regenerateInstallationKey(userId) {
     try {
       if (this.usesFallback) {
@@ -3627,6 +3711,8 @@ export default async function handler(req, res) {
         
       case 'checkForUpdates':
         const clientVersionNumber = parseInt(params.versionNumber || '0');
+        const clientId = params.clientId || 'unknown';
+        const macAddress = params.macAddress || '';
         
         // Get the latest version info from database
         const versionInfo = await db.getVersionInfo();
@@ -3635,17 +3721,35 @@ export default async function handler(req, res) {
           const latestVersionNumber = versionInfo.versionNumber;
           const updateAvailable = latestVersionNumber > clientVersionNumber;
           
-          result = {
-            success: true,
-            updateAvailable,
-            latestVersion: versionInfo.currentVersion,
-            latestVersionNumber,
-            currentVersionNumber: clientVersionNumber,
-            releaseNotes: versionInfo.releaseNotes || 'New version available',
-            downloadUrl: '/api/download?file=client',
-            forceUpdate: false,
-            timestamp: new Date().toISOString()
-          };
+          if (updateAvailable) {
+            // Generate installation key for the update
+            const updateKeyResult = await db.generateUpdateInstallationKey(clientId, macAddress);
+            
+            result = {
+              success: true,
+              updateAvailable,
+              latestVersion: versionInfo.currentVersion,
+              latestVersionNumber,
+              currentVersionNumber: clientVersionNumber,
+              releaseNotes: versionInfo.releaseNotes || 'New version available',
+              downloadUrl: `/api/download?file=client&updateKey=${updateKeyResult.success ? updateKeyResult.installationKey : ''}`,
+              installationKey: updateKeyResult.success ? updateKeyResult.installationKey : null,
+              forceUpdate: false,
+              timestamp: new Date().toISOString()
+            };
+          } else {
+            result = {
+              success: true,
+              updateAvailable,
+              latestVersion: versionInfo.currentVersion,
+              latestVersionNumber,
+              currentVersionNumber: clientVersionNumber,
+              releaseNotes: versionInfo.releaseNotes || 'You are running the latest version',
+              downloadUrl: '/api/download?file=client',
+              forceUpdate: false,
+              timestamp: new Date().toISOString()
+            };
+          }
         } else {
           result = {
             success: true,

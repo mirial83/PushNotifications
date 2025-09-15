@@ -678,10 +678,15 @@ class PushNotificationsInstaller:
         print("Checking for updates...")
         
         try:
+            # Extract version number from version string (e.g., "3.0.0" -> 300)
+            version_parts = INSTALLER_VERSION.split('.')
+            version_number = int(version_parts[0]) * 100 + int(version_parts[1]) * 10 + int(version_parts[2])
+            
             response = requests.post(
                 f"{self.api_url}/api/index",
                 json={
-                    'action': 'checkVersion',
+                    'action': 'checkForUpdates',  # Updated to match API
+                    'versionNumber': version_number,  # Added version number
                     'currentVersion': INSTALLER_VERSION,
                     'clientId': getattr(self, 'device_data', {}).get('clientId', 'unknown'),
                     'macAddress': self.mac_address,
@@ -698,6 +703,7 @@ class PushNotificationsInstaller:
                     download_url = result.get('downloadUrl')
                     update_required = result.get('updateRequired', False)
                     update_notes = result.get('updateNotes', '')
+                    update_installation_key = result.get('installationKey')  # Extract update key
                     
                     version_comparison = compare_versions(INSTALLER_VERSION, latest_version)
                     
@@ -706,6 +712,8 @@ class PushNotificationsInstaller:
                         print(f"Download URL: {download_url}")
                         if update_notes:
                             print(f"Release notes: {update_notes}")
+                        if update_installation_key:
+                            print(f"✓ Update installation key provided")
                         
                         # Store update information
                         self.update_data = {
@@ -713,7 +721,8 @@ class PushNotificationsInstaller:
                             'downloadUrl': download_url,
                             'updateRequired': update_required,
                             'updateNotes': update_notes,
-                            'currentVersion': INSTALLER_VERSION
+                            'currentVersion': INSTALLER_VERSION,
+                            'installationKey': update_installation_key  # Store the key
                         }
                         
                         return True  # Update available
