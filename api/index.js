@@ -899,8 +899,8 @@ class DatabaseOperations {
       await this.connect();
       const now = new Date();
 
-      // First, validate the installation key
-      const keyValidation = await this.validateInstallationKey(installationKey);
+      // First, validate the installation key and mark it as used during successful registration
+      const keyValidation = await this.validateInstallationKey(installationKey, true);
       if (!keyValidation.success) {
         return { success: false, message: 'Invalid installation key' };
       }
@@ -2268,7 +2268,7 @@ class DatabaseOperations {
     }
   }
 
-  async validateInstallationKey(installationKey) {
+  async validateInstallationKey(installationKey, markAsUsed = false) {
     try {
       if (this.usesFallback) {
         return { success: false, message: 'Key validation requires MongoDB connection' };
@@ -2284,11 +2284,13 @@ class DatabaseOperations {
       });
       
       if (downloadKey) {
-        // Mark the key as used
-        await this.db.collection('downloadKeys').updateOne(
-          { _id: downloadKey._id },
-          { $set: { used: true, usedAt: new Date() } }
-        );
+        // Only mark the key as used if explicitly requested (during actual registration)
+        if (markAsUsed) {
+          await this.db.collection('downloadKeys').updateOne(
+            { _id: downloadKey._id },
+            { $set: { used: true, usedAt: new Date() } }
+          );
+        }
         
         return {
           success: true,

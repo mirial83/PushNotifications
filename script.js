@@ -194,6 +194,8 @@ function initializeAdmin() {
         // Add a small delay to ensure DOM is fully loaded
         setTimeout(() => {
             initializeClientAdministration();
+            // Also load version information for download buttons
+            loadAndUpdateVersion();
         }, 500);
     }
 }
@@ -2527,37 +2529,63 @@ async function copyToClipboard(text) {
 
 // Function to load and update version information on download buttons
 async function loadAndUpdateVersion() {
+    console.log('🔍 loadAndUpdateVersion called - checking for version elements...');
+    
+    // Check if version elements exist before making API call
+    const versionTextElements = document.querySelectorAll('.version-text');
+    const versionBadges = document.querySelectorAll('.version-badge');
+    console.log(`Found ${versionTextElements.length} version text elements and ${versionBadges.length} version badges`);
+    
+    if (versionTextElements.length === 0 && versionBadges.length === 0) {
+        console.warn('⚠️ No version elements found on this page, skipping version update');
+        return;
+    }
+    
     try {
+        console.log('📡 Making API call to get_version...');
         const result = await apiCall('get_version', {}, false); // No auth required for version check
+        console.log('📡 get_version API response:', result);
         
         if (result && result.success && result.currentVersion) {
             const currentVersion = result.currentVersion;
-            console.log('Loaded current version:', currentVersion);
+            console.log('✅ Loaded current version:', currentVersion);
             
             // Update all download buttons with version text
-            const versionTextElements = document.querySelectorAll('.version-text');
-            versionTextElements.forEach(element => {
+            versionTextElements.forEach((element, index) => {
+                const oldText = element.textContent;
                 element.textContent = `v${currentVersion}`;
+                console.log(`📝 Updated version element ${index + 1}: "${oldText}" → "v${currentVersion}"`);
             });
             
             // Update version badges if they exist
-            const versionBadges = document.querySelectorAll('.version-badge');
-            versionBadges.forEach(badge => {
+            versionBadges.forEach((badge, index) => {
+                const oldText = badge.textContent;
                 badge.textContent = `Current Version: ${currentVersion}`;
+                console.log(`📝 Updated version badge ${index + 1}: "${oldText}" → "Current Version: ${currentVersion}"`);
             });
             
-            console.log(`Updated ${versionTextElements.length} version text elements and ${versionBadges.length} version badges`);
+            console.log(`✅ Successfully updated ${versionTextElements.length} version text elements and ${versionBadges.length} version badges`);
         } else {
-            console.warn('Failed to load version info:', result);
+            console.warn('⚠️ Failed to load version info from API:', result);
+            console.log('🔄 Falling back to default version v2.1.0');
+            
             // Fall back to a default version if API call fails
-            const versionTextElements = document.querySelectorAll('.version-text');
-            versionTextElements.forEach(element => {
-                element.textContent = 'v2.1.0'; // Keep existing fallback
+            versionTextElements.forEach((element, index) => {
+                const oldText = element.textContent;
+                element.textContent = 'v2.1.0';
+                console.log(`📝 Fallback update ${index + 1}: "${oldText}" → "v2.1.0"`);
             });
         }
     } catch (error) {
-        console.error('Error loading version information:', error);
+        console.error('❌ Error loading version information:', error);
+        console.log('🔄 Falling back to default version v2.1.0 due to error');
+        
         // Fall back to existing version on error
+        versionTextElements.forEach((element, index) => {
+            const oldText = element.textContent;
+            element.textContent = 'v2.1.0';
+            console.log(`📝 Error fallback ${index + 1}: "${oldText}" → "v2.1.0"`);
+        });
     }
 }
 
