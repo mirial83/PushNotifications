@@ -2792,8 +2792,29 @@ function displayClientsTable(clients) {
     `;
     
     clients.forEach(client => {
-        const isOnline = isRecentCheckin(client.lastCheckin) && client.activeClientId;
-        const version = client.activeClient?.version || 'Unknown';
+        // Determine client status based on activeClient availability and isActive status
+        const hasActiveClient = client.activeClient && client.activeClient.isActive;
+        const isOnline = hasActiveClient && isRecentCheckin(client.lastCheckin) && client.activeClientId;
+        
+        // Use activeClient version if available and active, otherwise fall back to latestClient or 'Unknown'
+        const version = hasActiveClient 
+            ? client.activeClient.version 
+            : (client.latestClient?.version || 'Unknown');
+        
+        // Determine appropriate status text and class
+        let statusText, statusClass;
+        if (hasActiveClient) {
+            if (isOnline) {
+                statusText = 'Online';
+                statusClass = 'online';
+            } else {
+                statusText = 'Offline';
+                statusClass = 'offline';
+            }
+        } else {
+            statusText = 'Inactive';
+            statusClass = 'inactive';
+        }
         
         tableHTML += `
             <tr>
@@ -2803,10 +2824,10 @@ function displayClientsTable(clients) {
                 <td>${escapeHtml(client.platform || 'Unknown')}</td>
                 <td>${escapeHtml(version)}</td>
                 <td>${formatTimestamp(client.lastCheckin)}</td>
-                <td><span class="status-badge ${isOnline ? 'online' : 'offline'}">${isOnline ? 'Online' : 'Offline'}</span></td>
+                <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                 <td>
                     <button class="btn-small" onclick="viewClientHistory('${client.macAddress}')">History</button>
-                    ${client.activeClientId ? 
+                    ${hasActiveClient && client.activeClientId ? 
                         `<button class="btn-small btn-warning" onclick="deactivateMacClient('${client.activeClientId}')">Deactivate</button>` : 
                         ''
                     }

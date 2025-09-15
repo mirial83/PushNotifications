@@ -2034,6 +2034,13 @@ class DatabaseOperations {
       const processedClients = [];
       
       for (const macClient of macClients) {
+        // Get the most recent client history record for this MAC (regardless of isActive status)
+        const latestClient = macClient.activeClientId ? 
+          await this.db.collection('clientHistory').findOne({
+            clientId: macClient.activeClientId
+          }) : null;
+
+        // Also check for any active client record
         const activeClient = macClient.activeClientId ? 
           await this.db.collection('clientHistory').findOne({
             clientId: macClient.activeClientId,
@@ -2051,11 +2058,22 @@ class DatabaseOperations {
           platform: macClient.platform,
           createdAt: macClient.createdAt,
           lastCheckin: macClient.lastCheckin,
+          // Include both active and latest client info
           activeClient: activeClient ? {
             installPath: activeClient.installPath,
             version: activeClient.version,
             createdAt: activeClient.createdAt,
-            lastCheckin: activeClient.lastCheckin
+            lastCheckin: activeClient.lastCheckin,
+            isActive: true
+          } : null,
+          latestClient: latestClient ? {
+            installPath: latestClient.installPath,
+            version: latestClient.version,
+            createdAt: latestClient.createdAt,
+            lastCheckin: latestClient.lastCheckin,
+            isActive: latestClient.isActive,
+            deactivatedAt: latestClient.deactivatedAt,
+            deactivationReason: latestClient.deactivationReason
           } : null
         });
       }
