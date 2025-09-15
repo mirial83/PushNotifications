@@ -909,8 +909,33 @@ if __name__ == "__main__":
         """Check if running with administrator privileges"""
         if self.system == "Windows":
             try:
-                return ctypes.windll.shell32.IsUserAnAdmin()
-            except:
+                # Primary method: Check using IsUserAnAdmin()
+                is_admin = bool(ctypes.windll.shell32.IsUserAnAdmin())
+                if is_admin:
+                    return True
+                
+                # Secondary method: Try opening a privileged registry key
+                try:
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
+                                      "SYSTEM\\CurrentControlSet\\Services", 0, 
+                                      winreg.KEY_WRITE) as key:
+                        return True
+                except (PermissionError, OSError):
+                    pass
+                
+                # Third method: Try net session command
+                try:
+                    result = subprocess.run(['net', 'session'], 
+                                          capture_output=True, text=True,
+                                          creationflags=subprocess.CREATE_NO_WINDOW)
+                    return result.returncode == 0
+                except:
+                    pass
+                    
+                return False
+                
+            except Exception as e:
+                print(f"Error checking admin privileges: {e}")
                 return False
         else:
             return os.geteuid() == 0
@@ -921,12 +946,111 @@ if __name__ == "__main__":
             try:
                 print("Restarting with administrator privileges...")
                 
-                # Use ShellExecuteW with runas to get admin privileges
-                ctypes.windll.shell32.ShellExecuteW(
-                    None, "runas", sys.executable, 
-                    " ".join([f'"{arg}"' for arg in sys.argv]), 
-                    None, 1)
-                sys.exit(0)
+                # Method 1: Try PowerShell Start-Process with -Verb RunAs (most reliable on Windows 10)
+                try:
+                    # Escape arguments properly for PowerShell
+                    script_path = sys.argv[0].replace('"', '`"')
+                    args = ' '.join([f'\"{arg}\"' for arg in sys.argv[1:]]) if len(sys.argv) > 1 else ''
+                    
+                    powershell_cmd = f'Start-Process -FilePath \"{sys.executable}\" -ArgumentList \"\"{script_path}\" {args}\" -Verb RunAs -WindowStyle Hidden'
+                    
+                    result = subprocess.run([
+                        'powershell.exe', '-Command', powershell_cmd
+                    ], capture_output=True, text=True, timeout=30,
+                       creationflags=subprocess.CREATE_NO_WINDOW)
+                    
+                    if result.returncode == 0:
+                        print("✓ Administrator privileges requested via PowerShell")
+                        sys.exit(0)
+                    else:
+                        print(f"PowerShell elevation failed: {result.stderr}")
+                        
+                except Exception as e:
+                    print(f"PowerShell method failed: {e}")
+                
+                # Method 2: Try win32api ShellExecute (traditional method)
+                try:
+                    import win32api
+                    
+                    script_args = ' '.join([f'"{arg}"' for arg in sys.argv])
+                    
+                    result = win32api.ShellExecute(
+                        None, "runas", sys.executable, script_args, None, 1
+                    )
+                    
+                    if result > 32:  # Success
+                        print("✓ Administrator privileges requested via ShellExecute")
+                        sys.exit(0)
+                    else:
+                        print(f"ShellExecute failed with error code: {result}")
+                        
+                except Exception as e:
+                    print(f"ShellExecute method failed: {e}")
+                
+                # Method 3: Try ctypes ShellExecuteW (64-bit compatible)
+                try:
+                    # Properly handle 64-bit Windows API calls
+                    shell32 = ctypes.windll.shell32
+                    
+                    # Define proper function signatures for 64-bit
+                    shell32.ShellExecuteW.argtypes = [
+                        ctypes.wintypes.HWND,      # hwnd
+                        ctypes.wintypes.LPCWSTR,   # lpOperation
+                        ctypes.wintypes.LPCWSTR,   # lpFile
+                        ctypes.wintypes.LPCWSTR,   # lpParameters
+                        ctypes.wintypes.LPCWSTR,   # lpDirectory
+                        ctypes.c_int               # nShowCmd
+                    ]
+                    shell32.ShellExecuteW.restype = ctypes.c_void_p
+                    
+                    script_args = ' '.join([f'"{arg}"' for arg in sys.argv])
+                    
+                    result = shell32.ShellExecuteW(
+                        None, "runas", sys.executable, script_args, None, 1
+                    )
+                    
+                    # Convert void pointer to integer for comparison
+                    result_int = ctypes.cast(result, ctypes.c_void_p).value or 0
+                    
+                    if result_int > 32:
+                        print("✓ Administrator privileges requested via ShellExecuteW")
+                        sys.exit(0)
+                    else:
+                        print(f"ShellExecuteW failed with error code: {result_int}")
+                        
+                except Exception as e:
+                    print(f"ShellExecuteW method failed: {e}")
+                
+                # Method 4: Final fallback - create a batch file to request elevation
+                try:
+                    import tempfile
+                    
+                    batch_content = f'''@echo off
+echo Requesting administrator privileges...
+powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{" ".join(sys.argv)}' -Verb RunAs"
+'''
+                    
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as f:
+                        f.write(batch_content)
+                        temp_batch = f.name
+                    
+                    subprocess.run([temp_batch], creationflags=subprocess.CREATE_NO_WINDOW)
+                    
+                    # Clean up temp file after a delay
+                    try:
+                        time.sleep(2)
+                        os.unlink(temp_batch)
+                    except:
+                        pass
+                    
+                    print("✓ Administrator privileges requested via batch file")
+                    sys.exit(0)
+                    
+                except Exception as e:
+                    print(f"Batch file method failed: {e}")
+                
+                print("✗ All elevation methods failed")
+                return False
                 
             except Exception as e:
                 print(f"Failed to restart with administrator privileges: {e}")
