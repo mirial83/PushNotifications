@@ -2126,36 +2126,89 @@ class PushNotificationsClient:
         self.root.withdraw()  # Hide main window
         
     def create_tray_icon(self):
-        """Create system tray icon"""
+        """Create system tray icon with enhanced quick actions menu"""
         try:
             def create_image():
+                # Try to load pnicon.png from the installation directory or current directory
+                icon_paths = [
+                    Path(__file__).parent / "pnicon.png",  # Same directory as this script
+                    Path.cwd() / "pnicon.png",  # Current working directory
+                    Path("C:\\Users\\gipso\\Documents\\GitHub\\PushNotifications\\pnicon.png")  # Absolute path
+                ]
+                
+                for icon_path in icon_paths:
+                    try:
+                        if icon_path.exists():
+                            image = Image.open(icon_path)
+                            # Resize to standard tray icon size if needed
+                            if image.size != (64, 64):
+                                image = image.resize((64, 64), Image.Resampling.LANCZOS)
+                            # Convert to RGBA if not already
+                            if image.mode != 'RGBA':
+                                image = image.convert('RGBA')
+                            print(f"✓ Loaded tray icon from: {{icon_path}}")
+                            return image
+                    except Exception as e:
+                        print(f"Warning: Could not load icon from {{icon_path}}: {{e}}")
+                        continue
+                
+                print("Warning: pnicon.png not found, creating fallback icon")
+                
+                # Fallback: create a simple icon if pnicon.png is not found
                 width = height = 64
                 image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
                 dc = ImageDraw.Draw(image)
-                dc.ellipse([10, 10, width-10, height-10], fill='#007bff')
-                # Draw "PN" text for "Push Notifications"
+                # Create a more distinctive icon
+                dc.ellipse([8, 8, width-8, height-8], fill='#007bff', outline='#0056b3', width=2)
+                # Draw notification bell icon
                 try:
                     from PIL import ImageFont
                     font = ImageFont.load_default()
-                    bbox = font.getbbox("PN")
-                    text_width = bbox[2] - bbox[0]
-                    text_height = bbox[3] - bbox[1]
-                    x = (width - text_width) // 2
-                    y = (height - text_height) // 2
-                    dc.text((x, y), "PN", fill='white', font=font)
+                    # Draw a simple bell shape
+                    dc.polygon([
+                        (width//2-8, height//2-4), (width//2+8, height//2-4),
+                        (width//2+6, height//2+6), (width//2-6, height//2+6)
+                    ], fill='white')
+                    # Bell top
+                    dc.ellipse([width//2-2, height//2-8, width//2+2, height//2-4], fill='white')
+                    # Bell clapper
+                    dc.ellipse([width//2-1, height//2+6, width//2+1, height//2+8], fill='white')
                 except:
-                    # Fallback if font loading fails
+                    # Fallback: just use "PN" text
                     dc.text((width//2-10, height//2-8), "PN", fill='white')
                 return image
             
+            # Enhanced menu with quick actions
             menu = pystray.Menu(
-                item('Status', self.show_status),
-                item('Show Notifications', self.show_all_notifications),
+                # Quick Actions Section
+                item('Mark Complete', self.tray_mark_complete),
+                item('Request Website Access', self.tray_request_website),
+                pystray.Menu.SEPARATOR,
+                # Administrative Actions
+                item('Request Deletion', self.tray_request_deletion),
+                item('Submit Bug Report', self.tray_submit_bug),
+                pystray.Menu.SEPARATOR,
+                # Standard Actions
+                item('Show Status', self.show_status),
+                item('Show All Notifications', self.show_all_notifications),
+                item('Snooze All (5 min)', lambda: self.tray_snooze_all(5)),
+                item('Snooze All (15 min)', lambda: self.tray_snooze_all(15)),
+                item('Snooze All (30 min)', lambda: self.tray_snooze_all(30)),
+                pystray.Menu.SEPARATOR,
+                item('Settings', self.show_settings),
+                item('About', self.show_about),
                 pystray.Menu.SEPARATOR,
                 item('Quit (Admin Required)', self.quit_application)
             )
             
-            return pystray.Icon("PushNotifications", create_image(), "Push Client", menu)
+            # Set proper window title for Task Manager
+            try:
+                import ctypes
+                ctypes.windll.kernel32.SetConsoleTitleW("PushNotifications Client")
+            except:
+                pass
+            
+            return pystray.Icon("PushNotifications", create_image(), "PushNotifications Client", menu)
         except Exception as e:
             print(f"Error creating tray icon: {{e}}")
             return None
@@ -2179,6 +2232,183 @@ class PushNotificationsClient:
         for window in self.notification_windows:
             if window.minimized:
                 window.restore_notification()
+    
+    def tray_mark_complete(self, icon=None, item=None):
+        """Mark the first active notification as complete from tray"""
+        try:
+            active_notifications = [n for n in self.notifications if not n.get('completed', False)]
+            if active_notifications:
+                self.complete_notification(active_notifications[0].get('id'))
+                messagebox.showinfo("Completed", "Notification marked as complete.")
+            else:
+                messagebox.showinfo("No Notifications", "No active notifications to complete.")
+        except Exception as e:
+            print(f"Error in tray mark complete: {{e}}")
+    
+    def tray_request_website(self, icon=None, item=None):
+        """Request website access from tray"""
+        try:
+            active_notifications = [n for n in self.notifications if not n.get('completed', False)]
+            if not active_notifications:
+                messagebox.showinfo("No Notifications", "No active notifications for website requests.")
+                return
+                
+            website = simpledialog.askstring(
+                "Website Access Request",
+                "Enter the website URL you want to request access to:",
+                initialvalue="https://"
+            )
+            
+            if website:
+                self.request_website_access(active_notifications[0].get('id'), website)
+                messagebox.showinfo("Request Sent", f"Website access request sent for: {{website}}")
+        except Exception as e:
+            print(f"Error in tray request website: {{e}}")
+    
+    def tray_request_deletion(self, icon=None, item=None):
+        """Request deletion/uninstallation from tray"""
+        try:
+            reason = simpledialog.askstring(
+                "Request Deletion",
+                "Please provide a reason for requesting deletion:",
+                initialvalue="User requested uninstall"
+            )
+            
+            if reason:
+                requests.post(API_URL, json={{
+                    'action': 'requestUninstall',
+                    'clientId': CLIENT_ID,
+                    'macAddress': MAC_ADDRESS,
+                    'reason': reason,
+                    'timestamp': datetime.now().isoformat()
+                }}, timeout=10)
+                
+                messagebox.showinfo("Request Sent", "Deletion request sent for admin approval.")
+        except Exception as e:
+            print(f"Error in tray request deletion: {{e}}")
+    
+    def tray_submit_bug(self, icon=None, item=None):
+        """Submit bug report from tray"""
+        try:
+            bug_description = simpledialog.askstring(
+                "Submit Bug Report",
+                "Describe the bug or issue:",
+                initialvalue=""
+            )
+            
+            if bug_description:
+                # Collect system info for bug report
+                import platform
+                system_info = {{
+                    'clientVersion': CLIENT_VERSION,
+                    'platform': platform.platform(),
+                    'pythonVersion': platform.python_version(),
+                    'activeNotifications': len(self.notifications),
+                    'securityActive': self.security_active
+                }}
+                
+                requests.post(API_URL, json={{
+                    'action': 'submitBugReport',
+                    'clientId': CLIENT_ID,
+                    'macAddress': MAC_ADDRESS,
+                    'bugDescription': bug_description,
+                    'systemInfo': system_info,
+                    'timestamp': datetime.now().isoformat()
+                }}, timeout=10)
+                
+                messagebox.showinfo("Bug Report Sent", "Thank you! Your bug report has been submitted.")
+        except Exception as e:
+            print(f"Error in tray submit bug: {{e}}")
+    
+    def tray_snooze_all(self, minutes):
+        """Snooze all notifications from tray"""
+        try:
+            self.snooze_notifications(minutes)
+            messagebox.showinfo("Snoozed", f"All notifications snoozed for {{minutes}} minutes.")
+        except Exception as e:
+            print(f"Error in tray snooze all: {{e}}")
+    
+    def show_settings(self, icon=None, item=None):
+        """Show client settings"""
+        try:
+            settings_window = tk.Toplevel()
+            settings_window.title("PushNotifications Settings")
+            settings_window.geometry("400x300")
+            settings_window.attributes('-topmost', True)
+            
+            # Settings content
+            tk.Label(settings_window, text="PushNotifications Settings", 
+                    font=("Arial", 14, "bold")).pack(pady=10)
+            
+            # Client info
+            info_frame = tk.LabelFrame(settings_window, text="Client Information")
+            info_frame.pack(fill=tk.X, padx=10, pady=5)
+            
+            tk.Label(info_frame, text=f"Version: {{CLIENT_VERSION}}").pack(anchor=tk.W, padx=5)
+            tk.Label(info_frame, text=f"Client ID: {{CLIENT_ID}}").pack(anchor=tk.W, padx=5)
+            tk.Label(info_frame, text=f"Status: {{'Running' if self.running else 'Stopped'}}").pack(anchor=tk.W, padx=5)
+            
+            # Settings options
+            options_frame = tk.LabelFrame(settings_window, text="Options")
+            options_frame.pack(fill=tk.X, padx=10, pady=5)
+            
+            tk.Button(options_frame, text="Check for Updates", 
+                     command=lambda: self._check_for_client_updates()).pack(pady=2)
+            tk.Button(options_frame, text="Restart Client", 
+                     command=lambda: self._restart_client()).pack(pady=2)
+            
+            # Close button
+            tk.Button(settings_window, text="Close", 
+                     command=settings_window.destroy).pack(pady=10)
+                     
+        except Exception as e:
+            print(f"Error showing settings: {{e}}")
+    
+    def show_about(self, icon=None, item=None):
+        """Show about dialog"""
+        try:
+            about_text = f"""PushNotifications Client
+
+Version: {{CLIENT_VERSION}}
+Client ID: {{CLIENT_ID}}
+
+© 2024 PushNotifications
+Advanced notification management system
+
+Features:
+• Multi-monitor overlay support
+• Website access control
+• Automatic security enforcement
+• Background operation"""
+            
+            messagebox.showinfo("About PushNotifications", about_text)
+        except Exception as e:
+            print(f"Error showing about: {{e}}")
+    
+    def _restart_client(self):
+        """Restart the client application"""
+        try:
+            messagebox.showinfo("Restart", "Client will restart in 3 seconds...")
+            import threading
+            
+            def restart_after_delay():
+                import time
+                time.sleep(3)
+                # Stop current instance
+                self.running = False
+                if self.tray_icon:
+                    self.tray_icon.stop()
+                
+                # Start new instance
+                client_path = Path(__file__).parent / "Client.exe"
+                if client_path.exists():
+                    subprocess.Popen([sys.executable, str(client_path)],
+                                   creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            threading.Thread(target=restart_after_delay, daemon=True).start()
+            
+        except Exception as e:
+            print(f"Error restarting client: {{e}}")
     
     def quit_application(self, icon=None, item=None):
         """Handle application quit - triggers force quit detection"""
