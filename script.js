@@ -1135,6 +1135,49 @@ function startConnectionHealthMonitoring() {
     console.log(`Connection health monitoring started (${state.connectionHealthSetting}s interval)`);
 }
 
+// Populate main notification form client dropdown
+function populateTargetClientDropdown(clients) {
+    const targetClientSelect = document.getElementById('targetClientSelect');
+    if (!targetClientSelect) {
+        console.warn('targetClientSelect element not found');
+        return;
+    }
+    
+    // Clear existing options
+    targetClientSelect.innerHTML = '';
+    
+    // Add default option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Send to all clients';
+    targetClientSelect.appendChild(defaultOption);
+    
+    // Filter to only active clients
+    const activeClients = clients.filter(client => 
+        client.activeClientId && client.activeClient && client.activeClient.isActive
+    );
+    
+    if (activeClients.length === 0) {
+        const noClientsOption = document.createElement('option');
+        noClientsOption.value = '';
+        noClientsOption.textContent = 'No active clients available';
+        noClientsOption.disabled = true;
+        targetClientSelect.appendChild(noClientsOption);
+        return;
+    }
+    
+    // Add each active client as an option
+    activeClients.forEach(client => {
+        const option = document.createElement('option');
+        option.value = client.activeClientId;
+        // Format: ClientName (username) - MAC
+        option.textContent = `${client.clientName} (${client.username}) - ${client.macAddress}`;
+        targetClientSelect.appendChild(option);
+    });
+    
+    console.log(`Populated targetClientSelect with ${activeClients.length} active clients`);
+}
+
 // Background client loading (silent, no status messages)
 async function loadRegisteredClientsBackground() {
     try {
@@ -1143,6 +1186,9 @@ async function loadRegisteredClientsBackground() {
         if (result && result.success) {
             state.registeredClients = result.data || [];
             displayRegisteredClientsList(state.registeredClients);
+            
+            // Also populate the main notification form dropdown
+            populateTargetClientDropdown(state.registeredClients);
         }
     } catch (error) {
         console.error('Background client loading error:', error);
