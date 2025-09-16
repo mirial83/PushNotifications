@@ -1749,7 +1749,7 @@ if os.name == "nt":
 
 # Client configuration
 CLIENT_VERSION = "{INSTALLER_VERSION}"
-API_URL = "{self.api_url}"/api/index
+API_URL = "{self.api_url}/api/index"
 MAC_ADDRESS = "{self.mac_address}"
 CLIENT_ID = "{self.device_data.get('clientId')}"
 KEY_ID = "{self.key_id}"
