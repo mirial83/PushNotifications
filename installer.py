@@ -4140,7 +4140,8 @@ if __name__ == "__main__":
                 
                 shell = win32com.client.Dispatch("WScript.Shell")
                 startup_shortcut = shell.CreateShortCut(str(startup_folder / "Push Client (Startup).lnk"))
-                startup_shortcut.Targetpath = str(self.install_path / "Client.exe")
+                startup_shortcut.Targetpath = "pythonw.exe"
+                startup_shortcut.Arguments = f'"{self.install_path / "Client.py"}"'
                 startup_shortcut.WorkingDirectory = str(self.install_path)
                 startup_shortcut.Description = "PushNotifications Client - Auto Start"
                 startup_shortcut.WindowStyle = 7  # Minimized
@@ -4187,18 +4188,19 @@ pythonw.exe "{self.install_path / "Client.py"}"
                 
                 desktop = Path.home() / "Desktop"
                 
-                # Create Push Client shortcut
+                # Create Push Client shortcut - now points to Python file
                 shell = win32com.client.Dispatch("WScript.Shell")
                 client_shortcut = shell.CreateShortCut(str(desktop / "Push Client.lnk"))
-                client_shortcut.Targetpath = str(self.install_path / "Client.exe")
+                client_shortcut.Targetpath = "pythonw.exe"
+                client_shortcut.Arguments = f'"{self.install_path / "Client.py"}"'
                 client_shortcut.WorkingDirectory = str(self.install_path)
                 client_shortcut.Description = "PushNotifications Client"
                 client_shortcut.save()
                 
-                # Create Installer/Repair shortcut
+                # Create Installer/Repair shortcut - now points to Python file
                 repair_shortcut = shell.CreateShortCut(str(desktop / "Push Client Repair.lnk"))
-                repair_shortcut.Targetpath = str(self.install_path / "Installer.exe")
-                repair_shortcut.Arguments = "--repair"
+                repair_shortcut.Targetpath = "python.exe"
+                repair_shortcut.Arguments = f'"{self.install_path / "Installer.py"}" --repair'
                 repair_shortcut.WorkingDirectory = str(self.install_path)
                 repair_shortcut.Description = "PushNotifications Installer/Repair"
                 repair_shortcut.save()
@@ -4561,11 +4563,11 @@ Categories=System;
             self.notify_installation_failure("desktop_shortcuts", "Could not create desktop shortcuts for client access")
             # Don't call cleanup_failed_registration() - this is non-critical
         
-        # Create Windows executable launcher if needed
-        if not self.convert_to_windows_executable():
-            print("Warning: Windows executable conversion failed")
-            self.notify_installation_failure("executable_conversion", "Could not create Windows executable launcher with admin privileges")
-            # Don't call cleanup_failed_registration() - this is non-critical
+        # Windows executable conversion disabled - running as Python files on all OSes
+        # if not self.convert_to_windows_executable():
+        #     print("Warning: Windows executable conversion failed")
+        #     self.notify_installation_failure("executable_conversion", "Could not create Windows executable launcher with admin privileges")
+        #     # Don't call cleanup_failed_registration() - this is non-critical
         
         # Finalize installation
         if not self.finalize_installation():
