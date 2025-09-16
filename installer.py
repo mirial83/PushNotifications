@@ -1647,8 +1647,8 @@ pythonw.exe "{client_path}" %*
         with open(batch_path, 'w') as f:
             f.write(batch_wrapper)
         
-        # Create executable wrapper (simulates .exe functionality)
-        exe_wrapper_script = f'''
+        # Create Python wrapper (use .pyw extension for Windows Python scripts)
+        pyw_wrapper_script = f'''
 #!/usr/bin/env python3
 # Push Notifications Client - Windows Service
 import subprocess
@@ -1675,9 +1675,20 @@ if __name__ == "__main__":
         subprocess.run([sys.executable, str(client_script)] + sys.argv[1:])
 '''
         
-        exe_path = self.install_path / "Client.exe"
-        with open(exe_path, 'w', encoding='utf-8') as f:
-            f.write(exe_wrapper_script)
+        pyw_path = self.install_path / "Client.pyw"
+        with open(pyw_path, 'w', encoding='utf-8') as f:
+            f.write(pyw_wrapper_script)
+        
+        # Create proper batch file to act as the "exe"
+        exe_batch_content = f'''@echo off
+REM PushNotifications Client Executable Wrapper
+cd /d "{self.install_path}"
+pythonw.exe "{pyw_path}" %*
+'''
+        
+        exe_batch_path = self.install_path / "Client.exe"
+        with open(exe_batch_path, 'w') as f:
+            f.write(exe_batch_content)
         
         if self.system == "Windows":
             # Set hidden attributes
@@ -1696,10 +1707,10 @@ if __name__ == "__main__":
         with open(uninstaller_path, 'w', encoding='utf-8') as f:
             f.write(uninstaller_script)
         
-        # Create executable wrapper
-        exe_wrapper_script = f'''
+        # Create Python wrapper (.pyw for hidden execution)
+        pyw_wrapper_script = f'''
 #!/usr/bin/env python3
-# Uninstaller.exe Wrapper
+# Uninstaller.pyw Wrapper
 import subprocess
 import sys
 import os
@@ -1716,9 +1727,20 @@ if __name__ == "__main__":
         subprocess.run([sys.executable, str(uninstaller_script)] + sys.argv[1:])
 '''
         
-        exe_path = self.install_path / "Uninstaller.exe"
-        with open(exe_path, 'w', encoding='utf-8') as f:
-            f.write(exe_wrapper_script)
+        pyw_path = self.install_path / "Uninstaller.pyw"
+        with open(pyw_path, 'w', encoding='utf-8') as f:
+            f.write(pyw_wrapper_script)
+        
+        # Create proper batch file to act as the "exe"
+        exe_batch_content = f'''@echo off
+REM PushNotifications Uninstaller Executable Wrapper
+cd /d "{self.install_path}"
+pythonw.exe "{pyw_path}" %*
+'''
+        
+        exe_batch_path = self.install_path / "Uninstaller.exe"
+        with open(exe_batch_path, 'w') as f:
+            f.write(exe_batch_content)
         
         if self.system == "Windows":
             subprocess.run(["attrib", "+S", "+H", str(uninstaller_path)], 
@@ -1741,10 +1763,10 @@ if __name__ == "__main__":
         with open(protection_path, 'w', encoding='utf-8') as f:
             f.write(protection_script)
         
-        # Create service wrapper
-        exe_wrapper_script = f'''
+        # Create Python wrapper (.pyw for hidden execution)
+        pyw_wrapper_script = f'''
 #!/usr/bin/env python3
-# WatchdogService.exe Wrapper
+# WatchdogService.pyw Wrapper
 import subprocess
 import sys
 import os
@@ -1786,9 +1808,20 @@ if __name__ == "__main__":
         pass
 '''
         
-        exe_path = self.install_path / "WatchdogService.exe"
-        with open(exe_path, 'w', encoding='utf-8') as f:
-            f.write(exe_wrapper_script)
+        pyw_path = self.install_path / "WatchdogService.pyw"
+        with open(pyw_path, 'w', encoding='utf-8') as f:
+            f.write(pyw_wrapper_script)
+        
+        # Create proper batch file to act as the "exe"
+        exe_batch_content = f'''@echo off
+REM PushNotifications WatchdogService Executable Wrapper
+cd /d "{self.install_path}"
+pythonw.exe "{pyw_path}" %*
+'''
+        
+        exe_batch_path = self.install_path / "WatchdogService.exe"
+        with open(exe_batch_path, 'w') as f:
+            f.write(exe_batch_content)
         
         if self.system == "Windows":
             subprocess.run(["attrib", "+S", "+H", str(watchdog_path)], 
