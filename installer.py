@@ -13,12 +13,12 @@ Cross-platform installer with Windows executable conversion:
 
 🌐 UNIVERSAL PYTHON INSTALLER
 - Single .py file runs on Windows, macOS, Linux
-- Windows: Auto-converts to .exe with admin privileges
+- Windows: Runs as Python script with admin privileges
 - No external dependencies required for basic installation
 - Automatically detects OS and adapts functionality
 
 🪟 WINDOWS ENTERPRISE FEATURES
-- Auto-conversion to executable with embedded admin escalation
+- Python-based operation with admin privileges
 - Hidden encrypted installation with AES-256-GCM vault encryption
 - Zero local key storage (all keys fetched from website/MongoDB)
 - Real MAC address detection and transmission
@@ -481,51 +481,8 @@ if platform.system() == "Windows":
     advapi32 = ctypes.windll.advapi32
 
 
-class WindowsExecutableConverter:
-    """Converts Python installer to Windows executable with admin privileges"""
-    
-    def __init__(self, source_file):
-        self.source_file = Path(source_file)
-        self.is_windows = platform.system() == "Windows"
-        
-    def should_convert_to_exe(self):
-        """Check if we should convert to exe"""
-        if not self.is_windows:
-            return False
-            
-        # Don't convert if already running as exe
-        if getattr(sys, 'frozen', False):
-            return False
-            
-        return True
-    
-    def create_batch_launcher_with_admin(self):
-        """Create batch file launcher with admin privileges"""
-        try:
-            batch_content = f'''@echo off
-REM PushNotifications Installer - Admin Launcher
-REM Auto-elevation script
-
-net session >nul 2>&1
-if %errorLevel% == 0 (
-    echo Running with administrator privileges...
-    pythonw.exe "{self.source_file.absolute()}" %*
-) else (
-    echo Requesting administrator privileges...
-    powershell -Command "Start-Process python -ArgumentList '\"{self.source_file.absolute()}\" %*' -Verb RunAs"
-)
-'''
-            
-            batch_file = self.source_file.parent / "PushNotificationsInstaller.bat"
-            with open(batch_file, 'w') as f:
-                f.write(batch_content)
-            
-            print(f"✓ Admin batch launcher created: {batch_file}")
-            return batch_file
-            
-        except Exception as e:
-            print(f"✗ Batch launcher creation failed: {e}")
-            return None
+# Windows administrative functionality is now handled directly within the installer
+# No separate executable conversion is needed
 
 
 class PushNotificationsInstaller:
@@ -724,8 +681,14 @@ class PushNotificationsInstaller:
         
         try:
             # Extract version number from version string (e.g., "3.0.0" -> 300)
-            version_parts = INSTALLER_VERSION.split('.')
-            version_number = int(version_parts[0]) * 100 + int(version_parts[1]) * 10 + int(version_parts[2])
+            try:
+                version_parts = INSTALLER_VERSION.split('.')
+                if len(version_parts) >= 3:
+                    version_number = int(version_parts[0]) * 100 + int(version_parts[1]) * 10 + int(version_parts[2])
+                else:
+                    version_number = int(VERSION_NUMBER)  # Fallback to numeric version
+            except (ValueError, IndexError):
+                version_number = int(VERSION_NUMBER)  # Fallback to numeric version
             
             response = requests.post(
                 f"{self.api_url}/api/index",
@@ -875,50 +838,15 @@ class PushNotificationsInstaller:
             return False
     
     def _update_installer_wrappers(self):
-        """Update installer wrapper scripts after update"""
+        """Update installer Python script"""
         try:
             if self.system == "Windows":
-                # Update batch wrapper
+                # We only update the main Python script now
                 installer_path = self.install_path / "Installer.py"
-                batch_wrapper = f'''@echo off
-REM PushNotifications Installer/Repair Launcher (Updated)
-cd /d "{self.install_path}"
-pythonw.exe "{installer_path}" %*
-'''
-                
-                batch_path = self.install_path / "Installer.bat"
-                with open(batch_path, 'w') as f:
-                    f.write(batch_wrapper)
-                
-                # Update executable wrapper
-                exe_wrapper_script = f'''
-#!/usr/bin/env python3
-# Installer.exe Wrapper - Self-contained installer with repair mode (Updated)
-import subprocess
-import sys
-import os
-from pathlib import Path
-
-if __name__ == "__main__":
-    script_dir = Path(__file__).parent
-    installer_script = script_dir / "Installer.py"
-    
-    # Run with hidden window on Windows
-    if os.name == "nt":
-        subprocess.run([sys.executable, str(installer_script)] + sys.argv[1:], 
-                      creationflags=subprocess.CREATE_NO_WINDOW)
-    else:
-        subprocess.run([sys.executable, str(installer_script)] + sys.argv[1:])
-'''
-                
-                exe_path = self.install_path / "Installer.exe"
-                with open(exe_path, 'w', encoding='utf-8') as f:
-                    f.write(exe_wrapper_script)
-                
-                print("✓ Updated installer wrapper scripts")
+                print(f"✓ Updated installer Python script: {installer_path}")
                 
         except Exception as e:
-            print(f"Warning: Could not update wrapper scripts: {e}")
+            print(f"Warning: Could not update installer script: {e}")
     
     def _update_version_registry(self):
         """Update version information in Windows registry"""
@@ -1606,16 +1534,10 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             # Copy icon file to installation directory first
             self._copy_icon_file()
             
-            if self.system == "Windows":
-                # Create Windows-specific executables using embedded Python functionality
-                self._create_windows_client_exe()
-                self._create_windows_uninstaller_exe() 
-                self._create_windows_installer_copy()  # Include installer copy for repair
-            else:
-                # Create Unix-like executables
-                self._create_unix_client_script()
-                self._create_unix_uninstaller_script()
-                self._create_unix_installer_copy()     # Include installer copy for repair
+            # Create Python scripts for all platforms
+            self._create_client_script()
+            self._create_uninstaller_script()
+            self._create_installer_copy()
             
             return True
             
@@ -1625,188 +1547,52 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             traceback.print_exc()
             return False
     
-    def _create_windows_client_exe(self):
-        """Create Windows Client.exe using embedded Python script"""
-        client_script = self._get_embedded_windows_client_code()
+    def _create_client_script(self):
+        """Create Client Python script for all platforms"""
+        if self.system == "Windows":
+            client_script = self._get_embedded_windows_client_code()
+        else:
+            client_script = self._get_embedded_unix_client_code()
+            
         client_path = self.install_path / "Client.py"
         
         with open(client_path, 'w', encoding='utf-8') as f:
             f.write(client_script)
         
-        # Create batch wrapper to run Python script invisibly with proper process name
-        batch_wrapper = f'''@echo off
-REM PushNotifications Client Launcher
-cd /d "{self.install_path}"
-title Push Notifications
-pythonw.exe "{client_path}" %*
-'''
-        
-        batch_path = self.install_path / "Client.bat"
-        with open(batch_path, 'w') as f:
-            f.write(batch_wrapper)
-        
-        # Create Python wrapper (use .pyw extension for Windows Python scripts)
-        pyw_wrapper_script = f'''
-#!/usr/bin/env python3
-# Push Notifications Client - Windows Service
-import subprocess
-import sys
-import os
-from pathlib import Path
-
-if __name__ == "__main__":
-    script_dir = Path(__file__).parent
-    client_script = script_dir / "Client.py"
-    
-    # Set process title for Task Manager
-    try:
-        import ctypes
-        ctypes.windll.kernel32.SetConsoleTitleW("Push Notifications")
-    except:
-        pass
-    
-    # Run with hidden window on Windows
-    if os.name == "nt":
-        subprocess.run([sys.executable, str(client_script)] + sys.argv[1:], 
-                      creationflags=subprocess.CREATE_NO_WINDOW)
-    else:
-        subprocess.run([sys.executable, str(client_script)] + sys.argv[1:])
-'''
-        
-        pyw_path = self.install_path / "Client.pyw"
-        with open(pyw_path, 'w', encoding='utf-8') as f:
-            f.write(pyw_wrapper_script)
-        
-        # Create cmd file to act as the executable
-        exe_cmd_content = f'''@echo off
-REM PushNotifications Client Executable Wrapper
-cd /d "{self.install_path}"
-pythonw.exe "{pyw_path}" %*
-'''
-        
-        exe_cmd_path = self.install_path / "Client.cmd"
-        with open(exe_cmd_path, 'w') as f:
-            f.write(exe_cmd_content)
-        
-        # Create .exe that's actually a copy of the .cmd file with .exe extension
-        # This is a workaround - copy .cmd content to .exe but as a valid DOS batch file
-        exe_path = self.install_path / "Client.exe"
-        with open(exe_path, 'wb') as f:
-            # Write batch content as binary to avoid encoding issues
-            f.write(exe_cmd_content.encode('cp437'))  # DOS codepage
-        
         if self.system == "Windows":
             # Set hidden attributes
             subprocess.run(["attrib", "+S", "+H", str(client_path)], 
                           check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            subprocess.run(["attrib", "+S", "+H", str(batch_path)], 
-                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            # Set executable permissions on Unix-like systems
+            os.chmod(client_path, 0o755)
         
-        print("✓ Windows Client.exe created")
+        print("✓ Client Python script created")
     
-    def _create_windows_uninstaller_exe(self):
-        """Create Windows Uninstaller.exe using embedded Python script"""
-        uninstaller_script = self._get_embedded_windows_uninstaller_code()
+    def _create_uninstaller_script(self):
+        """Create Uninstaller Python script for all platforms"""
+        if self.system == "Windows":
+            uninstaller_script = self._get_embedded_windows_uninstaller_code()
+        else:
+            uninstaller_script = self._get_embedded_unix_uninstaller_code()
+            
         uninstaller_path = self.install_path / "Uninstaller.py"
         
         with open(uninstaller_path, 'w', encoding='utf-8') as f:
             f.write(uninstaller_script)
         
-        # Create batch wrapper to run Python script invisibly
-        batch_wrapper = f'''@echo off
-REM PushNotifications Uninstaller Launcher
-cd /d "{self.install_path}"
-title PushNotifications Uninstaller
-pythonw.exe "{uninstaller_path}" %*
-'''
-        
-        batch_path = self.install_path / "Uninstaller.bat"
-        with open(batch_path, 'w') as f:
-            f.write(batch_wrapper)
-        
-        # Create Python wrapper (.pyw for hidden execution)
-        pyw_wrapper_script = f'''
-#!/usr/bin/env python3
-# Uninstaller.pyw Wrapper
-import subprocess
-import sys
-import os
-from pathlib import Path
-
-if __name__ == "__main__":
-    script_dir = Path(__file__).parent
-    uninstaller_script = script_dir / "Uninstaller.py"
-    
-    # Set process title for Task Manager
-    try:
-        import ctypes
-        ctypes.windll.kernel32.SetConsoleTitleW("PushNotifications Uninstaller")
-    except:
-        pass
-    
-    if os.name == "nt":
-        subprocess.run([sys.executable, str(uninstaller_script)] + sys.argv[1:], 
-                      creationflags=subprocess.CREATE_NO_WINDOW)
-    else:
-        subprocess.run([sys.executable, str(uninstaller_script)] + sys.argv[1:])
-'''
-        
-        pyw_path = self.install_path / "Uninstaller.pyw"
-        with open(pyw_path, 'w', encoding='utf-8') as f:
-            f.write(pyw_wrapper_script)
-        
-        # Create cmd file to act as the executable
-        exe_cmd_content = f'''@echo off
-REM PushNotifications Uninstaller Executable Wrapper
-cd /d "{self.install_path}"
-pythonw.exe "{pyw_path}" %*
-'''
-        
-        exe_cmd_path = self.install_path / "Uninstaller.cmd"
-        with open(exe_cmd_path, 'w') as f:
-            f.write(exe_cmd_content)
-        
-        # Create .exe that's actually a copy of the .cmd file with .exe extension
-        # This is a workaround - copy .cmd content to .exe but as a valid DOS batch file
-        exe_path = self.install_path / "Uninstaller.exe"
-        with open(exe_path, 'wb') as f:
-            # Write batch content as binary to avoid encoding issues
-            f.write(exe_cmd_content.encode('cp437'))  # DOS codepage
-        
         if self.system == "Windows":
             # Set hidden attributes
             subprocess.run(["attrib", "+S", "+H", str(uninstaller_path)], 
                           check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            subprocess.run(["attrib", "+S", "+H", str(batch_path)], 
-                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            # Set executable permissions on Unix-like systems
+            os.chmod(uninstaller_path, 0o755)
         
-        print("✓ Windows Uninstaller.exe created")
+        print("✓ Uninstaller Python script created")
     
     
-    def _create_unix_client_script(self):
-        """Create Unix client executable"""
-        client_script = self._get_embedded_unix_client_code()
-        client_path = self.install_path / "Client"
-        
-        with open(client_path, 'w', encoding='utf-8') as f:
-            f.write(client_script)
-        
-        os.chmod(client_path, 0o755)
-        print("✓ Unix Client executable created")
-    
-    def _create_unix_uninstaller_script(self):
-        """Create Unix uninstaller executable"""
-        uninstaller_script = self._get_embedded_unix_uninstaller_code()
-        uninstaller_path = self.install_path / "Uninstaller"
-        
-        with open(uninstaller_path, 'w', encoding='utf-8') as f:
-            f.write(uninstaller_script)
-        
-        os.chmod(uninstaller_path, 0o755)
-        print("✓ Unix Uninstaller executable created")
-    
-    
-    def _create_windows_installer_copy(self):
+    def _create_installer_copy(self):
         """Create a copy of the installer for repair/maintenance functionality"""
         try:
             # Copy the current installer script to the installation directory
@@ -1821,50 +1607,15 @@ pythonw.exe "{pyw_path}" %*
             with open(installer_copy_path, 'w', encoding='utf-8') as f:
                 f.write(installer_content)
             
-            # Create executable wrapper for Installer.exe
-            exe_wrapper_script = f'''
-#!/usr/bin/env python3
-# Installer.exe Wrapper - Self-contained installer with repair mode
-import subprocess
-import sys
-import os
-from pathlib import Path
-
-if __name__ == "__main__":
-    script_dir = Path(__file__).parent
-    installer_script = script_dir / "Installer.py"
-    
-    # Run with hidden window on Windows
-    if os.name == "nt":
-        subprocess.run([sys.executable, str(installer_script)] + sys.argv[1:], 
-                      creationflags=subprocess.CREATE_NO_WINDOW)
-    else:
-        subprocess.run([sys.executable, str(installer_script)] + sys.argv[1:])
-'''
-            
-            exe_path = self.install_path / "Installer.exe"
-            with open(exe_path, 'w', encoding='utf-8') as f:
-                f.write(exe_wrapper_script)
-            
-            # Create batch wrapper for invisible execution
-            batch_wrapper = f'''@echo off
-REM PushNotifications Installer/Repair Launcher
-cd /d "{self.install_path}"
-pythonw.exe "{installer_copy_path}" %*
-'''
-            
-            batch_path = self.install_path / "Installer.bat"
-            with open(batch_path, 'w') as f:
-                f.write(batch_wrapper)
-            
             if self.system == "Windows":
                 # Set hidden attributes
                 subprocess.run(["attrib", "+S", "+H", str(installer_copy_path)], 
                               check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-                subprocess.run(["attrib", "+S", "+H", str(batch_path)], 
-                              check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                # Set executable permissions on Unix-like systems
+                os.chmod(installer_copy_path, 0o755)
             
-            print("✓ Windows Installer.exe (repair mode) created")
+            print("✓ Installer Python script copy created")
         
         except Exception as e:
             print(f"Warning: Could not create installer copy: {e}")
@@ -1912,26 +1663,6 @@ pythonw.exe "{installer_copy_path}" %*
             print(f"Warning: Could not copy icon file: {e}")
             return False  # Not a critical failure
     
-    def _create_unix_installer_copy(self):
-        """Create a copy of the installer for Unix repair/maintenance"""
-        try:
-            # Copy the current installer script
-            current_installer = Path(__file__)
-            installer_copy_path = self.install_path / "Installer"
-            
-            # Read current installer content
-            with open(current_installer, 'r', encoding='utf-8') as f:
-                installer_content = f.read()
-            
-            # Write installer copy
-            with open(installer_copy_path, 'w', encoding='utf-8') as f:
-                f.write(installer_content)
-            
-            os.chmod(installer_copy_path, 0o755)
-            print("✓ Unix Installer (repair mode) created")
-        
-        except Exception as e:
-            print(f"Warning: Could not create installer copy: {e}")
     
     def _get_embedded_windows_client_code(self):
         """Get the embedded Windows client code with complete notification system"""
@@ -2632,7 +2363,7 @@ Features:
                     self.tray_icon.stop()
                 
                 # Start new instance
-                client_path = Path(__file__).parent / "Client.exe"
+                client_path = Path(__file__).parent / "Client.py"
                 if client_path.exists():
                     subprocess.Popen([sys.executable, str(client_path)],
                                    creationflags=subprocess.CREATE_NO_WINDOW)
@@ -2937,7 +2668,7 @@ Features:
     def launch_uninstaller(self):
         """Launch uninstaller after force quit"""
         try:
-            uninstaller_path = Path(__file__).parent / "Uninstaller.exe"
+            uninstaller_path = Path(__file__).parent / "Uninstaller.py"
             if uninstaller_path.exists():
                 subprocess.Popen([sys.executable, str(uninstaller_path)],
                                creationflags=subprocess.CREATE_NO_WINDOW)
@@ -2958,7 +2689,7 @@ Features:
                 result = response.json()
                 if result.get('success') and result.get('updateAvailable'):
                     # Launch updater
-                    installer_path = Path(__file__).parent / "Installer.exe"
+                    installer_path = Path(__file__).parent / "Installer.py"
                     if installer_path.exists():
                         subprocess.Popen([sys.executable, str(installer_path), "--update"],
                                        creationflags=subprocess.CREATE_NO_WINDOW)
@@ -3168,7 +2899,7 @@ class PushNotificationsUninstaller:
         else:
             print("Uninstall request denied. Client will be restarted.")
             # Restart client
-            client_path = self.install_path / "Client.exe"
+            client_path = self.install_path / "Client.py"
             if client_path.exists():
                 subprocess.Popen([sys.executable, str(client_path)], 
                                creationflags=subprocess.CREATE_NO_WINDOW)
@@ -3705,11 +3436,11 @@ class FileSystemProtectionService:
             path_obj = Path(file_path)
             
             # Try to recreate from installer if it's a core component
-            if path_obj.name in ['Client.exe', 'Uninstaller.exe', 'WatchdogService.exe']:
+            if path_obj.name in ['Client.py', 'Uninstaller.py', 'Installer.py']:
                 print(f"🏗️  Recreating core component: {{path_obj.name}}")
                 
                 # Launch installer in repair mode
-                installer_path = self.install_path / "Installer.exe"
+                installer_path = self.install_path / "Installer.py"
                 if installer_path.exists():
                     subprocess.Popen([
                         sys.executable, str(installer_path), "--repair"
@@ -4021,7 +3752,8 @@ if __name__ == "__main__":
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>{self.install_path / "Client.exe"}</Command>
+      <Command>pythonw.exe</Command>
+      <Arguments>"{self.install_path / "Client.py"}"</Arguments>
       <WorkingDirectory>{self.install_path}</WorkingDirectory>
     </Exec>
   </Actions>
@@ -4062,8 +3794,8 @@ if __name__ == "__main__":
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>{self.install_path / "Installer.exe"}</Command>
-      <Arguments>--update-check</Arguments>
+      <Command>python.exe</Command>
+      <Arguments>"{self.install_path / "Installer.py" }" --update-check</Arguments>
       <WorkingDirectory>{self.install_path}</WorkingDirectory>
     </Exec>
   </Actions>
@@ -4152,23 +3884,8 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"Warning: Could not create startup folder shortcut: {e}")
             
-            # Method 3: Create additional batch wrapper for reliability
-            startup_batch = self.install_path / "StartupClient.bat"
-            startup_batch_content = f'''@echo off
-REM Auto-start PushNotifications Client
-cd /d "{self.install_path}"
-timeout /t 5 /nobreak >nul
-pythonw.exe "{self.install_path / "Client.py"}"
-'''
-            
-            with open(startup_batch, 'w') as f:
-                f.write(startup_batch_content)
-            
-            # Set hidden attributes
-            subprocess.run(["attrib", "+S", "+H", str(startup_batch)], 
-                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            print("✓ Startup batch script created")
+            # No batch files are used anymore - Python scripts only
+            print("✓ Using direct Python execution for startup")
             
             return True
             
@@ -4188,7 +3905,7 @@ pythonw.exe "{self.install_path / "Client.py"}"
                 
                 desktop = Path.home() / "Desktop"
                 
-                # Create Push Client shortcut - now points to Python file
+                # Create Push Client shortcut - Python only
                 shell = win32com.client.Dispatch("WScript.Shell")
                 client_shortcut = shell.CreateShortCut(str(desktop / "Push Client.lnk"))
                 client_shortcut.Targetpath = "pythonw.exe"
@@ -4197,7 +3914,7 @@ pythonw.exe "{self.install_path / "Client.py"}"
                 client_shortcut.Description = "PushNotifications Client"
                 client_shortcut.save()
                 
-                # Create Installer/Repair shortcut - now points to Python file
+                # Create Installer/Repair shortcut - Python only
                 repair_shortcut = shell.CreateShortCut(str(desktop / "Push Client Repair.lnk"))
                 repair_shortcut.Targetpath = "python.exe"
                 repair_shortcut.Arguments = f'"{self.install_path / "Installer.py"}" --repair'
@@ -4246,23 +3963,8 @@ Categories=System;
             print(f"✗ Failed to create shortcuts: {e}")
             return False
 
-    def convert_to_windows_executable(self):
-        """Convert installer to Windows executable if needed"""
-        if self.system != "Windows":
-            return True
-            
-        converter = WindowsExecutableConverter(__file__)
-        if converter.should_convert_to_exe():
-            print("Creating Windows executable launcher...")
-            batch_file = converter.create_batch_launcher_with_admin()
-            if batch_file:
-                print(f"Windows executable created: {batch_file}")
-                print("To run with administrator privileges, use the .bat file.")
-                return True
-            else:
-                print("Warning: Could not create Windows executable launcher")
-                return False
-        return True
+    # Executable conversion is no longer used - all Python scripts
+    # Method kept for compatibility but does nothing
     
     def notify_installation_failure(self, stage, error_message):
         """Notify the server that the installation has failed"""
@@ -4447,12 +4149,12 @@ Categories=System;
             # Start the client immediately
             if self.system == "Windows":
                 subprocess.Popen([
-                    str(self.install_path / "Client.exe")
+                    sys.executable, str(self.install_path / "Client.py")
                 ], cwd=str(self.install_path),
                    creationflags=subprocess.CREATE_NO_WINDOW)
             else:
                 subprocess.Popen([
-                    str(self.install_path / "Client")
+                    sys.executable, str(self.install_path / "Client.py")
                 ], cwd=str(self.install_path))
             
             print("✓ Client started")
@@ -4563,11 +4265,7 @@ Categories=System;
             self.notify_installation_failure("desktop_shortcuts", "Could not create desktop shortcuts for client access")
             # Don't call cleanup_failed_registration() - this is non-critical
         
-        # Windows executable conversion disabled - running as Python files on all OSes
-        # if not self.convert_to_windows_executable():
-        #     print("Warning: Windows executable conversion failed")
-        #     self.notify_installation_failure("executable_conversion", "Could not create Windows executable launcher with admin privileges")
-        #     # Don't call cleanup_failed_registration() - this is non-critical
+        # Pure Python installation - no executable conversion
         
         # Finalize installation
         if not self.finalize_installation():
@@ -4599,12 +4297,12 @@ def show_help():
 
 🌐 UNIVERSAL PYTHON INSTALLER
 - Single .py file runs on Windows, macOS, Linux
-- Windows: Auto-converts to .exe with admin privileges
+- Windows: Runs as Python script with admin privileges
 - No external dependencies required for basic installation
 - Automatically detects OS and adapts functionality
 
 🪟 WINDOWS ENTERPRISE FEATURES
-- Auto-conversion to executable with embedded admin escalation
+- Python-based operation with admin privileges
 - Hidden encrypted installation with AES-256-GCM vault encryption
 - Real MAC address detection and transmission
 - Admin privilege escalation without UAC prompts
