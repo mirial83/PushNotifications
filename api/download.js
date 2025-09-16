@@ -1,7 +1,7 @@
 // Download API endpoint for PushNotifications
-import fs from 'fs';
-import path from 'path';
-import { MongoClient } from 'mongodb';
+const fs = require('fs');
+const path = require('path');
+const { MongoClient } = require('mongodb');
 
 // Database configuration
 const MONGODB_CONNECTION_STRING = process.env.MONGODB_CONNECTION_STRING;
@@ -197,7 +197,7 @@ class DownloadHandler {
   }
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
