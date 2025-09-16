@@ -1,6 +1,5 @@
 // PushNotifications Node.js API
-import { MongoClient, ObjectId } from 'mongodb';
-import crypto from 'crypto';
+const { MongoClient, ObjectId } = require('mongodb');
 
 // Environment variables
 const MONGODB_CONNECTION_STRING = process.env.MONGODB_CONNECTION_STRING;
@@ -3823,7 +3822,7 @@ class DatabaseOperations {
 }
 
 // Main API handler
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
