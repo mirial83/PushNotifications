@@ -2434,8 +2434,8 @@ Features:
                 
                 time.sleep(30)  # Check every 30 seconds
                 
-            except Exception as e:
-                print(f"Error in notification check: {{e}}")
+        except Exception as e:
+            print(f"Error in notification check: {{e}}")
                 time.sleep(60)
     
     def process_notifications(self, server_notifications):
