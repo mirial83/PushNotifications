@@ -4700,14 +4700,24 @@ def main():
                     
                     # Try PowerShell first (most reliable on Windows 10/11)
                     try:
-                        powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList "{script_path}", {', '.join([f'\"{arg}\"' for arg in sys.argv[1:]])} -Verb RunAs -Wait'
+                        # Build argument list properly for PowerShell
+                        if len(sys.argv) > 1:
+                            args_list = f"'{script_path}', " + ", ".join([f"'{arg}'" for arg in sys.argv[1:]])
+                        else:
+                            args_list = f"'{script_path}'"
+                        
+                        powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList {args_list} -Verb RunAs -Wait'
+                        
+                        print(f"Executing: {powershell_cmd}")
                         result = subprocess.run([
                             'powershell.exe', '-Command', powershell_cmd
-                        ], creationflags=subprocess.CREATE_NO_WINDOW, timeout=60)
+                        ], timeout=60)
                         
                         if result.returncode == 0:
                             print("✓ Elevated process completed")
                             sys.exit(0)
+                        else:
+                            print(f"PowerShell elevation returned code: {result.returncode}")
                     except Exception as e:
                         print(f"PowerShell elevation failed: {e}")
                     
