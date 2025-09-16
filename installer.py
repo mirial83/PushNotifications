@@ -4684,6 +4684,67 @@ def show_specific_documentation(doc_type):
 def main():
     """Main installer entry point"""
     try:
+        # FORCE ADMINISTRATOR PRIVILEGES IMMEDIATELY ON WINDOWS
+        # This prevents '16-bit subsystem' errors and other privilege-related issues
+        if platform.system() == "Windows":
+            try:
+                # Check if already running as admin
+                is_admin = bool(ctypes.windll.shell32.IsUserAnAdmin())
+                if not is_admin:
+                    print("Restarting with administrator privileges...")
+                    print("This is required to avoid '16-bit subsystem' errors.")
+                    
+                    # Use the most reliable elevation method
+                    script_path = os.path.abspath(sys.argv[0])
+                    script_args = ' '.join([f'"{arg}"' for arg in sys.argv])
+                    
+                    # Try PowerShell first (most reliable on Windows 10/11)
+                    try:
+                        powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList "{script_path}", {', '.join([f'\"{arg}\"' for arg in sys.argv[1:]])} -Verb RunAs -Wait'
+                        result = subprocess.run([
+                            'powershell.exe', '-Command', powershell_cmd
+                        ], creationflags=subprocess.CREATE_NO_WINDOW, timeout=60)
+                        
+                        if result.returncode == 0:
+                            print("✓ Elevated process completed")
+                            sys.exit(0)
+                    except Exception as e:
+                        print(f"PowerShell elevation failed: {e}")
+                    
+                    # Fallback to ctypes ShellExecuteW
+                    try:
+                        shell32 = ctypes.windll.shell32
+                        shell32.ShellExecuteW.argtypes = [
+                            ctypes.wintypes.HWND, ctypes.wintypes.LPCWSTR, ctypes.wintypes.LPCWSTR,
+                            ctypes.wintypes.LPCWSTR, ctypes.wintypes.LPCWSTR, ctypes.c_int
+                        ]
+                        shell32.ShellExecuteW.restype = ctypes.c_void_p
+                        
+                        result = shell32.ShellExecuteW(
+                            None, "runas", sys.executable, script_args, None, 1
+                        )
+                        
+                        result_int = ctypes.cast(result, ctypes.c_void_p).value or 0
+                        if result_int > 32:
+                            print("✓ Administrator privileges requested")
+                            sys.exit(0)
+                        else:
+                            print(f"Elevation failed with error code: {result_int}")
+                    except Exception as e:
+                        print(f"Elevation failed: {e}")
+                    
+                    # If all methods fail, show error and exit
+                    print("\n❌ Failed to obtain administrator privileges.")
+                    print("Please right-click this script and select 'Run as administrator'")
+                    print("Administrator privileges are required to prevent system errors.")
+                    input("Press Enter to exit...")
+                    sys.exit(1)
+                else:
+                    print("✓ Running with administrator privileges")
+            except Exception as e:
+                print(f"Error checking administrator privileges: {e}")
+                print("Continuing anyway...")
+        
         # Parse command line arguments
         api_url = None
         repair_mode = False

@@ -868,7 +868,7 @@ class DatabaseOperations {
 
       if (this.usesFallback) {
         // Fallback storage for simple registration
-        const clientId = `${username}_${macAddress.replace(/[:-]/g, '').substr(-6)}`;
+        const clientId = `${username}_${macAddress.replace(/[:-]/g, '').slice(-6)}`;
         const client = {
           clientId,
           clientName: clientName || `${username}1`,
@@ -925,7 +925,7 @@ class DatabaseOperations {
       
       // Generate client ID and names
       const generatedClientName = clientName || `${username}${installationCount}`;
-      const clientId = `${username}_${macAddress.replace(/[:-]/g, '').substr(-6)}_${installationCount}`;
+      const clientId = `${username}_${macAddress.replace(/[:-]/g, '').slice(-6)}_${installationCount}`;
       const installationId = `inst_${macAddress.replace(/[:-]/g, '')}_${installationCount}`;
       const keyId = `key_${macAddress.replace(/[:-]/g, '')}_${Date.now()}`;
       
