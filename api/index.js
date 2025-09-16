@@ -1885,50 +1885,63 @@ class DatabaseOperations {
 
       // Check if MAC address already has installations
       const existingInstallations = await this.db.collection('installations')
-        .find({ macAddress })
-        .sort({ installationCount: -1 })
+        .find({ macAddress, isActive: true })
+        .sort({ createdAt: -1 })
         .toArray();
       
-      let clientName, clientId, isNewInstallation = false;
-      const installationCount = existingInstallations.length + 1;
-
-      if (existingInstallations.length === 0) {
-        // First installation on this MAC address
-        clientName = `${username}1`;
-        clientId = `${username}_${macAddress.replace(/:/g, '').substr(-6)}_1`;
-        isNewInstallation = true;
-      } else {
-        // Existing MAC address - this is a new installation
-        clientName = `${username}${installationCount}`;
-        clientId = `${username}_${macAddress.replace(/:/g, '').substr(-6)}_${installationCount}`;
-        isNewInstallation = true;
-        
-        // Deactivate any existing current installation for this MAC
+      // Check for current active installation
+      const currentInstallation = existingInstallations.find(install => install.isCurrentForMac === true);
+      
+      if (currentInstallation) {
+        // Found existing active installation - return its details
+        return {
+          success: true,
+          clientId: currentInstallation.clientId,
+          clientName: currentInstallation.clientName,
+          isNewInstallation: false,
+          macAddress: currentInstallation.macAddress,
+          installationCount: currentInstallation.installationNumber || 1,
+          keyId: currentInstallation.keyId,
+          message: 'Existing client installation authenticated'
+        };
+      }
+      
+      // If no current installation, check for any previous installations on this MAC
+      const allInstallations = await this.db.collection('installations')
+        .find({ macAddress })
+        .sort({ installationNumber: -1 })
+        .toArray();
+      
+      const installationCount = allInstallations.length + 1;
+      const clientName = `${username}${installationCount}`;
+      const clientId = `${username}_${macAddress.replace(/:/g, '').substr(-6)}_${installationCount}`;
+      
+      // Deactivate any existing installations for this MAC
+      if (allInstallations.length > 0) {
         await this.db.collection('installations').updateMany(
-          { macAddress, isCurrentForMac: true },
+          { macAddress, isActive: true },
           { 
             $set: { 
               isActive: false,
               isCurrentForMac: false,
               deactivatedAt: now,
-              deactivationReason: 'New installation on same MAC address'
+              deactivationReason: 'New installation detected on same MAC address'
             }
           }
         );
       }
-
-      // Note: This method is primarily for legacy authentication
-      // Full registration should use registerClientInstallation
-      // For now, we'll return the generated IDs that would be used
+      
+      // This method is for authentication only - actual installation record
+      // should be created via registerClientInstallation method
       
       return {
         success: true,
         clientId,
         clientName,
-        isNewInstallation,
+        isNewInstallation: true,
         macAddress,
         installationCount,
-        message: isNewInstallation ? 'New client installation would be registered' : 'Client authentication successful'
+        message: 'Authentication successful - ready for installation registration'
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -1948,32 +1961,48 @@ class DatabaseOperations {
       await this.connect();
       const now = new Date();
 
-      // Update client history record
-      const historyResult = await this.db.collection('clientHistory').updateOne(
+      // Find and update the installation record for this client ID
+      const installation = await this.db.collection('installations').findOne({
+        clientId,
+        isActive: true
+      });
+
+      if (!installation) {
+        return {
+          success: false,
+          message: `No active installation found for client ID: ${clientId}`,
+          updated: false
+        };
+      }
+
+      // Update the installation record with the latest checkin and version
+      const result = await this.db.collection('installations').updateOne(
         { clientId, isActive: true },
         { 
           $set: { 
             lastCheckin: now,
-            version: version || 'unknown'
+            version: version || installation.version || 'unknown'
           }
         }
       );
 
-      if (historyResult.modifiedCount > 0) {
-        // Update MAC client record
-        const clientHistory = await this.db.collection('clientHistory').findOne({ clientId, isActive: true });
-        if (clientHistory) {
-          await this.db.collection('macClients').updateOne(
-            { macAddress: clientHistory.macAddress },
-            { $set: { lastCheckin: now } }
-          );
-        }
-      }
+      const additionalInfo = {
+        installationId: installation.installationId,
+        macAddress: installation.macAddress,
+        hostname: installation.hostname,
+        isCurrentForMac: installation.isCurrentForMac,
+        previousVersion: installation.version,
+        newVersion: version || installation.version || 'unknown',
+        versionChanged: version && version !== installation.version
+      };
 
       return { 
         success: true, 
-        message: 'Client checkin updated',
-        updated: historyResult.modifiedCount > 0
+        message: `Client checkin updated for ${clientId}`,
+        updated: result.modifiedCount > 0,
+        clientId,
+        lastCheckin: now,
+        ...additionalInfo
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -2017,58 +2046,131 @@ class DatabaseOperations {
 
       await this.connect();
       
-      // Get only MAC clients with active registrations
-      const macClients = await this.db.collection('macClients')
-        .find({ isActiveRegistration: { $ne: false } }) // Only get active registrations
-        .sort({ lastCheckin: -1 })
+      // Get all installations from the unified collection, grouped by MAC address
+      const installations = await this.db.collection('installations')
+        .find({})
+        .sort({ macAddress: 1, createdAt: -1 }) // Sort by MAC address, then by creation date (newest first)
         .toArray();
 
-      const processedClients = [];
+      // Group installations by MAC address
+      const macClientMap = new Map();
       
-      for (const macClient of macClients) {
-        // Get the most recent client history record for this MAC (regardless of isActive status)
-        const latestClient = macClient.activeClientId ? 
-          await this.db.collection('clientHistory').findOne({
-            clientId: macClient.activeClientId
-          }) : null;
-
-        // Also check for any active client record
-        const activeClient = macClient.activeClientId ? 
-          await this.db.collection('clientHistory').findOne({
-            clientId: macClient.activeClientId,
-            isActive: true
-          }) : null;
-
-        processedClients.push({
-          _id: macClient._id.toString(),
-          macAddress: macClient.macAddress,
-          username: macClient.username,
-          clientName: macClient.clientName,
-          activeClientId: macClient.activeClientId,
-          installationCount: macClient.installationCount,
-          hostname: macClient.hostname,
-          platform: macClient.platform,
-          createdAt: macClient.createdAt,
-          lastCheckin: macClient.lastCheckin,
-          // Include both active and latest client info
-          activeClient: activeClient ? {
-            installPath: activeClient.installPath,
-            version: activeClient.version,
-            createdAt: activeClient.createdAt,
-            lastCheckin: activeClient.lastCheckin,
-            isActive: true
-          } : null,
-          latestClient: latestClient ? {
-            installPath: latestClient.installPath,
-            version: latestClient.version,
-            createdAt: latestClient.createdAt,
-            lastCheckin: latestClient.lastCheckin,
-            isActive: latestClient.isActive,
-            deactivatedAt: latestClient.deactivatedAt,
-            deactivationReason: latestClient.deactivationReason
-          } : null
-        });
+      for (const installation of installations) {
+        const macAddress = installation.macAddress;
+        
+        if (!macClientMap.has(macAddress)) {
+          // Initialize MAC client entry with the first (most recent) installation
+          macClientMap.set(macAddress, {
+            _id: installation._id.toString(),
+            macAddress: installation.macAddress,
+            username: installation.username,
+            clientName: installation.clientName,
+            activeClientId: installation.isActive ? installation.clientId : null,
+            installationCount: installation.installationCount || 1,
+            hostname: installation.hostname,
+            platform: installation.platform,
+            createdAt: installation.createdAt,
+            registeredAt: installation.registeredAt,
+            lastCheckin: installation.lastCheckin,
+            // Current active installation (if this one is active)
+            activeInstallation: installation.isActive && installation.isCurrentForMac ? {
+              clientId: installation.clientId,
+              installationId: installation.installationId,
+              keyId: installation.keyId,
+              installPath: installation.installPath,
+              version: installation.version,
+              createdAt: installation.createdAt,
+              lastCheckin: installation.lastCheckin,
+              isActive: installation.isActive,
+              isCurrentForMac: installation.isCurrentForMac
+            } : null,
+            // Latest installation (this one, since sorted by newest first)
+            latestInstallation: {
+              clientId: installation.clientId,
+              installationId: installation.installationId,
+              keyId: installation.keyId,
+              installPath: installation.installPath,
+              version: installation.version,
+              createdAt: installation.createdAt,
+              lastCheckin: installation.lastCheckin,
+              isActive: installation.isActive,
+              isCurrentForMac: installation.isCurrentForMac,
+              deactivatedAt: installation.deactivatedAt,
+              deactivationReason: installation.deactivationReason
+            },
+            // Count of all installations for this MAC
+            totalInstallations: installations.filter(i => i.macAddress === macAddress).length,
+            // Count of active installations for this MAC
+            activeInstallations: installations.filter(i => i.macAddress === macAddress && i.isActive).length
+          });
+        } else {
+          // Update existing MAC client entry with active installation info if needed
+          const macClient = macClientMap.get(macAddress);
+          
+          // Update active installation if this installation is current and active
+          if (installation.isActive && installation.isCurrentForMac && !macClient.activeInstallation) {
+            macClient.activeClientId = installation.clientId;
+            macClient.activeInstallation = {
+              clientId: installation.clientId,
+              installationId: installation.installationId,
+              keyId: installation.keyId,
+              installPath: installation.installPath,
+              version: installation.version,
+              createdAt: installation.createdAt,
+              lastCheckin: installation.lastCheckin,
+              isActive: installation.isActive,
+              isCurrentForMac: installation.isCurrentForMac
+            };
+            
+            // Update last checkin if this is more recent
+            if (installation.lastCheckin > macClient.lastCheckin) {
+              macClient.lastCheckin = installation.lastCheckin;
+            }
+          }
+        }
       }
+
+      // Convert map to array and maintain compatibility with old API format
+      const processedClients = Array.from(macClientMap.values()).map(macClient => ({
+        _id: macClient._id,
+        macAddress: macClient.macAddress,
+        username: macClient.username,
+        clientName: macClient.clientName,
+        activeClientId: macClient.activeClientId,
+        installationCount: macClient.installationCount,
+        hostname: macClient.hostname,
+        platform: macClient.platform,
+        createdAt: macClient.createdAt,
+        registeredAt: macClient.registeredAt,
+        lastCheckin: macClient.lastCheckin,
+        // Maintain compatibility with old API structure
+        activeClient: macClient.activeInstallation ? {
+          installPath: macClient.activeInstallation.installPath,
+          version: macClient.activeInstallation.version,
+          createdAt: macClient.activeInstallation.createdAt,
+          lastCheckin: macClient.activeInstallation.lastCheckin,
+          isActive: macClient.activeInstallation.isActive
+        } : null,
+        latestClient: macClient.latestInstallation ? {
+          installPath: macClient.latestInstallation.installPath,
+          version: macClient.latestInstallation.version,
+          createdAt: macClient.latestInstallation.createdAt,
+          lastCheckin: macClient.latestInstallation.lastCheckin,
+          isActive: macClient.latestInstallation.isActive,
+          deactivatedAt: macClient.latestInstallation.deactivatedAt,
+          deactivationReason: macClient.latestInstallation.deactivationReason
+        } : null,
+        // Enhanced information from unified installations
+        installationDetails: {
+          totalInstallations: macClient.totalInstallations,
+          activeInstallations: macClient.activeInstallations,
+          currentInstallation: macClient.activeInstallation,
+          latestInstallation: macClient.latestInstallation
+        }
+      }));
+
+      // Sort by last checkin (most recent first)
+      processedClients.sort((a, b) => new Date(b.lastCheckin) - new Date(a.lastCheckin));
 
       return { success: true, data: processedClients };
     } catch (error) {
@@ -2084,30 +2186,68 @@ class DatabaseOperations {
 
       await this.connect();
       
+      // Query the installations collection for historical data
       const query = macAddress ? { macAddress } : {};
-      const history = await this.db.collection('clientHistory')
+      const installations = await this.db.collection('installations')
         .find(query)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1 }) // Sort by creation date (newest first)
         .toArray();
 
-      const processedHistory = history.map(record => ({
-        _id: record._id.toString(),
-        macAddress: record.macAddress,
-        clientId: record.clientId,
-        clientName: record.clientName,
-        username: record.username,
-        hostname: record.hostname,
-        installPath: record.installPath,
-        platform: record.platform,
-        version: record.version,
-        isActive: record.isActive,
-        createdAt: record.createdAt,
-        lastCheckin: record.lastCheckin,
-        deactivatedAt: record.deactivatedAt,
-        deactivationReason: record.deactivationReason
+      // Map installations to the expected client history format
+      const processedHistory = installations.map(installation => ({
+        _id: installation._id.toString(),
+        macAddress: installation.macAddress,
+        clientId: installation.clientId,
+        clientName: installation.clientName,
+        username: installation.username,
+        hostname: installation.hostname,
+        installPath: installation.installPath,
+        platform: installation.platform,
+        version: installation.version,
+        isActive: installation.isActive,
+        createdAt: installation.createdAt,
+        lastCheckin: installation.lastCheckin,
+        deactivatedAt: installation.deactivatedAt,
+        deactivationReason: installation.deactivationReason,
+        // Enhanced fields from unified installations collection
+        installationId: installation.installationId,
+        keyId: installation.keyId,
+        installationCount: installation.installationCount,
+        isCurrentForMac: installation.isCurrentForMac,
+        registeredAt: installation.registeredAt,
+        userId: installation.userId ? installation.userId.toString() : null,
+        userRole: installation.userRole,
+        // Installation metadata
+        installerMode: installation.installerMode,
+        macDetectionMethod: installation.macDetectionMethod,
+        // Policy information
+        policy: installation.policy,
+        // Installation history tracking
+        installationHistory: installation.installationHistory
       }));
 
-      return { success: true, data: processedHistory };
+      // Enhanced response with additional metadata
+      const totalInstallations = installations.length;
+      const activeInstallations = installations.filter(i => i.isActive).length;
+      const uniqueMacs = new Set(installations.map(i => i.macAddress)).size;
+      const dateRange = installations.length > 0 ? {
+        earliest: installations[installations.length - 1].createdAt,
+        latest: installations[0].createdAt
+      } : null;
+
+      return { 
+        success: true, 
+        data: processedHistory,
+        metadata: {
+          totalInstallations,
+          activeInstallations,
+          inactiveInstallations: totalInstallations - activeInstallations,
+          uniqueMacAddresses: uniqueMacs,
+          dateRange,
+          filteredByMac: macAddress ? true : false,
+          macAddress: macAddress || null
+        }
+      };
     } catch (error) {
       return { success: false, message: error.message };
     }
@@ -2126,33 +2266,77 @@ class DatabaseOperations {
       await this.connect();
       const now = new Date();
 
-      // Deactivate the client in history
-      const result = await this.db.collection('clientHistory').updateOne(
+      // Find the installation record for this client ID
+      const installation = await this.db.collection('installations').findOne({
+        clientId,
+        isActive: true
+      });
+
+      if (!installation) {
+        return {
+          success: false,
+          message: `No active installation found for client ID: ${clientId}`,
+          deactivated: false
+        };
+      }
+
+      // Deactivate the installation
+      const result = await this.db.collection('installations').updateOne(
         { clientId, isActive: true },
         {
           $set: {
             isActive: false,
+            isCurrentForMac: false, // Also unmark as current for MAC
             deactivatedAt: now,
             deactivationReason: reason
           }
         }
       );
 
+      let additionalInfo = {};
       if (result.modifiedCount > 0) {
-        // Clear the active client ID from MAC client record
-        const clientHistory = await this.db.collection('clientHistory').findOne({ clientId });
-        if (clientHistory) {
-          await this.db.collection('macClients').updateOne(
-            { macAddress: clientHistory.macAddress },
-            { $set: { activeClientId: null } }
+        // Check if there are other active installations for the same MAC address
+        const otherActiveInstallations = await this.db.collection('installations')
+          .find({
+            macAddress: installation.macAddress,
+            isActive: true,
+            clientId: { $ne: clientId } // Exclude the one we just deactivated
+          })
+          .sort({ createdAt: -1 }) // Get the most recent one
+          .toArray();
+
+        // If there are other active installations, mark the most recent one as current
+        if (otherActiveInstallations.length > 0) {
+          const mostRecentInstallation = otherActiveInstallations[0];
+          await this.db.collection('installations').updateOne(
+            { _id: mostRecentInstallation._id },
+            { $set: { isCurrentForMac: true } }
           );
+          
+          additionalInfo.newCurrentInstallation = {
+            clientId: mostRecentInstallation.clientId,
+            installationId: mostRecentInstallation.installationId,
+            createdAt: mostRecentInstallation.createdAt
+          };
         }
+
+        additionalInfo.deactivatedInstallation = {
+          installationId: installation.installationId,
+          macAddress: installation.macAddress,
+          hostname: installation.hostname,
+          version: installation.version,
+          createdAt: installation.createdAt,
+          deactivatedAt: now,
+          deactivationReason: reason
+        };
       }
 
       return {
         success: true,
-        message: 'Client deactivated successfully',
-        deactivated: result.modifiedCount > 0
+        message: `Client ${clientId} deactivated successfully`,
+        deactivated: result.modifiedCount > 0,
+        clientId,
+        ...additionalInfo
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -2172,50 +2356,66 @@ class DatabaseOperations {
       await this.connect();
       const now = new Date();
 
-      // Find the MAC client record
-      const macClient = await this.db.collection('macClients').findOne({ macAddress });
-      if (!macClient) {
-        return { success: false, message: 'MAC client not found' };
+      // Find all installations for this MAC address
+      const installations = await this.db.collection('installations')
+        .find({ macAddress, isActive: true })
+        .toArray();
+
+      if (installations.length === 0) {
+        return {
+          success: false,
+          message: `No active installations found for MAC address: ${macAddress}`,
+          macAddress,
+          deactivated: false
+        };
       }
 
-      // Mark the MAC client registration as inactive
-      const result = await this.db.collection('macClients').updateOne(
-        { macAddress },
+      // Deactivate all installations for this MAC address
+      const result = await this.db.collection('installations').updateMany(
+        { macAddress, isActive: true },
         {
           $set: {
-            isActiveRegistration: false,
+            isActive: false,
+            isCurrentForMac: false,
             deactivatedAt: now,
             deactivationReason: reason
           }
         }
       );
 
-      // Also deactivate any active client history record for this MAC address
-      if (macClient.activeClientId) {
-        await this.db.collection('clientHistory').updateOne(
-          { clientId: macClient.activeClientId, isActive: true },
-          {
-            $set: {
-              isActive: false,
-              deactivatedAt: now,
-              deactivationReason: reason
-            }
-          }
-        );
-      }
+      // Collect information about deactivated installations
+      const deactivatedInstallations = installations.map(installation => ({
+        clientId: installation.clientId,
+        installationId: installation.installationId,
+        hostname: installation.hostname,
+        username: installation.username,
+        version: installation.version,
+        createdAt: installation.createdAt,
+        deactivatedAt: now,
+        deactivationReason: reason
+      }));
 
       return {
         success: true,
-        message: `MAC client registration for ${macAddress} deactivated successfully`,
+        message: `All installations for MAC address ${macAddress} deactivated successfully`,
         macAddress,
-        deactivated: result.modifiedCount > 0
+        deactivated: result.modifiedCount > 0,
+        deactivatedInstallations,
+        totalDeactivated: result.modifiedCount,
+        installationDetails: {
+          totalInstallationsFound: installations.length,
+          totalDeactivated: result.modifiedCount,
+          clientIds: installations.map(i => i.clientId),
+          hostnames: [...new Set(installations.map(i => i.hostname))],
+          usernames: [...new Set(installations.map(i => i.username))]
+        }
       };
     } catch (error) {
       return { success: false, message: error.message };
     }
   }
 
-  // Update security key management to work with MAC addresses
+  // Update security key management to work with embedded keys in installations
   async createSecurityKeyForMac(macAddress, keyType, keyValue, installPath, hostname) {
     try {
       if (this.usesFallback) {
@@ -2224,47 +2424,49 @@ class DatabaseOperations {
 
       await this.connect();
       
-      // Get the active client for this MAC address
-      const macClient = await this.db.collection('macClients').findOne({ macAddress });
-      if (!macClient || !macClient.activeClientId) {
-        return { success: false, message: 'No active client found for this MAC address' };
+      // Find the active installation for this MAC address
+      const installation = await this.db.collection('installations').findOne({
+        macAddress,
+        isActive: true,
+        isCurrentForMac: true
+      });
+      
+      if (!installation) {
+        return { success: false, message: 'No active installation found for this MAC address' };
       }
 
-      const securityKeyData = {
-        clientId: macClient.activeClientId,
-        macAddress,
-        keyType,
+      const now = new Date();
+      const keyData = {
         keyValue,
-        installPath,
-        hostname,
-        createdAt: new Date(),
-        lastUsed: new Date()
+        keyType,
+        createdAt: now,
+        lastUsed: now,
+        updatedAt: now
       };
 
-      // Check if key already exists for this client
-      const existingKey = await this.db.collection('securityKeys').findOne({
-        clientId: macClient.activeClientId,
-        keyType
-      });
-
-      if (existingKey) {
-        // Update existing key
-        await this.db.collection('securityKeys').updateOne(
-          { _id: existingKey._id },
-          { 
-            $set: { 
-              keyValue,
-              macAddress,
-              lastUsed: new Date(),
-              updatedAt: new Date()
-            }
+      // Update the installation record to include/update the security key
+      const updatePath = `securityKeys.${keyType.toLowerCase()}Key`;
+      const result = await this.db.collection('installations').updateOne(
+        { _id: installation._id },
+        { 
+          $set: { 
+            [updatePath]: keyData,
+            'securityKeys.lastUpdated': now
           }
-        );
-        return { success: true, message: 'Security key updated' };
+        }
+      );
+
+      if (result.modifiedCount > 0) {
+        return {
+          success: true,
+          message: `Security key ${keyType} created/updated for installation ${installation.installationId}`,
+          installationId: installation.installationId,
+          clientId: installation.clientId,
+          keyType,
+          createdAt: now
+        };
       } else {
-        // Insert new key
-        await this.db.collection('securityKeys').insertOne(securityKeyData);
-        return { success: true, message: 'Security key created' };
+        return { success: false, message: 'Failed to update security key' };
       }
     } catch (error) {
       return { success: false, message: error.message };
@@ -2280,28 +2482,46 @@ class DatabaseOperations {
 
       await this.connect();
       
-      // Get the active client for this MAC address
-      const macClient = await this.db.collection('macClients').findOne({ macAddress });
-      if (!macClient || !macClient.activeClientId) {
-        return { success: false, message: 'No active client found for this MAC address' };
-      }
-
-      const securityKey = await this.db.collection('securityKeys').findOne({
-        clientId: macClient.activeClientId,
-        keyType
+      // Find the active installation for this MAC address
+      const installation = await this.db.collection('installations').findOne({
+        macAddress,
+        isActive: true,
+        isCurrentForMac: true
       });
-
-      if (securityKey) {
-        // Update last used timestamp
-        await this.db.collection('securityKeys').updateOne(
-          { _id: securityKey._id },
-          { $set: { lastUsed: new Date() } }
-        );
-        
-        return { success: true, key: securityKey.keyValue };
-      } else {
-        return { success: false, message: 'Security key not found' };
+      
+      if (!installation) {
+        return { success: false, message: 'No active installation found for this MAC address' };
       }
+
+      // Get the security key from the embedded keys structure
+      const keyPath = `securityKeys.${keyType.toLowerCase()}Key`;
+      const securityKey = installation.securityKeys && installation.securityKeys[`${keyType.toLowerCase()}Key`];
+      
+      if (!securityKey || !securityKey.keyValue) {
+        return { success: false, message: `Security key ${keyType} not found for this installation` };
+      }
+
+      // Update last used timestamp for the security key
+      const now = new Date();
+      await this.db.collection('installations').updateOne(
+        { _id: installation._id },
+        { 
+          $set: { 
+            [`${keyPath}.lastUsed`]: now,
+            'securityKeys.lastUpdated': now
+          }
+        }
+      );
+      
+      return { 
+        success: true, 
+        key: securityKey.keyValue,
+        installationId: installation.installationId,
+        clientId: installation.clientId,
+        keyType,
+        lastUsed: now,
+        createdAt: securityKey.createdAt
+      };
     } catch (error) {
       return { success: false, message: error.message };
     }
