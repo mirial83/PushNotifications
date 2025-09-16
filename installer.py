@@ -3875,7 +3875,7 @@ if __name__ == "__main__":
                 pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
                 if not Path(pythonw_exe).exists():
                     pythonw_exe = 'pythonw.exe'  # Fallback to system PATH
-                client_cmd = f'"{pythonw_exe}" "{self.install_path / "Client.py"}'"
+                client_cmd = f'"{pythonw_exe}" "{self.install_path / "Client.py"}"'
                 winreg.SetValueEx(key, "PushNotifications", 0, winreg.REG_SZ, client_cmd)
                 print("✓ Registry startup entry created")
             
@@ -3893,7 +3893,7 @@ if __name__ == "__main__":
                 if not Path(pythonw_exe).exists():
                     pythonw_exe = 'pythonw.exe'  # Fallback to system PATH
                 startup_shortcut.Targetpath = pythonw_exe
-                startup_shortcut.Arguments = f'"{self.install_path / "Client.py"}'"
+                startup_shortcut.Arguments = f'"{self.install_path / "Client.py"}"'
                 startup_shortcut.WorkingDirectory = str(self.install_path)
                 startup_shortcut.Description = "PushNotifications Client - Auto Start"
                 startup_shortcut.WindowStyle = 7  # Minimized
@@ -3933,7 +3933,7 @@ if __name__ == "__main__":
                 if not Path(pythonw_exe).exists():
                     pythonw_exe = 'pythonw.exe'  # Fallback to system PATH
                 client_shortcut.Targetpath = pythonw_exe
-                client_shortcut.Arguments = f'"{self.install_path / "Client.py"}'"
+                client_shortcut.Arguments = f'"{self.install_path / "Client.py"}"'
                 client_shortcut.WorkingDirectory = str(self.install_path)
                 client_shortcut.Description = "PushNotifications Client"
                 client_shortcut.save()
