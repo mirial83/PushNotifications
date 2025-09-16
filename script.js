@@ -1152,30 +1152,37 @@ function populateTargetClientDropdown(clients) {
     defaultOption.textContent = 'Send to all clients';
     targetClientSelect.appendChild(defaultOption);
     
-    // Filter to only active clients
-    const activeClients = clients.filter(client => 
-        client.activeClientId && client.activeClient
+    // Show all registered clients regardless of online status
+    const registeredClients = clients.filter(client => 
+        client.macAddress && client.clientName
     );
     
-    if (activeClients.length === 0) {
+    if (registeredClients.length === 0) {
         const noClientsOption = document.createElement('option');
         noClientsOption.value = '';
-        noClientsOption.textContent = 'No active clients available';
+        noClientsOption.textContent = 'No registered clients available';
         noClientsOption.disabled = true;
         targetClientSelect.appendChild(noClientsOption);
         return;
     }
     
-    // Add each active client as an option
-    activeClients.forEach(client => {
+    // Add each registered client as an option
+    registeredClients.forEach(client => {
         const option = document.createElement('option');
-        option.value = client.activeClientId;
-        // Format: ClientName (username) - MAC
-        option.textContent = `${client.clientName} (${client.username}) - ${client.macAddress}`;
+        // Use activeClientId if available, otherwise use a fallback ID based on MAC
+        option.value = client.activeClientId || `mac_${client.macAddress.replace(/[:-]/g, '')}`;
+        
+        // Show online status in the dropdown text
+        const isOnline = client.activeClientId && isRecentCheckin(client.lastCheckin);
+        const statusIcon = isOnline ? '🟢' : '⚫';
+        const statusText = isOnline ? 'Online' : 'Offline';
+        
+        // Format: ClientName (username) - MAC [Status]
+        option.textContent = `${statusIcon} ${client.clientName} (${client.username}) - ${client.macAddress} [${statusText}]`;
         targetClientSelect.appendChild(option);
     });
     
-    console.log(`Populated targetClientSelect with ${activeClients.length} active clients`);
+    console.log(`Populated targetClientSelect with ${registeredClients.length} registered clients`);
 }
 
 // Background client loading (silent, no status messages)
