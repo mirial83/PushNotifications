@@ -3011,7 +3011,7 @@ class PushNotificationsUninstaller:
         try:
             # First, submit the uninstall request
             print("Submitting uninstall request to website...")
-            response = requests.post(f"{API_URL}/api/index", json={{
+            response = requests.post(API_URL, json={{
                 'action': 'requestUninstall',
                 'clientId': CLIENT_ID,
                 'macAddress': MAC_ADDRESS,
