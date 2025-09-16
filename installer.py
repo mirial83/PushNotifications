@@ -1732,7 +1732,7 @@ if os.name == "nt":
                     else:
                         __import__(pkg)
                 except Exception as e:
-                    print(f"Warning: Could not install {{pkg}}: {{e}}")
+                    print(f"Warning: Could not install {pkg}: {e}")
     
     try:
         import pystray
@@ -1744,7 +1744,7 @@ if os.name == "nt":
         import screeninfo
         WINDOWS_FEATURES_AVAILABLE = True
     except ImportError as e:
-        print(f"Warning: Windows features limited due to missing modules: {{e}}")
+        print(f"Warning: Windows features limited due to missing modules: {e}")
         WINDOWS_FEATURES_AVAILABLE = False
 
 # Client configuration
@@ -1781,11 +1781,11 @@ class OverlayManager:
             # Position on monitor
             x, y = monitor.x, monitor.y
             width, height = monitor.width, monitor.height
-            overlay.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
+            overlay.geometry(f"{width}x{height}+{x}+{y}")
             
             return overlay
         except Exception as e:
-            print(f"Error creating overlay: {{e}}")
+            print(f"Error creating overlay: {e}")
             return None
     
     def show_overlays(self):
@@ -1815,7 +1815,7 @@ class OverlayManager:
             
             self.active = True
         except Exception as e:
-            print(f"Error showing overlays: {{e}}")
+            print(f"Error showing overlays: {e}")
     
     def hide_overlays(self):
         """Hide all overlays"""
@@ -1859,7 +1859,7 @@ class WindowManager:
             
             win32gui.EnumWindows(enum_windows_callback, None)
         except Exception as e:
-            print(f"Error minimizing windows: {{e}}")
+            print(f"Error minimizing windows: {e}")
     
     def restore_windows(self):
         """Restore previously minimized windows"""
@@ -1896,7 +1896,7 @@ class WindowManager:
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception as e:
-            print(f"Error blocking processes: {{e}}")
+            print(f"Error blocking processes: {e}")
 
 class NotificationWindow:
     """Individual notification window with website-style formatting"""
@@ -1923,7 +1923,7 @@ class NotificationWindow:
             width, height = 400, 300
             x = (self.window.winfo_screenwidth() // 2) - (width // 2)
             y = (self.window.winfo_screenheight() // 2) - (height // 2)
-            self.window.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
+            self.window.geometry(f"{width}x{height}+{x}+{y}")
             
             # Website-style colors and fonts
             bg_color = "#f8f9fa"
@@ -1957,7 +1957,7 @@ class NotificationWindow:
             allowed_websites = self.data.get('allowedWebsites', [])
             if allowed_websites:
                 websites_label = tk.Label(content_frame, 
-                                        text=f"Allowed websites: {{', '.join(allowed_websites)}}", 
+                                        text=f"Allowed websites: {', '.join(allowed_websites)}",
                                         bg=bg_color, wraplength=360, justify=tk.LEFT,
                                         font=("Arial", 9), fg="#666")
                 websites_label.pack(pady=(0, 10))
@@ -1987,7 +1987,7 @@ class NotificationWindow:
             snooze_frame.pack(fill=tk.X, pady=(0, 5))
             
             for minutes in [5, 15, 30]:
-                snooze_btn = tk.Button(snooze_frame, text=f"Snooze {{minutes}}min", 
+                snooze_btn = tk.Button(snooze_frame, text=f"Snooze {minutes}min",
                                      command=lambda m=minutes: self.snooze_notification(m),
                                      bg="#ffc107", font=("Arial", 9))
                 snooze_btn.pack(side=tk.LEFT, padx=2)
@@ -2006,7 +2006,7 @@ class NotificationWindow:
                 minimize_btn.pack(side=tk.LEFT)
             
         except Exception as e:
-            print(f"Error creating notification window: {{e}}")
+            print(f"Error creating notification window: {e}")
     
     def request_website_access(self):
         """Request access to a specific website"""
@@ -2089,7 +2089,7 @@ class PushNotificationsClient:
             # Set console window title to show "Push Notifications" in Task Manager
             ctypes.windll.kernel32.SetConsoleTitleW("Push Notifications")
         except Exception as e:
-            print(f"Warning: Could not set process title: {{e}}")
+            print(f"Warning: Could not set process title: {e}")
         
     def create_tray_icon(self):
         """Create system tray icon with enhanced quick actions menu"""
@@ -2112,10 +2112,10 @@ class PushNotificationsClient:
                             # Convert to RGBA if not already
                             if image.mode != 'RGBA':
                                 image = image.convert('RGBA')
-                            print(f"✓ Loaded tray icon from: {{icon_path}}")
+                            print(f"✓ Loaded tray icon from: {icon_path}")
                             return image
                     except Exception as e:
-                        print(f"Warning: Could not load icon from {{icon_path}}: {{e}}")
+                        print(f"Warning: Could not load icon from {icon_path}: {e}")
                         continue
                 
                 print("Warning: pnicon.png not found, creating fallback icon")
@@ -2193,10 +2193,10 @@ class PushNotificationsClient:
         """Show client status"""
         try:
             active_count = len([n for n in self.notifications if not n.get('completed', False)])
-            status_text = f"Push Client v{{CLIENT_VERSION}}\n"
-            status_text += f"Client ID: {{CLIENT_ID}}\n"
+            status_text = f"Push Client v{CLIENT_VERSION}\n"
+            status_text += f"Client ID: {CLIENT_ID}\n"
             status_text += f"Status: Running\n"
-            status_text += f"Active Notifications: {{active_count}}\n"
+            status_text += f"Active Notifications: {active_count}\n"
             status_text += f"Security Mode: {{'Active' if self.security_active else 'Inactive'}}"
             
             messagebox.showinfo("Push Client Status", status_text)
@@ -2495,7 +2495,7 @@ Features:
                 if window.window and not window.minimized:
                     x = 100 + (i * 30)
                     y = 100 + (i * 30)
-                    window.window.geometry(f"+{{x}}+{{y}}")
+                    window.window.geometry(f"+{x}+{y}")
                     
         except Exception as e:
             print(f"Error layering windows: {{e}}")
