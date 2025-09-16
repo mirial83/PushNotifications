@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
+# PushNotifications Client Installer
+# Downloaded Version: 1.8.4
+# Version Number: 85
+# Download Date: 2025-09-15T15:31:10.423Z
+# task manager name update
+
 """
 PushNotifications Universal Client Installer
-Version: 3.0.0
+Version: 1.8.4
 
 Cross-platform installer with Windows executable conversion:
 
@@ -165,8 +171,44 @@ try:
 except ImportError:
     GUI_AVAILABLE = False
 
+def fetch_current_version_from_api(api_url=None):
+    """Fetch the current version from the API"""
+    api_url = api_url or DEFAULT_API_URL
+    
+    try:
+        print("Fetching current version from API...")
+        response = requests.post(
+            f"{api_url}/api/index",
+            json={
+                'action': 'getCurrentVersion',
+                'timestamp': datetime.now().isoformat()
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('success') and result.get('currentVersion'):
+                version = result.get('currentVersion')
+                print(f"✓ Retrieved version from API: v{version}")
+                return version
+            else:
+                print(f"✗ API response unsuccessful: {result.get('message', 'Unknown error')}")
+        else:
+            print(f"✗ API request failed: HTTP {response.status_code}")
+            
+    except requests.RequestException as e:
+        print(f"✗ Network error fetching version: {e}")
+    except Exception as e:
+        print(f"✗ Error fetching version: {e}")
+    
+    # Fallback to a default version if API fails
+    print("Warning: Using fallback version 1.0.0")
+    return "1.0.0"
+
 # Global configuration
-INSTALLER_VERSION = "3.0.0"
+INSTALLER_VERSION = '1.0.0'  # Dynamic version - replaced by download API
+VERSION_NUMBER = 1  # Numeric version for update comparisons
 REGISTRY_KEY = r"HKEY_CURRENT_USER\Software\PushNotifications"
 DEFAULT_API_URL = "https://push-notifications-phi.vercel.app"
 
@@ -503,6 +545,8 @@ class PushNotificationsInstaller:
         self.repair_mode = False  # Will be set to True if running in repair mode
         self.update_mode = False  # Will be set to True if running in update mode
         self.update_data = {}     # Will contain update information from server
+        self.installation_finalized = False  # Track if installation completed successfully
+        self.cleanup_performed = False  # Track if cleanup was already performed
         
         print(f"PushNotifications Installer v{INSTALLER_VERSION}")
         print(f"Platform: {self.system}")
@@ -1509,6 +1553,9 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         print("Creating embedded client components...")
         
         try:
+            # Copy icon file to installation directory first
+            self._copy_icon_file()
+            
             if self.system == "Windows":
                 # Create Windows-specific executables using embedded Python functionality
                 self._create_windows_client_exe()
@@ -1796,6 +1843,49 @@ pythonw.exe "{installer_copy_path}" %*
         
         except Exception as e:
             print(f"Warning: Could not create installer copy: {e}")
+    
+    def _copy_icon_file(self):
+        """Copy pnicon.png to the installation directory"""
+        try:
+            # Look for pnicon.png in various locations
+            icon_paths = [
+                Path(__file__).parent / "pnicon.png",  # Same directory as this installer
+                Path.cwd() / "pnicon.png",  # Current working directory
+                Path("C:\\Users\\gipso\\Documents\\GitHub\\PushNotifications\\pnicon.png")  # Absolute path
+            ]
+            
+            source_icon = None
+            for icon_path in icon_paths:
+                if icon_path.exists():
+                    source_icon = icon_path
+                    print(f"✓ Found icon file at: {icon_path}")
+                    break
+            
+            if source_icon:
+                # Copy to installation directory
+                dest_icon = self.install_path / "pnicon.png"
+                
+                import shutil
+                shutil.copy2(source_icon, dest_icon)
+                
+                # Set hidden attributes on Windows
+                if self.system == "Windows":
+                    subprocess.run(["attrib", "+S", "+H", str(dest_icon)], 
+                                  check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+                else:
+                    # Set appropriate permissions on Unix-like systems
+                    os.chmod(dest_icon, 0o644)
+                
+                print(f"✓ Icon file copied to installation directory: {dest_icon.name}")
+                return True
+            else:
+                print("⚠️  Warning: pnicon.png not found in any expected locations")
+                print("   The client may use a fallback system tray icon")
+                return False  # Not a critical failure
+                
+        except Exception as e:
+            print(f"Warning: Could not copy icon file: {e}")
+            return False  # Not a critical failure
     
     def _create_unix_installer_copy(self):
         """Create a copy of the installer for Unix repair/maintenance"""

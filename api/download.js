@@ -123,7 +123,13 @@ class DownloadHandler {
         `Version: ${versionInfo.version}`
       );
       
-      // Replace in CLIENT_CONFIG
+      // Replace INSTALLER_VERSION variable
+      installerContent = installerContent.replace(
+        /INSTALLER_VERSION\s*=\s*'[^']*'/g,
+        `INSTALLER_VERSION = '${versionInfo.version}'`
+      );
+      
+      // Replace in CLIENT_CONFIG (if it exists)
       installerContent = installerContent.replace(
         /'client_version': '\d+\.\d+\.\d+'/g,
         `'client_version': '${versionInfo.version}'`
@@ -135,14 +141,9 @@ class DownloadHandler {
         `- Client Version: ${versionInfo.version}`
       );
 
-      // Inject numeric VERSION_NUMBER marker if present, or add it near top
+      // Replace VERSION_NUMBER if it exists
       if (installerContent.match(/VERSION_NUMBER\s*=\s*\d+/)) {
         installerContent = installerContent.replace(/VERSION_NUMBER\s*=\s*\d+/, `VERSION_NUMBER = ${versionInfo.versionNumber}`);
-      } else {
-        installerContent = installerContent.replace(
-          /(CLIENT_CONFIG\s*=\s*\{[\s\S]*?\}\s*)/,
-          (m) => `${m}\n# Embedded version number for update checks\nVERSION_NUMBER = ${versionInfo.versionNumber}\n`
-        );
       }
 
       // Add a comment header with version metadata
