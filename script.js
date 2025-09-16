@@ -1188,14 +1188,23 @@ function populateTargetClientDropdown(clients) {
 // Background client loading (silent, no status messages)
 async function loadRegisteredClientsBackground() {
     try {
+        console.log('🔍 Calling getAllMacClients API...');
         const result = await apiCall('getAllMacClients');
+        console.log('📋 getAllMacClients API response:', result);
         
         if (result && result.success) {
             state.registeredClients = result.data || [];
+            console.log('📊 Total registered clients found:', state.registeredClients.length);
+            if (state.registeredClients.length > 0) {
+                console.log('🔍 First client sample:', state.registeredClients[0]);
+            }
+            
             displayRegisteredClientsList(state.registeredClients);
             
             // Also populate the main notification form dropdown
             populateTargetClientDropdown(state.registeredClients);
+        } else {
+            console.error('❌ getAllMacClients failed:', result);
         }
     } catch (error) {
         console.error('Background client loading error:', error);
