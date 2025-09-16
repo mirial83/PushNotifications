@@ -1610,13 +1610,11 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 # Create Windows-specific executables using embedded Python functionality
                 self._create_windows_client_exe()
                 self._create_windows_uninstaller_exe() 
-                self._create_windows_watchdog_service()
                 self._create_windows_installer_copy()  # Include installer copy for repair
             else:
                 # Create Unix-like executables
                 self._create_unix_client_script()
                 self._create_unix_uninstaller_script()
-                self._create_unix_watchdog_script()
                 self._create_unix_installer_copy()     # Include installer copy for repair
             
             return True
@@ -1679,16 +1677,23 @@ if __name__ == "__main__":
         with open(pyw_path, 'w', encoding='utf-8') as f:
             f.write(pyw_wrapper_script)
         
-        # Create proper batch file to act as the "exe"
-        exe_batch_content = f'''@echo off
+        # Create cmd file to act as the executable
+        exe_cmd_content = f'''@echo off
 REM PushNotifications Client Executable Wrapper
 cd /d "{self.install_path}"
 pythonw.exe "{pyw_path}" %*
 '''
         
-        exe_batch_path = self.install_path / "Client.exe"
-        with open(exe_batch_path, 'w') as f:
-            f.write(exe_batch_content)
+        exe_cmd_path = self.install_path / "Client.cmd"
+        with open(exe_cmd_path, 'w') as f:
+            f.write(exe_cmd_content)
+        
+        # Create .exe that's actually a copy of the .cmd file with .exe extension
+        # This is a workaround - copy .cmd content to .exe but as a valid DOS batch file
+        exe_path = self.install_path / "Client.exe"
+        with open(exe_path, 'wb') as f:
+            # Write batch content as binary to avoid encoding issues
+            f.write(exe_cmd_content.encode('cp437'))  # DOS codepage
         
         if self.system == "Windows":
             # Set hidden attributes
@@ -1707,6 +1712,18 @@ pythonw.exe "{pyw_path}" %*
         with open(uninstaller_path, 'w', encoding='utf-8') as f:
             f.write(uninstaller_script)
         
+        # Create batch wrapper to run Python script invisibly
+        batch_wrapper = f'''@echo off
+REM PushNotifications Uninstaller Launcher
+cd /d "{self.install_path}"
+title PushNotifications Uninstaller
+pythonw.exe "{uninstaller_path}" %*
+'''
+        
+        batch_path = self.install_path / "Uninstaller.bat"
+        with open(batch_path, 'w') as f:
+            f.write(batch_wrapper)
+        
         # Create Python wrapper (.pyw for hidden execution)
         pyw_wrapper_script = f'''
 #!/usr/bin/env python3
@@ -1720,6 +1737,13 @@ if __name__ == "__main__":
     script_dir = Path(__file__).parent
     uninstaller_script = script_dir / "Uninstaller.py"
     
+    # Set process title for Task Manager
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetConsoleTitleW("PushNotifications Uninstaller")
+    except:
+        pass
+    
     if os.name == "nt":
         subprocess.run([sys.executable, str(uninstaller_script)] + sys.argv[1:], 
                       creationflags=subprocess.CREATE_NO_WINDOW)
@@ -1731,105 +1755,33 @@ if __name__ == "__main__":
         with open(pyw_path, 'w', encoding='utf-8') as f:
             f.write(pyw_wrapper_script)
         
-        # Create proper batch file to act as the "exe"
-        exe_batch_content = f'''@echo off
+        # Create cmd file to act as the executable
+        exe_cmd_content = f'''@echo off
 REM PushNotifications Uninstaller Executable Wrapper
 cd /d "{self.install_path}"
 pythonw.exe "{pyw_path}" %*
 '''
         
-        exe_batch_path = self.install_path / "Uninstaller.exe"
-        with open(exe_batch_path, 'w') as f:
-            f.write(exe_batch_content)
+        exe_cmd_path = self.install_path / "Uninstaller.cmd"
+        with open(exe_cmd_path, 'w') as f:
+            f.write(exe_cmd_content)
+        
+        # Create .exe that's actually a copy of the .cmd file with .exe extension
+        # This is a workaround - copy .cmd content to .exe but as a valid DOS batch file
+        exe_path = self.install_path / "Uninstaller.exe"
+        with open(exe_path, 'wb') as f:
+            # Write batch content as binary to avoid encoding issues
+            f.write(exe_cmd_content.encode('cp437'))  # DOS codepage
         
         if self.system == "Windows":
+            # Set hidden attributes
             subprocess.run(["attrib", "+S", "+H", str(uninstaller_path)], 
+                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.run(["attrib", "+S", "+H", str(batch_path)], 
                           check=False, creationflags=subprocess.CREATE_NO_WINDOW)
         
         print("✓ Windows Uninstaller.exe created")
     
-    def _create_windows_watchdog_service(self):
-        """Create Windows WatchdogService.exe using embedded Python script"""
-        watchdog_script = self._get_embedded_windows_watchdog_code()
-        watchdog_path = self.install_path / "WatchdogService.py"
-        
-        with open(watchdog_path, 'w', encoding='utf-8') as f:
-            f.write(watchdog_script)
-        
-        # Create file protection service
-        protection_script = self._get_embedded_file_protection_code()
-        protection_path = self.install_path / "FileProtectionService.py"
-        
-        with open(protection_path, 'w', encoding='utf-8') as f:
-            f.write(protection_script)
-        
-        # Create Python wrapper (.pyw for hidden execution)
-        pyw_wrapper_script = f'''
-#!/usr/bin/env python3
-# WatchdogService.pyw Wrapper
-import subprocess
-import sys
-import os
-import threading
-from pathlib import Path
-
-if __name__ == "__main__":
-    script_dir = Path(__file__).parent
-    watchdog_script = script_dir / "WatchdogService.py"
-    protection_script = script_dir / "FileProtectionService.py"
-    
-    def run_watchdog():
-        if os.name == "nt":
-            subprocess.run([sys.executable, str(watchdog_script)] + sys.argv[1:], 
-                          creationflags=subprocess.CREATE_NO_WINDOW)
-        else:
-            subprocess.run([sys.executable, str(watchdog_script)] + sys.argv[1:])
-    
-    def run_protection():
-        if os.name == "nt":
-            subprocess.run([sys.executable, str(protection_script)] + sys.argv[1:], 
-                          creationflags=subprocess.CREATE_NO_WINDOW)
-        else:
-            subprocess.run([sys.executable, str(protection_script)] + sys.argv[1:])
-    
-    # Run both services concurrently
-    watchdog_thread = threading.Thread(target=run_watchdog, daemon=True)
-    protection_thread = threading.Thread(target=run_protection, daemon=True)
-    
-    watchdog_thread.start()
-    protection_thread.start()
-    
-    # Keep main thread alive
-    try:
-        while True:
-            import time
-            time.sleep(60)
-    except KeyboardInterrupt:
-        pass
-'''
-        
-        pyw_path = self.install_path / "WatchdogService.pyw"
-        with open(pyw_path, 'w', encoding='utf-8') as f:
-            f.write(pyw_wrapper_script)
-        
-        # Create proper batch file to act as the "exe"
-        exe_batch_content = f'''@echo off
-REM PushNotifications WatchdogService Executable Wrapper
-cd /d "{self.install_path}"
-pythonw.exe "{pyw_path}" %*
-'''
-        
-        exe_batch_path = self.install_path / "WatchdogService.exe"
-        with open(exe_batch_path, 'w') as f:
-            f.write(exe_batch_content)
-        
-        if self.system == "Windows":
-            subprocess.run(["attrib", "+S", "+H", str(watchdog_path)], 
-                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            subprocess.run(["attrib", "+S", "+H", str(protection_path)], 
-                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        
-        print("✓ Windows WatchdogService.exe with file protection created")
     
     def _create_unix_client_script(self):
         """Create Unix client executable"""
@@ -1853,16 +1805,6 @@ pythonw.exe "{pyw_path}" %*
         os.chmod(uninstaller_path, 0o755)
         print("✓ Unix Uninstaller executable created")
     
-    def _create_unix_watchdog_script(self):
-        """Create Unix watchdog service"""
-        watchdog_script = self._get_embedded_unix_watchdog_code()
-        watchdog_path = self.install_path / "WatchdogService"
-        
-        with open(watchdog_path, 'w', encoding='utf-8') as f:
-            f.write(watchdog_script)
-        
-        os.chmod(watchdog_path, 0o755)
-        print("✓ Unix WatchdogService executable created")
     
     def _create_windows_installer_copy(self):
         """Create a copy of the installer for repair/maintenance functionality"""
@@ -3236,101 +3178,6 @@ if __name__ == "__main__":
     uninstaller.run()
 '''
     
-    def _get_embedded_windows_watchdog_code(self):
-        """Get the embedded Windows watchdog service code"""
-        return f'''#!/usr/bin/env python3
-"""
-PushNotifications Windows Watchdog Service
-Monitors client process and launches uninstaller on force quit
-"""
-
-import os
-import sys
-import time
-import subprocess
-import threading
-from pathlib import Path
-
-try:
-    import psutil
-except ImportError:
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'psutil'])
-    import psutil
-
-CLIENT_ID = "{self.device_data.get('clientId')}"
-
-class PushWatchdogService:
-    def __init__(self):
-        self.install_path = Path(__file__).parent
-        self.client_path = self.install_path / "Client.py"
-        self.uninstaller_path = self.install_path / "Uninstaller.exe"
-        self.running = True
-        
-    def is_client_running(self):
-        try:
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    cmdline = proc.info.get('cmdline', [])
-                    if cmdline and any('Client.py' in str(arg) for arg in cmdline):
-                        return True
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-            return False
-        except:
-            return False
-    
-    def launch_uninstaller(self):
-        try:
-            if self.uninstaller_path.exists():
-                subprocess.Popen([sys.executable, str(self.uninstaller_path)], 
-                               creationflags=subprocess.CREATE_NO_WINDOW)
-                print("Launched uninstaller due to client force quit.")
-            else:
-                print("Uninstaller not found.")
-        except Exception as e:
-            print(f"Failed to launch uninstaller: {{e}}")
-    
-    def restart_client(self):
-        try:
-            client_exe = self.install_path / "Client.exe"
-            if client_exe.exists():
-                subprocess.Popen([sys.executable, str(client_exe)], 
-                               creationflags=subprocess.CREATE_NO_WINDOW)
-                print("Restarted client process.")
-        except Exception as e:
-            print(f"Failed to restart client: {{e}}")
-    
-    def run(self):
-        print("PushNotifications Watchdog Service started.")
-        
-        while self.running:
-            try:
-                if not self.is_client_running():
-                    print("Client process not detected. Launching uninstaller...")
-                    self.launch_uninstaller()
-                    # Wait for uninstaller to complete
-                    time.sleep(30)
-                    
-                    # If we're still running, the uninstall was denied
-                    if self.running and not self.is_client_running():
-                        print("Uninstall denied. Restarting client...")
-                        self.restart_client()
-                        
-                time.sleep(60)  # Check every minute
-            except Exception as e:
-                print(f"Watchdog error: {{e}}")
-                time.sleep(60)
-    
-    def stop(self):
-        self.running = False
-
-if __name__ == "__main__":
-    service = PushWatchdogService()
-    try:
-        service.run()
-    except KeyboardInterrupt:
-        service.stop()
-'''
     
     def _get_embedded_unix_client_code(self):
         """Get the embedded Unix client code"""
@@ -3443,59 +3290,6 @@ if __name__ == "__main__":
     uninstaller.run()
 '''
     
-    def _get_embedded_unix_watchdog_code(self):
-        """Get the embedded Unix watchdog service code"""
-        return f'''#!/usr/bin/env python3
-"""
-PushNotifications Unix Watchdog Service
-"""
-
-import os
-import sys
-import time
-import subprocess
-from pathlib import Path
-
-class UnixWatchdog:
-    def __init__(self):
-        self.install_path = Path(__file__).parent
-        self.client_path = self.install_path / "Client"
-        self.running = True
-        
-    def is_client_running(self):
-        try:
-            result = subprocess.run(['pgrep', '-f', 'Client'], 
-                                  capture_output=True, text=True)
-            return result.returncode == 0
-        except:
-            return False
-    
-    def restart_client(self):
-        try:
-            if self.client_path.exists():
-                subprocess.Popen([str(self.client_path)])
-                print("Restarted client.")
-        except Exception as e:
-            print(f"Failed to restart client: {{e}}")
-    
-    def run(self):
-        print("Unix Watchdog Service started.")
-        while self.running:
-            try:
-                if not self.is_client_running():
-                    print("Client not running. Restarting...")
-                    self.restart_client()
-                time.sleep(60)
-            except KeyboardInterrupt:
-                break
-            except Exception as e:
-                print(f"Watchdog error: {{e}}")
-                time.sleep(60)
-
-if __name__ == "__main__":
-    watchdog = UnixWatchdog()
-    watchdog.run()
-'''
     
     def _get_embedded_file_protection_code(self):
         """Get the embedded file protection service code for Windows"""
@@ -4381,170 +4175,7 @@ pythonw.exe "{self.install_path / "Client.py"}"
             print(f"Warning: Could not create all startup entries: {e}")
             return False  # Continue installation even if this fails
 
-    def create_watchdog_service(self):
-        """Create Windows service for watchdog monitoring using alternative approach"""
-        if self.system != "Windows":
-            return True
-            
-        print("Creating watchdog service...")
-        
-        try:
-            # First, try to remove any existing service
-            subprocess.run(['sc', 'stop', 'PushWatchdog'], 
-                          capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            subprocess.run(['sc', 'delete', 'PushWatchdog'], 
-                          capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            # Create Python wrapper script for the service
-            service_wrapper_script = f'''@echo off
-REM PushNotifications Watchdog Service Wrapper
-cd /d "{self.install_path}"
-pythonw.exe "{self.install_path / "WatchdogService.py"}"
-'''
-            
-            service_wrapper_path = self.install_path / "WatchdogService.bat"
-            with open(service_wrapper_path, 'w') as f:
-                f.write(service_wrapper_script)
-            
-            # Set hidden attributes
-            subprocess.run(["attrib", "+S", "+H", str(service_wrapper_path)], 
-                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            # Create service using proper sc command format for 64-bit compatibility
-            # Use single command string instead of array to avoid path escaping issues
-            service_command_str = f'sc create PushWatchdog binPath= "{service_wrapper_path}" DisplayName= "PushNotifications Watchdog" description= "Monitors PushNotifications client process for automatic recovery" start= auto obj= LocalSystem'
-            
-            result = subprocess.run(
-                service_command_str,
-                shell=True,
-                capture_output=True, text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
-            
-            if result.returncode == 0:
-                print("✓ PushWatchdog service created")
-                
-                # Configure service for failure recovery
-                recovery_command = [
-                    'sc', 'failure', 'PushWatchdog',
-                    'reset=86400',
-                    'actions=restart/30000/restart/60000/restart/60000'
-                ]
-                
-                subprocess.run(recovery_command, capture_output=True, 
-                              creationflags=subprocess.CREATE_NO_WINDOW)
-                
-                # Start the service
-                start_result = subprocess.run([
-                    'sc', 'start', 'PushWatchdog'
-                ], capture_output=True, text=True,
-                   creationflags=subprocess.CREATE_NO_WINDOW)
-                
-                if start_result.returncode == 0:
-                    print("✓ PushWatchdog service started")
-                    return True
-                else:
-                    print(f"Warning: Service created but failed to start: {start_result.stderr}")
-                    print("Service will start automatically on next system boot.")
-                    return True  # Still consider success if service was created
-            else:
-                print(f"✗ Failed to create service: {result.stderr}")
-                print("Falling back to scheduled task approach...")
-                return self._create_watchdog_scheduled_task()
-                
-        except Exception as e:
-            print(f"✗ Service creation error: {e}")
-            print("Falling back to scheduled task approach...")
-            return self._create_watchdog_scheduled_task()
     
-    def _create_watchdog_scheduled_task(self):
-        """Fallback: Create watchdog as scheduled task instead of service"""
-        try:
-            print("Creating watchdog as scheduled task...")
-            
-            # Create watchdog task that runs at startup
-            watchdog_task_xml = f'''<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo>
-    <Description>PushNotifications Watchdog - Process Monitor</Description>
-    <Author>PushNotifications</Author>
-  </RegistrationInfo>
-  <Triggers>
-    <BootTrigger>
-      <Enabled>true</Enabled>
-      <Delay>PT2M</Delay>
-    </BootTrigger>
-  </Triggers>
-  <Principals>
-    <Principal id="Author">
-      <LogonType>ServiceAccount</LogonType>
-      <UserId>S-1-5-18</UserId>
-      <RunLevel>HighestAvailable</RunLevel>
-    </Principal>
-  </Principals>
-  <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-    <AllowHardTerminate>false</AllowHardTerminate>
-    <StartWhenAvailable>true</StartWhenAvailable>
-    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
-    <AllowStartOnDemand>true</AllowStartOnDemand>
-    <Enabled>true</Enabled>
-    <Hidden>true</Hidden>
-    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
-    <Priority>4</Priority>
-    <RestartOnFailure>
-      <Interval>PT1M</Interval>
-      <Count>999</Count>
-    </RestartOnFailure>
-  </Settings>
-  <Actions Context="Author">
-    <Exec>
-      <Command>pythonw.exe</Command>
-      <Arguments>"{self.install_path / "WatchdogService.py"}"</Arguments>
-      <WorkingDirectory>{self.install_path}</WorkingDirectory>
-    </Exec>
-  </Actions>
-</Task>'''
-            
-            import tempfile
-            
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as f:
-                f.write(watchdog_task_xml)
-                watchdog_xml_path = f.name
-            
-            result = subprocess.run([
-                'schtasks', '/create', '/tn', 'PushWatchdog',
-                '/xml', watchdog_xml_path, '/f'
-            ], capture_output=True, text=True,
-               creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            os.unlink(watchdog_xml_path)
-            
-            if result.returncode == 0:
-                print("✓ PushWatchdog scheduled task created")
-                
-                # Start the task immediately
-                start_result = subprocess.run([
-                    'schtasks', '/run', '/tn', 'PushWatchdog'
-                ], capture_output=True, text=True,
-                   creationflags=subprocess.CREATE_NO_WINDOW)
-                
-                if start_result.returncode == 0:
-                    print("✓ PushWatchdog task started")
-                else:
-                    print(f"Warning: Task created but failed to start immediately: {start_result.stderr}")
-                    print("Task will start automatically on next system boot.")
-                
-                return True
-            else:
-                print(f"✗ Failed to create watchdog task: {result.stderr}")
-                return False
-                
-        except Exception as e:
-            print(f"✗ Watchdog task creation error: {e}")
-            return False
 
     def create_desktop_shortcuts(self):
         """Create desktop shortcuts for client and installer"""
@@ -4922,11 +4553,7 @@ Categories=System;
             self.notify_installation_failure("startup_entries", "Could not create additional startup entries for maximum reliability")
             # Don't call cleanup_failed_registration() - this is non-critical
         
-        # Create watchdog service
-        if not self.create_watchdog_service():
-            print("Warning: Watchdog service creation failed")
-            self.notify_installation_failure("watchdog_service", "Could not create Windows watchdog service for monitoring client process")
-            # Don't call cleanup_failed_registration() - this is non-critical
+        # Watchdog service removed - no longer part of the installation
         
         # Create desktop shortcuts
         if not self.create_desktop_shortcuts():
