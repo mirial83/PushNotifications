@@ -2186,7 +2186,7 @@ class PushNotificationsClient:
             
             return pystray.Icon("PushNotifications", create_image(), "PushNotifications Client", menu)
         except Exception as e:
-            print(f"Error creating tray icon: {e}")
+            print(f"Error creating tray icon: {{e}}")
             return None
     
     def show_status(self, icon=None, item=None):
