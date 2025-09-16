@@ -383,6 +383,9 @@ function loadInitialData() {
     // Load incomplete notification banners
     loadIncompleteNotificationBanners();
     
+    // Load registered clients immediately for dropdown
+    loadRegisteredClientsBackground();
+    
     // Update UI state
     updateConnectionStatus(false);
 }
@@ -474,6 +477,9 @@ async function refreshNotifications() {
             
             updateNotificationsList();
             updateConnectionStatus(true);
+            
+            // Also refresh client dropdown data to keep it up-to-date
+            loadRegisteredClientsBackground();
         } else {
             throw new Error(result.message || result.error || 'Failed to fetch notifications');
         }
@@ -1137,15 +1143,18 @@ function startConnectionHealthMonitoring() {
 
 // Populate main notification form client dropdown
 function populateTargetClientDropdown(clients) {
+    console.log('🎯 populateTargetClientDropdown called with:', clients.length, 'clients');
     const targetClientSelect = document.getElementById('targetClientSelect');
     if (!targetClientSelect) {
-        console.warn('targetClientSelect element not found');
+        console.warn('❌ targetClientSelect element not found');
         return;
     }
     
+    console.log('🔧 Clearing existing options in dropdown');
     // Clear existing options
     targetClientSelect.innerHTML = '';
     
+    console.log('➕ Adding default option');
     // Add default option
     const defaultOption = document.createElement('option');
     defaultOption.value = '';
@@ -2271,7 +2280,7 @@ function isRecentCheckin(lastCheckin) {
         const checkinTime = new Date(lastCheckin);
         const now = new Date();
         const diffMinutes = (now - checkinTime) / (1000 * 60);
-        return diffMinutes < 5; // Consider online if checked in within last 5 minutes
+        return diffMinutes < 2; // Consider online if checked in within last 2 minutes (client heartbeats every 30s)
     } catch (error) {
         return false;
     }

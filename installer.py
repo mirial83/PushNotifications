@@ -2193,10 +2193,10 @@ class PushNotificationsClient:
         """Show client status"""
         try:
             active_count = len([n for n in self.notifications if not n.get('completed', False)])
-            status_text = f"Push Client v{{CLIENT_VERSION}}\n"
-            status_text += f"Client ID: {{CLIENT_ID}}\n"
-            status_text += f"Status: Running\n"
-            status_text += f"Active Notifications: {{active_count}}\n"
+            status_text = f"Push Client v{{CLIENT_VERSION}}\\n"
+            status_text += f"Client ID: {{CLIENT_ID}}\\n"
+            status_text += f"Status: Running\\n"
+            status_text += f"Active Notifications: {{active_count}}\\n"
             status_text += f"Security Mode: {{'Active' if self.security_active else 'Inactive'}}"
             
             messagebox.showinfo("Push Client Status", status_text)
@@ -2404,13 +2404,16 @@ Features:
             self.tray_icon.stop()
     
     def check_notifications(self):
-        """Main notification checking loop"""
+        """Main notification checking loop with heartbeat functionality"""
         while self.running:
             try:
                 # Check if snooze period has ended
                 if self.snooze_end_time and datetime.now() > self.snooze_end_time:
                     self.snooze_end_time = None
                     self.evaluate_security_state()
+                
+                # Send heartbeat/check-in to update client status
+                self._send_heartbeat()
                 
                 # Fetch notifications from server
                 response = requests.post(API_URL, json={{
@@ -2434,9 +2437,30 @@ Features:
                 
                 time.sleep(30)  # Check every 30 seconds
                 
-        except Exception as e:
-            print(f"Error in notification check: {{e}}")
+            except Exception as e:
+                print(f"Error in notification check: {{e}}")
                 time.sleep(60)
+    
+    def _send_heartbeat(self):
+        """Send heartbeat/check-in to update client status"""
+        try:
+            # Send updateClientMacCheckin request to keep client status current
+            response = requests.post(API_URL, json={{
+                'action': 'updateClientMacCheckin',
+                'clientId': CLIENT_ID,
+                'macAddress': MAC_ADDRESS,
+                'timestamp': datetime.now().isoformat(),
+                'status': 'active',
+                'version': CLIENT_VERSION
+            }}, timeout=5)  # Short timeout for heartbeat
+            
+            # Don't log success to avoid spam, only log errors
+            if response.status_code != 200:
+                print(f"Heartbeat warning: HTTP {{response.status_code}}")
+                
+        except Exception as e:
+            # Log heartbeat errors but don't let them crash the client
+            print(f"Heartbeat error: {{e}}")
     
     def process_notifications(self, server_notifications):
         """Process notifications from server and update display"""
