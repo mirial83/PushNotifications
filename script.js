@@ -1154,7 +1154,7 @@ function populateTargetClientDropdown(clients) {
     
     // Filter to only active clients
     const activeClients = clients.filter(client => 
-        client.activeClientId && client.activeClient && client.activeClient.isActive
+        client.activeClientId && client.activeClient
     );
     
     if (activeClients.length === 0) {
