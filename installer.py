@@ -2092,9 +2092,9 @@ class PushNotificationsClient:
         """Create system tray icon with enhanced quick actions menu"""
         try:
             def create_image():
-                # Try to load pnicon.png from the installation directory or current directory
+                # Try to load pnicon.png from the installation directory first
                 icon_paths = [
-                    Path(__file__).parent / "pnicon.png",  # Same directory as this script
+                    Path(__file__).parent / "pnicon.png",  # Same directory as this script (installation dir)
                     Path.cwd() / "pnicon.png",  # Current working directory
                     Path("C:\\Users\\gipso\\Documents\\GitHub\\PushNotifications\\pnicon.png")  # Absolute path
                 ]
@@ -2117,28 +2117,38 @@ class PushNotificationsClient:
                 
                 print("Warning: pnicon.png not found, creating fallback icon")
                 
-                # Fallback: create a simple icon if pnicon.png is not found
+                # Fallback: create a teal circle with white "PN" text
                 width = height = 64
                 image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
                 dc = ImageDraw.Draw(image)
-                # Create a more distinctive icon
-                dc.ellipse([8, 8, width-8, height-8], fill='#007bff', outline='#0056b3', width=2)
-                # Draw notification bell icon
+                
+                # Create teal circle background
+                dc.ellipse([4, 4, width-4, height-4], fill='#20B2AA', outline='#008B8B', width=2)
+                
+                # Draw "PN" text in white
                 try:
                     from PIL import ImageFont
-                    font = ImageFont.load_default()
-                    # Draw a simple bell shape
-                    dc.polygon([
-                        (width//2-8, height//2-4), (width//2+8, height//2-4),
-                        (width//2+6, height//2+6), (width//2-6, height//2+6)
-                    ], fill='white')
-                    # Bell top
-                    dc.ellipse([width//2-2, height//2-8, width//2+2, height//2-4], fill='white')
-                    # Bell clapper
-                    dc.ellipse([width//2-1, height//2+6, width//2+1, height//2+8], fill='white')
+                    # Try to get a better font for the text
+                    try:
+                        font = ImageFont.truetype("arial.ttf", 24)
+                    except:
+                        try:
+                            font = ImageFont.truetype("calibri.ttf", 24)
+                        except:
+                            font = ImageFont.load_default()
+                    
+                    # Calculate text position to center it
+                    bbox = dc.textbbox((0, 0), "PN", font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    x = (width - text_width) // 2
+                    y = (height - text_height) // 2 - 2
+                    
+                    dc.text((x, y), "PN", fill='white', font=font)
                 except:
-                    # Fallback: just use "PN" text
-                    dc.text((width//2-10, height//2-8), "PN", fill='white')
+                    # Ultimate fallback: simple text positioning
+                    dc.text((width//2-12, height//2-8), "PN", fill='white')
+                
                 return image
             
             # Enhanced menu with quick actions
@@ -2688,7 +2698,7 @@ Features:
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success') and result.get('updateAvailable'):
-                    # Launch updater
+                    # Launch updater using Python
                     installer_path = Path(__file__).parent / "Installer.py"
                     if installer_path.exists():
                         subprocess.Popen([sys.executable, str(installer_path), "--update"],
@@ -3439,7 +3449,7 @@ class FileSystemProtectionService:
             if path_obj.name in ['Client.py', 'Uninstaller.py', 'Installer.py']:
                 print(f"🏗️  Recreating core component: {{path_obj.name}}")
                 
-                # Launch installer in repair mode
+                # Launch installer in repair mode using Python
                 installer_path = self.install_path / "Installer.py"
                 if installer_path.exists():
                     subprocess.Popen([
@@ -3859,7 +3869,11 @@ if __name__ == "__main__":
             # Method 1: Registry run key (user-level auto-start)
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, 
                                 "Software\\Microsoft\\Windows\\CurrentVersion\\Run") as key:
-                client_cmd = f'pythonw.exe "{self.install_path / "Client.py"}"'
+                # Use pythonw.exe to ensure no console window appears
+                pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
+                if not Path(pythonw_exe).exists():
+                    pythonw_exe = 'pythonw.exe'  # Fallback to system PATH
+                client_cmd = f'"{pythonw_exe}" "{self.install_path / "Client.py"}'"
                 winreg.SetValueEx(key, "PushNotifications", 0, winreg.REG_SZ, client_cmd)
                 print("✓ Registry startup entry created")
             
@@ -3872,8 +3886,12 @@ if __name__ == "__main__":
                 
                 shell = win32com.client.Dispatch("WScript.Shell")
                 startup_shortcut = shell.CreateShortCut(str(startup_folder / "Push Client (Startup).lnk"))
-                startup_shortcut.Targetpath = "pythonw.exe"
-                startup_shortcut.Arguments = f'"{self.install_path / "Client.py"}"'
+                # Use pythonw.exe to ensure no console window appears
+                pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
+                if not Path(pythonw_exe).exists():
+                    pythonw_exe = 'pythonw.exe'  # Fallback to system PATH
+                startup_shortcut.Targetpath = pythonw_exe
+                startup_shortcut.Arguments = f'"{self.install_path / "Client.py"}'"
                 startup_shortcut.WorkingDirectory = str(self.install_path)
                 startup_shortcut.Description = "PushNotifications Client - Auto Start"
                 startup_shortcut.WindowStyle = 7  # Minimized
@@ -3908,8 +3926,12 @@ if __name__ == "__main__":
                 # Create Push Client shortcut - Python only
                 shell = win32com.client.Dispatch("WScript.Shell")
                 client_shortcut = shell.CreateShortCut(str(desktop / "Push Client.lnk"))
-                client_shortcut.Targetpath = "pythonw.exe"
-                client_shortcut.Arguments = f'"{self.install_path / "Client.py"}"'
+                # Use pythonw.exe to ensure no console window appears
+                pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
+                if not Path(pythonw_exe).exists():
+                    pythonw_exe = 'pythonw.exe'  # Fallback to system PATH
+                client_shortcut.Targetpath = pythonw_exe
+                client_shortcut.Arguments = f'"{self.install_path / "Client.py"}'"
                 client_shortcut.WorkingDirectory = str(self.install_path)
                 client_shortcut.Description = "PushNotifications Client"
                 client_shortcut.save()
@@ -4146,10 +4168,15 @@ Categories=System;
                 else:
                     print(f"Warning: Server reported: {result.get('message')}")
             
-            # Start the client immediately
+            # Start the client immediately with pythonw.exe to hide console
             if self.system == "Windows":
+                # Use pythonw.exe instead of python.exe to hide console window
+                pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
+                if not Path(pythonw_exe).exists():
+                    pythonw_exe = 'pythonw.exe'  # Fallback to system PATH
+                
                 subprocess.Popen([
-                    sys.executable, str(self.install_path / "Client.py")
+                    pythonw_exe, str(self.install_path / "Client.py")
                 ], cwd=str(self.install_path),
                    creationflags=subprocess.CREATE_NO_WINDOW)
             else:
