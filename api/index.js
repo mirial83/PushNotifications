@@ -4705,7 +4705,6 @@ export default async function handler(req, res) {
         result = await db.backupCollectionBeforeCleanup(params.collectionName || '');
         break;
       }
-        
     }
 
     await db.close();
