@@ -1812,23 +1812,63 @@ class DatabaseOperations {
       }
 
       await this.connect();
-      const keys = await this.db.collection('securityKeys')
-        .find({})
+      
+      // Get all active installations that have embedded security keys
+      const installations = await this.db.collection('installations')
+        .find({ 
+          isActive: true,
+          securityKeys: { $exists: true }
+        })
         .sort({ createdAt: -1 })
         .toArray();
 
-      // Don't return actual key values for security
-      const processedKeys = keys.map(key => ({
-        _id: key._id.toString(),
-        clientId: key.clientId,
-        keyType: key.keyType,
-        hostname: key.hostname,
-        installPath: key.installPath,
-        createdAt: key.createdAt,
-        lastUsed: key.lastUsed
-      }));
+      // Extract and flatten all embedded security keys
+      const processedKeys = [];
+      
+      installations.forEach(installation => {
+        if (installation.securityKeys) {
+          // Process each type of security key (e.g., encryptionKey, authKey, etc.)
+          Object.entries(installation.securityKeys).forEach(([keyName, keyData]) => {
+            // Skip the lastUpdated timestamp field
+            if (keyName === 'lastUpdated' || !keyData || typeof keyData !== 'object') {
+              return;
+            }
+            
+            // Only include if it has the key structure we expect
+            if (keyData.keyValue && keyData.keyType) {
+              processedKeys.push({
+                _id: `${installation._id}_${keyName}`,
+                installationId: installation.installationId,
+                clientId: installation.clientId,
+                keyType: keyData.keyType,
+                keyName: keyName, // e.g., 'encryptionKey', 'authKey', etc.
+                hostname: installation.hostname,
+                installPath: installation.installPath,
+                macAddress: installation.macAddress,
+                username: installation.username,
+                platform: installation.platform,
+                version: installation.version,
+                createdAt: keyData.createdAt,
+                lastUsed: keyData.lastUsed,
+                // Installation context
+                installationCreatedAt: installation.createdAt,
+                lastCheckin: installation.lastCheckin,
+                isCurrentForMac: installation.isCurrentForMac
+              });
+            }
+          });
+        }
+      });
+      
+      // Sort by creation date (newest first)
+      processedKeys.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      return { success: true, data: processedKeys };
+      return { 
+        success: true, 
+        data: processedKeys,
+        totalKeys: processedKeys.length,
+        totalInstallations: installations.length
+      };
     } catch (error) {
       return { success: false, message: error.message };
     }
