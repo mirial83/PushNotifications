@@ -3025,6 +3025,12 @@ if __name__ == "__main__":
     
     def _get_embedded_windows_uninstaller_code(self):
         """Get the embedded Windows uninstaller code"""
+        # Properly format variables for the embedded code
+        api_url = self.api_url
+        mac_address = self.mac_address
+        client_id = self.device_data.get('clientId', 'unknown')
+        key_id = self.key_id
+        
         return f'''#!/usr/bin/env python3
 """
 PushNotifications Windows Uninstaller
@@ -3047,10 +3053,10 @@ except ImportError:
     subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'requests'])
     import requests
 
-API_URL = "{self.api_url}"
-MAC_ADDRESS = "{self.mac_address}"
-CLIENT_ID = "{self.device_data.get('clientId')}"
-KEY_ID = "{self.key_id}"
+API_URL = "{api_url}"
+MAC_ADDRESS = "{mac_address}"
+CLIENT_ID = "{client_id}"
+KEY_ID = "{key_id}"
 
 class PushNotificationsUninstaller:
     def __init__(self):
