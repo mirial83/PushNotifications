@@ -3001,7 +3001,7 @@ except ImportError:
     subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'requests'])
     import requests
 
-API_URL = "{self.api_url}/api/index"
+API_URL = "{self.api_url}"
 MAC_ADDRESS = "{self.mac_address}"
 CLIENT_ID = "{self.device_data.get('clientId')}"
 KEY_ID = "{self.key_id}"
@@ -3015,7 +3015,7 @@ class PushNotificationsUninstaller:
         try:
             # First, submit the uninstall request
             print("Submitting uninstall request to website...")
-            response = requests.post(API_URL, json={{
+            response = requests.post(f"{API_URL}/api/index", json={{
                 'action': 'requestUninstall',
                 'clientId': CLIENT_ID,
                 'macAddress': MAC_ADDRESS,
