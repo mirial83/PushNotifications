@@ -1626,8 +1626,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             # Look for pnicon.png in various locations
             icon_paths = [
                 Path(__file__).parent / "pnicon.png",  # Same directory as this installer
-                Path.cwd() / "pnicon.png",  # Current working directory
-                Path("C:\\Users\\gipso\\Documents\\GitHub\\PushNotifications\\pnicon.png")  # Absolute path
+                Path.cwd() / "pnicon.png"  # Current working directory
             ]
             
             source_icon = None
@@ -2098,8 +2097,7 @@ class PushNotificationsClient:
                 # Try to load pnicon.png from the installation directory first
                 icon_paths = [
                     Path(__file__).parent / "pnicon.png",  # Same directory as this script (installation dir)
-                    Path.cwd() / "pnicon.png",  # Current working directory
-                    Path("C:\\Users\\gipso\\Documents\\GitHub\\PushNotifications\\pnicon.png")  # Absolute path
+                    Path.cwd() / "pnicon.png"  # Current working directory
                 ]
                 
                 for icon_path in icon_paths:
