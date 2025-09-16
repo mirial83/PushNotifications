@@ -642,20 +642,58 @@ function displayNotificationsError(errorMessage) {
     `;
 }
 
-async function handleSendNotification(event) {
-    event.preventDefault();
+async function handleSendNotification() {
+    // Get form elements
+    const targetClientSelect = document.getElementById('targetClientSelect');
+    const messageTypeRadios = document.querySelectorAll('input[name="messageType"]');
+    const presetSelect = document.getElementById('presetSelect');
+    const customText = document.getElementById('customText');
+    const allowBrowserUsage = document.getElementById('allowBrowserUsage');
+    const allowedWebsites = document.getElementById('allowedWebsites');
     
-    const form = event.target;
-    const formData = new FormData(form);
+    // Get selected message type
+    const messageType = Array.from(messageTypeRadios).find(radio => radio.checked)?.value;
+    
+    // Get message text
+    let message = '';
+    if (messageType === 'preset') {
+        const selectedPreset = presetSelect.value;
+        if (!selectedPreset) {
+            showStatus('Please select a preset message', 'error');
+            return;
+        }
+        message = presetSelect.options[presetSelect.selectedIndex].text;
+    } else if (messageType === 'custom') {
+        message = customText.value.trim();
+        if (!message) {
+            showStatus('Please enter a custom message', 'error');
+            return;
+        }
+    } else {
+        showStatus('Please select a message type', 'error');
+        return;
+    }
+    
+    // Get target client
+    const targetClient = targetClientSelect.value;
+    
+    // Get website settings
+    const browserUsageEnabled = allowBrowserUsage.checked;
+    let websiteList = [];
+    if (browserUsageEnabled && allowedWebsites.value.trim()) {
+        websiteList = allowedWebsites.value
+            .split('\n')
+            .map(url => url.trim())
+            .filter(url => url.length > 0);
+    }
     
     const notificationData = {
         action: 'sendNotification',
-        
-        message: formData.get('message'),
-        workMode: formData.get('workMode'),
-        browserUsage: formData.get('browserUsage'),
-        allowedWebsites: formData.get('allowedWebsites')?.split('\n').filter(url => url.trim()),
-        snoozeMinutes: parseInt(formData.get('snoozeMinutes')) || 0
+        targetClient: targetClient,
+        message: message,
+        messageType: messageType,
+        browserUsageEnabled: browserUsageEnabled,
+        allowedWebsites: websiteList
     };
     
     try {
@@ -673,7 +711,19 @@ async function handleSendNotification(event) {
         
         if (result.success) {
             showStatus(`Notification sent successfully to ${result.clientCount || 0} client(s)!`, 'success');
-            form.reset();
+            
+            // Reset form elements
+            const messageTypeRadios = document.querySelectorAll('input[name="messageType"]');
+            const customText = document.getElementById('customText');
+            const allowBrowserUsage = document.getElementById('allowBrowserUsage');
+            const allowedWebsites = document.getElementById('allowedWebsites');
+            const presetSelect = document.getElementById('presetSelect');
+            
+            if (presetSelect) presetSelect.value = '';
+            if (customText) customText.value = '';
+            if (allowBrowserUsage) allowBrowserUsage.checked = false;
+            if (allowedWebsites) allowedWebsites.value = '';
+            
             updateWorkModeDescription(); // Reset descriptions
             updateBrowserUsageDescription();
             refreshNotifications();
