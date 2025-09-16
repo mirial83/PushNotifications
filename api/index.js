@@ -1590,22 +1590,42 @@ class DatabaseOperations {
       }
 
       await this.connect();
-      const securityKey = await this.db.collection('securityKeys').findOne({
+      // Find the installation with this clientId and embedded security keys
+      const installation = await this.db.collection('installations').findOne({
         clientId,
-        keyType
+        isActive: true,
+        'securityKeys': { $exists: true }
       });
 
-      if (securityKey) {
-        // Update last used timestamp
-        await this.db.collection('securityKeys').updateOne(
-          { _id: securityKey._id },
-          { $set: { lastUsed: new Date() } }
+      if (installation && installation.securityKeys) {
+        // Look for the specific key type in the embedded security keys
+        const matchingKey = Object.values(installation.securityKeys).find(key => 
+          key && typeof key === 'object' && key.keyType === keyType
         );
         
-        return { success: true, key: securityKey.keyValue };
-      } else {
-        return { success: false, message: 'Security key not found' };
+        if (matchingKey && matchingKey.keyValue) {
+          // Update last used timestamp for this specific key
+          const keyName = Object.keys(installation.securityKeys).find(name => 
+            installation.securityKeys[name] === matchingKey
+          );
+          
+          if (keyName) {
+            await this.db.collection('installations').updateOne(
+              { clientId, isActive: true },
+              { 
+                $set: { 
+                  [`securityKeys.${keyName}.lastUsed`]: new Date(),
+                  'securityKeys.lastUpdated': new Date()
+                }
+              }
+            );
+          }
+          
+          return { success: true, key: matchingKey.keyValue };
+        }
       }
+      
+      return { success: false, message: 'Security key not found' };
     } catch (error) {
       return { success: false, message: error.message };
     }
@@ -1619,39 +1639,68 @@ class DatabaseOperations {
       }
 
       await this.connect();
-      const securityKeyData = {
+      const now = new Date();
+      
+      // Find the installation with this clientId
+      const installation = await this.db.collection('installations').findOne({
         clientId,
-        keyType,
-        keyValue,
-        installPath,
-        hostname,
-        createdAt: new Date(),
-        lastUsed: new Date()
-      };
-
-      // Check if key already exists
-      const existingKey = await this.db.collection('securityKeys').findOne({
-        clientId,
-        keyType
+        isActive: true
       });
-
-      if (existingKey) {
-        // Update existing key
-        await this.db.collection('securityKeys').updateOne(
-          { _id: existingKey._id },
-          { 
-            $set: { 
-              keyValue,
-              lastUsed: new Date(),
-              updatedAt: new Date()
-            }
+      
+      if (!installation) {
+        return { success: false, message: 'No active installation found for this client ID' };
+      }
+      
+      // Create security key data structure
+      const keyData = {
+        keyValue,
+        keyType,
+        createdAt: now,
+        lastUsed: now,
+        updatedAt: now
+      };
+      
+      // Determine the key name based on key type
+      let keyName;
+      switch (keyType.toUpperCase()) {
+        case 'ENCRYPTION_KEY':
+          keyName = 'encryptionKey';
+          break;
+        case 'AUTH_KEY':
+          keyName = 'authKey';
+          break;
+        case 'ACCESS_KEY':
+          keyName = 'accessKey';
+          break;
+        default:
+          keyName = keyType.toLowerCase() + 'Key';
+          break;
+      }
+      
+      // Update the installation record to include/update the security key
+      const updatePath = `securityKeys.${keyName}`;
+      const result = await this.db.collection('installations').updateOne(
+        { clientId, isActive: true },
+        { 
+          $set: { 
+            [updatePath]: keyData,
+            'securityKeys.lastUpdated': now
           }
-        );
-        return { success: true, message: 'Security key updated' };
+        }
+      );
+      
+      if (result.modifiedCount > 0) {
+        return {
+          success: true,
+          message: `Security key ${keyType} created/updated for installation ${installation.installationId}`,
+          installationId: installation.installationId,
+          clientId,
+          keyType,
+          keyName,
+          createdAt: now
+        };
       } else {
-        // Insert new key
-        await this.db.collection('securityKeys').insertOne(securityKeyData);
-        return { success: true, message: 'Security key created' };
+        return { success: false, message: 'Failed to create/update security key' };
       }
     } catch (error) {
       return { success: false, message: error.message };
@@ -1665,15 +1714,68 @@ class DatabaseOperations {
       }
 
       await this.connect();
-      const result = await this.db.collection('securityKeys').updateOne(
-        { clientId, keyType },
-        { $set: { lastUsed: new Date() } }
+      const now = new Date();
+      
+      // Find the installation with this clientId and embedded security keys
+      const installation = await this.db.collection('installations').findOne({
+        clientId,
+        isActive: true,
+        'securityKeys': { $exists: true }
+      });
+      
+      if (!installation) {
+        return { 
+          success: false, 
+          message: 'No active installation found for this client ID',
+          updated: false
+        };
+      }
+      
+      // Look for the specific key type in the embedded security keys
+      const matchingKey = Object.values(installation.securityKeys).find(key => 
+        key && typeof key === 'object' && key.keyType === keyType
+      );
+      
+      if (!matchingKey) {
+        return { 
+          success: false, 
+          message: `Security key of type '${keyType}' not found for this installation`,
+          updated: false
+        };
+      }
+      
+      // Find the key name
+      const keyName = Object.keys(installation.securityKeys).find(name => 
+        installation.securityKeys[name] === matchingKey
+      );
+      
+      if (!keyName) {
+        return { 
+          success: false, 
+          message: 'Unable to identify key name for update',
+          updated: false
+        };
+      }
+      
+      // Update the last used timestamp for the specific key
+      const result = await this.db.collection('installations').updateOne(
+        { clientId, isActive: true },
+        { 
+          $set: { 
+            [`securityKeys.${keyName}.lastUsed`]: now,
+            'securityKeys.lastUpdated': now
+          }
+        }
       );
 
       return { 
         success: true, 
-        message: 'Key last used timestamp updated',
-        updated: result.modifiedCount > 0
+        message: `Key last used timestamp updated for ${keyType}`,
+        updated: result.modifiedCount > 0,
+        installationId: installation.installationId,
+        keyType,
+        keyName,
+        lastUsed: now
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -1695,18 +1797,36 @@ class DatabaseOperations {
       }
 
       await this.connect();
-      const clientInfo = await this.db.collection('clientInfo').findOne({
+      
+      // Find installation in the unified installations collection
+      // Use machineId as a loose search criterion in system info, and match on hostname or installPath
+      const installation = await this.db.collection('installations').findOne({
         $or: [
-          { machineId },
           { hostname },
-          { installPath }
-        ]
+          { installPath },
+          // Search for machineId in systemInfo if provided
+          ...(machineId ? [{ 'systemInfo.machineId': machineId }] : [])
+        ],
+        isActive: true
       });
 
-      if (clientInfo) {
-        return { success: true, clientId: clientInfo.clientId };
+      if (installation) {
+        return { 
+          success: true, 
+          clientId: installation.clientId,
+          installationId: installation.installationId,
+          hostname: installation.hostname,
+          installPath: installation.installPath,
+          platform: installation.platform,
+          version: installation.version,
+          macAddress: installation.macAddress,
+          username: installation.username,
+          createdAt: installation.createdAt,
+          lastCheckin: installation.lastCheckin,
+          isCurrentForMac: installation.isCurrentForMac
+        };
       } else {
-        return { success: false, message: 'Client info not found' };
+        return { success: false, message: 'Client installation not found' };
       }
     } catch (error) {
       return { success: false, message: error.message };
@@ -1729,44 +1849,73 @@ class DatabaseOperations {
       }
 
       await this.connect();
-      const clientInfoData = {
-        clientId,
-        machineId,
-        installationId,
-        installPath,
-        hostname,
-        platform,
-        version,
-        createdAt: new Date(),
-        lastCheckin: new Date()
-      };
-
-      // Check if client already exists
-      const existingClient = await this.db.collection('clientInfo').findOne({
+      
+      // In the unified system, client info should already be created during installation registration
+      // This method now serves as a compatibility layer and verification function
+      
+      // Check if installation exists in the unified installations collection
+      const installation = await this.db.collection('installations').findOne({
         $or: [
           { clientId },
-          { machineId },
-          { installPath }
-        ]
+          { installationId },
+          { installPath, hostname }
+        ],
+        isActive: true
       });
-
-      if (existingClient) {
-        // Update existing client
-        await this.db.collection('clientInfo').updateOne(
-          { _id: existingClient._id },
-          { 
-            $set: { 
-              version,
-              lastCheckin: new Date(),
-              updatedAt: new Date()
-            }
-          }
-        );
-        return { success: true, message: 'Client info updated' };
+      
+      if (installation) {
+        // Installation exists, update it with any new information if needed
+        const updateFields = {};
+        
+        if (version && version !== installation.version) {
+          updateFields.version = version;
+        }
+        if (machineId && (!installation.systemInfo || installation.systemInfo.machineId !== machineId)) {
+          updateFields['systemInfo.machineId'] = machineId;
+        }
+        
+        // Always update the lastCheckin timestamp
+        updateFields.lastCheckin = new Date();
+        updateFields.updatedAt = new Date();
+        
+        if (Object.keys(updateFields).length > 2) { // More than just timestamps
+          const result = await this.db.collection('installations').updateOne(
+            { _id: installation._id },
+            { $set: updateFields }
+          );
+          
+          return { 
+            success: true, 
+            message: 'Client installation info updated',
+            installationId: installation.installationId,
+            clientId: installation.clientId,
+            updated: result.modifiedCount > 0
+          };
+        } else {
+          // Just update timestamps
+          await this.db.collection('installations').updateOne(
+            { _id: installation._id },
+            { $set: updateFields }
+          );
+          
+          return { 
+            success: true, 
+            message: 'Client checkin updated',
+            installationId: installation.installationId,
+            clientId: installation.clientId,
+            updated: true
+          };
+        }
       } else {
-        // Insert new client
-        await this.db.collection('clientInfo').insertOne(clientInfoData);
-        return { success: true, message: 'Client info created' };
+        // Installation not found - this suggests the client wasn't properly registered
+        // In the unified system, installations should be created via registerClientInstallation
+        return { 
+          success: false, 
+          message: 'Client installation not found in unified system. Please register the installation first.',
+          recommendation: 'Use registerClientInstallation method for new installations',
+          clientId,
+          installationId
+        };
       }
     } catch (error) {
       return { success: false, message: error.message };
@@ -1785,20 +1934,43 @@ class DatabaseOperations {
       }
 
       await this.connect();
-      const result = await this.db.collection('clientInfo').updateOne(
-        { clientId },
-        { 
-          $set: { 
-            lastCheckin: new Date(),
-            version: version || 'unknown'
-          }
-        }
+      const now = new Date();
+      
+      // Find the installation record for this client ID in the unified installations collection
+      const installation = await this.db.collection('installations').findOne({
+        clientId,
+        isActive: true
+      });
+      
+      if (!installation) {
+        return {
+          success: false,
+          message: `No active installation found for client ID: ${clientId}`,
+          updated: false
+        };
+      }
+      
+      // Update the installation record with the latest checkin and version
+      const updateFields = {
+        lastCheckin: now,
+        version: version || installation.version || 'unknown'
+      };
+      
+      const result = await this.db.collection('installations').updateOne(
+        { clientId, isActive: true },
+        { $set: updateFields }
       );
-
+      
       return { 
         success: true, 
         message: 'Client checkin updated',
-        updated: result.modifiedCount > 0
+        updated: result.modifiedCount > 0,
+        clientId,
+        installationId: installation.installationId,
+        lastCheckin: now,
+        previousVersion: installation.version,
+        newVersion: updateFields.version,
+        versionChanged: version && version !== installation.version
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -1881,23 +2053,72 @@ class DatabaseOperations {
       }
 
       await this.connect();
-      const clients = await this.db.collection('clientInfo')
+      
+      // Get all installations from the unified installations collection
+      const installations = await this.db.collection('installations')
         .find({})
         .sort({ createdAt: -1 })
         .toArray();
 
-      const processedClients = clients.map(client => ({
-        _id: client._id.toString(),
-        clientId: client.clientId,
-        hostname: client.hostname,
-        platform: client.platform,
-        version: client.version,
-        installPath: client.installPath,
-        createdAt: client.createdAt,
-        lastCheckin: client.lastCheckin
+      // Extract client info from installations
+      const processedClients = installations.map(installation => ({
+        _id: installation._id.toString(),
+        clientId: installation.clientId,
+        installationId: installation.installationId,
+        hostname: installation.hostname,
+        platform: installation.platform,
+        version: installation.version,
+        installPath: installation.installPath,
+        createdAt: installation.createdAt,
+        lastCheckin: installation.lastCheckin,
+        // Additional fields from unified installations collection
+        macAddress: installation.macAddress,
+        username: installation.username,
+        clientName: installation.clientName,
+        registeredAt: installation.registeredAt,
+        isActive: installation.isActive,
+        isCurrentForMac: installation.isCurrentForMac,
+        installationCount: installation.installationCount,
+        keyId: installation.keyId,
+        // User context
+        userId: installation.userId ? installation.userId.toString() : null,
+        userRole: installation.userRole,
+        // Installation metadata
+        installerMode: installation.installerMode,
+        macDetectionMethod: installation.macDetectionMethod,
+        // Status information
+        deactivatedAt: installation.deactivatedAt,
+        deactivationReason: installation.deactivationReason,
+        // Policy information  
+        policy: installation.policy,
+        // System information
+        systemInfo: installation.systemInfo
       }));
 
-      return { success: true, data: processedClients };
+      // Enhanced response with metadata
+      const totalInstallations = installations.length;
+      const activeInstallations = installations.filter(i => i.isActive).length;
+      const uniqueClients = new Set(installations.map(i => i.clientId)).size;
+      const uniqueMacs = new Set(installations.map(i => i.macAddress)).size;
+      const platforms = [...new Set(installations.map(i => i.platform).filter(Boolean))];
+      const dateRange = installations.length > 0 ? {
+        earliest: installations[installations.length - 1].createdAt,
+        latest: installations[0].createdAt
+      } : null;
+
+      return { 
+        success: true, 
+        data: processedClients,
+        metadata: {
+          totalInstallations,
+          activeInstallations,
+          inactiveInstallations: totalInstallations - activeInstallations,
+          uniqueClientIds: uniqueClients,
+          uniqueMacAddresses: uniqueMacs,
+          platforms,
+          dateRange
+        }
+      };
     } catch (error) {
       return { success: false, message: error.message };
     }
@@ -2057,21 +2278,105 @@ class DatabaseOperations {
       }
 
       await this.connect();
-      const macClient = await this.db.collection('macClients').findOne({ macAddress });
       
-      if (!macClient) {
-        return { success: false, message: 'No client found for this MAC address' };
+      // Get all installations for this MAC address from the unified installations collection
+      const installations = await this.db.collection('installations')
+        .find({ macAddress })
+        .sort({ createdAt: -1 }) // Sort by creation date (newest first)
+        .toArray();
+      
+      if (installations.length === 0) {
+        return { success: false, message: 'No installations found for this MAC address' };
       }
 
-      const activeClient = await this.db.collection('clientHistory').findOne({
-        clientId: macClient.activeClientId,
-        isActive: true
-      });
+      // Find the current active installation for this MAC address
+      const currentActiveInstallation = installations.find(install => 
+        install.isActive && install.isCurrentForMac
+      );
+
+      // Get the most recent installation regardless of active status
+      const latestInstallation = installations[0]; // Already sorted by newest first
+
+      // Create a MAC client summary compatible with the old API structure
+      const macClient = {
+        _id: latestInstallation._id.toString(),
+        macAddress,
+        username: latestInstallation.username,
+        clientName: latestInstallation.clientName,
+        activeClientId: currentActiveInstallation ? currentActiveInstallation.clientId : null,
+        installationCount: latestInstallation.installationCount || 1,
+        hostname: latestInstallation.hostname,
+        platform: latestInstallation.platform,
+        createdAt: latestInstallation.createdAt,
+        registeredAt: latestInstallation.registeredAt,
+        lastCheckin: currentActiveInstallation ? currentActiveInstallation.lastCheckin : latestInstallation.lastCheckin,
+        // Enhanced information from unified installations
+        totalInstallations: installations.length,
+        activeInstallations: installations.filter(i => i.isActive).length,
+        userId: latestInstallation.userId ? latestInstallation.userId.toString() : null,
+        userRole: latestInstallation.userRole
+      };
+
+      // Create an active client summary if there's a current active installation
+      const activeClient = currentActiveInstallation ? {
+        _id: currentActiveInstallation._id.toString(),
+        clientId: currentActiveInstallation.clientId,
+        installationId: currentActiveInstallation.installationId,
+        keyId: currentActiveInstallation.keyId,
+        installPath: currentActiveInstallation.installPath,
+        hostname: currentActiveInstallation.hostname,
+        platform: currentActiveInstallation.platform,
+        version: currentActiveInstallation.version,
+        username: currentActiveInstallation.username,
+        clientName: currentActiveInstallation.clientName,
+        isActive: currentActiveInstallation.isActive,
+        isCurrentForMac: currentActiveInstallation.isCurrentForMac,
+        createdAt: currentActiveInstallation.createdAt,
+        lastCheckin: currentActiveInstallation.lastCheckin,
+        registeredAt: currentActiveInstallation.registeredAt,
+        installationCount: currentActiveInstallation.installationCount,
+        // Security information
+        securityKeys: currentActiveInstallation.securityKeys,
+        // Policy information
+        policy: currentActiveInstallation.policy,
+        // User context
+        userId: currentActiveInstallation.userId ? currentActiveInstallation.userId.toString() : null,
+        userRole: currentActiveInstallation.userRole
+      } : null;
+
+      // Include detailed installation history
+      const installationHistory = installations.map(installation => ({
+        _id: installation._id.toString(),
+        clientId: installation.clientId,
+        installationId: installation.installationId,
+        keyId: installation.keyId,
+        hostname: installation.hostname,
+        version: installation.version,
+        installPath: installation.installPath,
+        isActive: installation.isActive,
+        isCurrentForMac: installation.isCurrentForMac,
+        createdAt: installation.createdAt,
+        lastCheckin: installation.lastCheckin,
+        deactivatedAt: installation.deactivatedAt,
+        deactivationReason: installation.deactivationReason,
+        installationCount: installation.installationCount,
+        userRole: installation.userRole
+      }));
 
       return {
         success: true,
+        macAddress,
         macClient,
-        activeClient
+        activeClient,
+        installationHistory,
+        metadata: {
+          totalInstallations: installations.length,
+          activeInstallations: installations.filter(i => i.isActive).length,
+          inactiveInstallations: installations.filter(i => !i.isActive).length,
+          hasCurrentInstallation: !!currentActiveInstallation,
+          latestInstallationDate: latestInstallation.createdAt,
+          oldestInstallationDate: installations[installations.length - 1].createdAt
+        }
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -2795,27 +3100,38 @@ class DatabaseOperations {
 
       await this.connect();
       
-      // Try to find an existing client to get user context
+      // Try to find an existing client to get user context from the unified installations collection
       let user = null;
-      if (macAddress) {
-        const macClient = await this.db.collection('macClients').findOne({ macAddress });
-        if (macClient && macClient.activeClientId) {
-          // Try to find the client installation record to get user info
-          const installation = await this.db.collection('installations').findOne({
-            clientId: macClient.activeClientId
-          });
-          if (installation && installation.userId) {
-            user = await this.db.collection('users').findOne({
-              _id: installation.userId,
-              isActive: true
-            });
-          }
-        }
+      let installation = null;
+      
+      // First try to find by clientId directly
+      if (clientId) {
+        installation = await this.db.collection('installations').findOne({
+          clientId,
+          isActive: true
+        });
+      }
+      
+      // If not found by clientId and we have a MAC address, try to find by MAC address
+      if (!installation && macAddress) {
+        installation = await this.db.collection('installations').findOne({
+          macAddress,
+          isActive: true,
+          isCurrentForMac: true
+        });
+      }
+      
+      // If we have an installation, try to get user info
+      if (installation && installation.userId) {
+        user = await this.db.collection('users').findOne({
+          _id: installation.userId,
+          isActive: true
+        });
       }
       
       // If we can't find user context, create a generic update key
-      if (!user) {
-        console.log(`Creating generic update key for client ${clientId}`);
+      if (!user || !installation) {
+        console.log(`Creating generic update key for client ${clientId} (MAC: ${macAddress})`);
         
         // Generate update-specific installation key
         const updateKey = this.generateInstallationKey();
@@ -2828,13 +3144,21 @@ class DatabaseOperations {
           type: 'update',
           createdAt: new Date(),
           expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours
-          used: false
+          used: false,
+          // Include installation context if available
+          ...(installation ? {
+            installationId: installation.installationId,
+            hostname: installation.hostname,
+            username: installation.username,
+            platform: installation.platform
+          } : {})
         });
         
         return {
           success: true,
           installationKey: updateKey,
-          message: 'Update installation key generated successfully'
+          message: 'Update installation key generated successfully',
+          context: installation ? 'with_installation_context' : 'generic'
         };
       }
       
@@ -2847,18 +3171,36 @@ class DatabaseOperations {
         username: user.username,
         role: user.role,
         installationKey: updateKey,
-        clientId,
-        macAddress,
+        clientId: installation.clientId,
+        macAddress: installation.macAddress,
         type: 'update',
         createdAt: new Date(),
         expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours for updates
-        used: false
+        used: false,
+        // Include additional installation context
+        installationId: installation.installationId,
+        hostname: installation.hostname,
+        platform: installation.platform,
+        version: installation.version
       });
 
       return {
         success: true,
         installationKey: updateKey,
-        message: 'Update installation key generated successfully'
+        message: 'Update installation key generated successfully',
+        context: 'with_user_context',
+        user: {
+          id: user._id.toString(),
+          username: user.username,
+          role: user.role
+        },
+        installation: {
+          installationId: installation.installationId,
+          clientId: installation.clientId,
+          hostname: installation.hostname,
+          platform: installation.platform,
+          version: installation.version
+        }
       };
     } catch (error) {
       console.error('Error generating update installation key:', error);
@@ -3122,33 +3464,95 @@ class DatabaseOperations {
         return { success: false, message: 'User not found' };
       }
 
+      // Get user's installations before deleting for reporting purposes
+      const userInstallations = await this.db.collection('installations')
+        .find({ userId: new ObjectId(userId) })
+        .toArray();
+      
+      console.log(`Deleting user ${user.username} (${userId}) and ${userInstallations.length} associated installations`);
+
       // Delete user and all associated data
       // Using Promise.all for concurrent operations
-      await Promise.all([
+      const deleteResults = await Promise.all([
         // Delete user sessions
         this.db.collection('sessions').deleteMany({ userId: new ObjectId(userId) }),
-        
-        // Delete security keys associated with the user
-        this.db.collection('securityKeys').deleteMany({ userId: new ObjectId(userId) }),
         
         // Delete download keys associated with the user
         this.db.collection('downloadKeys').deleteMany({ userId: new ObjectId(userId) }),
         
+        // Delete update keys associated with the user (if any exist)
+        this.db.collection('updateKeys').deleteMany({ userId: new ObjectId(userId) }),
+        
         // Delete user's notifications
         this.db.collection('notifications').deleteMany({ userId: new ObjectId(userId) }),
         
-        // Delete user's MAC clients
-        this.db.collection('macClients').deleteMany({ userId: new ObjectId(userId) })
+        // Delete or deactivate user's installations from unified installations collection
+        this.db.collection('installations').updateMany(
+          { userId: new ObjectId(userId) },
+          { 
+            $set: {
+              isActive: false,
+              isCurrentForMac: false,
+              deactivatedAt: new Date(),
+              deactivationReason: `User account deleted: ${user.username}`,
+              userDeleted: true,
+              userDeletedAt: new Date()
+            },
+            $unset: {
+              userId: "",
+              userRole: ""
+            }
+          }
+        ),
+        
+        // Delete installation reports associated with user installations
+        this.db.collection('installationReports').deleteMany({
+          clientId: { $in: userInstallations.map(i => i.clientId) }
+        })
       ]);
       
-      // Finally, delete the user record itself
-      const result = await this.db.collection('users').deleteOne({ _id: new ObjectId(userId) });
+      // Get deletion counts for reporting
+      const [sessionsResult, downloadKeysResult, updateKeysResult, notificationsResult, installationsResult, reportsResult] = deleteResults;
       
-      if (result.deletedCount === 0) {
+      // Finally, delete the user record itself
+      const userResult = await this.db.collection('users').deleteOne({ _id: new ObjectId(userId) });
+      
+      if (userResult.deletedCount === 0) {
         return { success: false, message: 'Failed to delete user' };
       }
 
-      return { success: true, message: 'User and associated data deleted successfully' };
+      console.log(`User deletion completed:`);
+      console.log(`  - Sessions deleted: ${sessionsResult.deletedCount}`);
+      console.log(`  - Download keys deleted: ${downloadKeysResult.deletedCount}`);
+      console.log(`  - Update keys deleted: ${updateKeysResult.deletedCount}`);
+      console.log(`  - Notifications deleted: ${notificationsResult.deletedCount}`);
+      console.log(`  - Installations deactivated: ${installationsResult.modifiedCount}`);
+      console.log(`  - Installation reports deleted: ${reportsResult.deletedCount}`);
+
+      return { 
+        success: true, 
+        message: 'User and associated data deleted successfully',
+        deletionSummary: {
+          username: user.username,
+          userId: userId,
+          sessionsDeleted: sessionsResult.deletedCount,
+          downloadKeysDeleted: downloadKeysResult.deletedCount,
+          updateKeysDeleted: updateKeysResult.deletedCount,
+          notificationsDeleted: notificationsResult.deletedCount,
+          installationsDeactivated: installationsResult.modifiedCount,
+          installationReportsDeleted: reportsResult.deletedCount,
+          totalInstallations: userInstallations.length,
+          installationDetails: userInstallations.map(i => ({
+            clientId: i.clientId,
+            installationId: i.installationId,
+            macAddress: i.macAddress,
+            hostname: i.hostname,
+            platform: i.platform,
+            createdAt: i.createdAt,
+            lastCheckin: i.lastCheckin
+          }))
+        }
+      };
     } catch (error) {
       console.error('Error deleting user:', error);
       return { success: false, message: error.message };
