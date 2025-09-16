@@ -4384,35 +4384,13 @@ def show_specific_documentation(doc_type):
 def main():
     """Main installer entry point"""
     try:
-        # FORCE ADMINISTRATOR PRIVILEGES IMMEDIATELY ON WINDOWS
-        # This prevents '16-bit subsystem' errors and other privilege-related issues
+        # Check for administrator privileges on Windows
         if platform.system() == "Windows":
             try:
-                # Force 32-bit compatibility mode to prevent 16-bit subsystem errors
-                try:
-                    import ctypes.wintypes
-                    kernel32 = ctypes.windll.kernel32
-                    
-                    # Set process to prefer 32-bit execution
-                    # This helps avoid "16-bit MS-DOS Subsystem" errors on 64-bit systems
-                    process_handle = kernel32.GetCurrentProcess()
-                    
-                    # Set compatibility flags for 32-bit mode
-                    try:
-                        # Force WOW64 compatibility if available
-                        kernel32.SetProcessWorkingSetSize(process_handle, -1, -1)
-                    except:
-                        pass
-                    
-                    print("✓ Enabled 32-bit compatibility mode")
-                except Exception as e:
-                    print(f"Warning: Could not set 32-bit compatibility mode: {e}")
-                
                 # Check if already running as admin
                 is_admin = bool(ctypes.windll.shell32.IsUserAnAdmin())
                 if not is_admin:
                     print("Restarting with administrator privileges...")
-                    print("This is required to avoid '16-bit subsystem' errors.")
                     
                     # Use the most reliable elevation method
                     script_path = os.path.abspath(sys.argv[0])
