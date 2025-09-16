@@ -162,34 +162,29 @@ class DatabaseOperations {
         await this.db.collection('settings').insertMany(settings);
       }
 
-      // Create indexes for security collections
+      // Create indexes for installations collection
       try {
-        // Security Keys collection indexes
-        await this.db.collection('securityKeys').createIndex({ clientId: 1, keyType: 1 }, { unique: true });
-        await this.db.collection('securityKeys').createIndex({ macAddress: 1 });
-        await this.db.collection('securityKeys').createIndex({ hostname: 1 });
-        await this.db.collection('securityKeys').createIndex({ createdAt: -1 });
-        await this.db.collection('securityKeys').createIndex({ lastUsed: -1 });
-
-        // MAC-based Client Management collection indexes
-        await this.db.collection('macClients').createIndex({ macAddress: 1 }, { unique: true });
-        await this.db.collection('macClients').createIndex({ activeClientId: 1 });
-        await this.db.collection('macClients').createIndex({ createdAt: -1 });
-        await this.db.collection('macClients').createIndex({ lastCheckin: -1 });
-
-        // Client Installation History collection indexes
-        await this.db.collection('clientHistory').createIndex({ macAddress: 1 });
-        await this.db.collection('clientHistory').createIndex({ clientId: 1 });
-        await this.db.collection('clientHistory').createIndex({ isActive: 1 });
-        await this.db.collection('clientHistory').createIndex({ createdAt: -1 });
-
-        // Legacy Client Info collection indexes (for backward compatibility)
-        await this.db.collection('clientInfo').createIndex({ clientId: 1 }, { unique: true });
-        await this.db.collection('clientInfo').createIndex({ machineId: 1 });
-        await this.db.collection('clientInfo').createIndex({ hostname: 1 });
-        await this.db.collection('clientInfo').createIndex({ installPath: 1 });
-        await this.db.collection('clientInfo').createIndex({ createdAt: -1 });
-        await this.db.collection('clientInfo').createIndex({ lastCheckin: -1 });
+        // Primary lookup indexes
+        await this.db.collection('installations').createIndex({ clientId: 1 }, { unique: true });
+        await this.db.collection('installations').createIndex({ macAddress: 1 });
+        await this.db.collection('installations').createIndex({ userId: 1 });
+        await this.db.collection('installations').createIndex({ installationId: 1 }, { unique: true });
+        
+        // Status and activity indexes
+        await this.db.collection('installations').createIndex({ isActive: 1 });
+        await this.db.collection('installations').createIndex({ isCurrentForMac: 1 });
+        await this.db.collection('installations').createIndex({ macAddress: 1, isCurrentForMac: 1 });
+        
+        // Time-based indexes
+        await this.db.collection('installations').createIndex({ createdAt: -1 });
+        await this.db.collection('installations').createIndex({ lastCheckin: -1 });
+        await this.db.collection('installations').createIndex({ registeredAt: -1 });
+        
+        // Combined indexes for common queries
+        await this.db.collection('installations').createIndex({ macAddress: 1, isActive: 1 });
+        await this.db.collection('installations').createIndex({ userId: 1, isActive: 1 });
+        await this.db.collection('installations').createIndex({ hostname: 1 });
+        await this.db.collection('installations').createIndex({ platform: 1 });
 
         // Notification collection indexes (if not already created)
         await this.db.collection('notifications').createIndex({ status: 1 });
@@ -905,57 +900,106 @@ class DatabaseOperations {
         return { success: false, message: 'Invalid installation key' };
       }
 
-      // Use MAC-based authentication to register the client
-      const authResult = await this.authenticateClientByMac(
-        macAddress,
-        username,
-        installPath,
-        platform,
-        version
-      );
-
-      if (!authResult.success) {
-        return { success: false, message: 'Failed to authenticate client by MAC address' };
+      // Check existing installations for this MAC address
+      const existingInstallations = await this.db.collection('installations')
+        .find({ macAddress, isCurrentForMac: true })
+        .toArray();
+      
+      // Deactivate any existing current installation for this MAC
+      if (existingInstallations.length > 0) {
+        await this.db.collection('installations').updateMany(
+          { macAddress, isCurrentForMac: true },
+          { 
+            $set: { 
+              isActive: false,
+              isCurrentForMac: false,
+              deactivatedAt: now,
+              deactivationReason: 'New installation on same MAC address'
+            }
+          }
+        );
       }
-
-      const clientId = authResult.clientId;
+      
+      // Count previous installations for this MAC to determine installation count
+      const installationCount = await this.db.collection('installations')
+        .countDocuments({ macAddress }) + 1;
+      
+      // Generate client ID and names
+      const clientName = `${username}${installationCount}`;
+      const clientId = `${username}_${macAddress.replace(/[:-]/g, '').substr(-6)}_${installationCount}`;
+      const installationId = `inst_${macAddress.replace(/[:-]/g, '')}_${installationCount}`;
       const keyId = `key_${macAddress.replace(/[:-]/g, '')}_${Date.now()}`;
+      
+      // Generate security key for embedding
+      const securityKeyValue = this.generateInstallationKey();
 
-      // Store comprehensive installation record
+      // Store comprehensive installation record in unified structure
       const installationRecord = {
+        installationId,
         clientId,
-        keyId,
         installationKey,
+        keyId,
+        
+        // MAC address and device info
         macAddress,
+        macDetectionMethod,
+        
+        // User information
         username,
-        clientName: authResult.clientName,
+        clientName,
+        userId: keyValidation.user ? new ObjectId(keyValidation.user.id) : null,
+        userRole: keyValidation.user ? keyValidation.user.role : 'user',
+        
+        // System information
         hostname,
         platform,
         version,
         installPath,
-        macDetectionMethod,
-        installerMode,
         systemInfo,
-        userId: keyValidation.user ? keyValidation.user.id : null,
-        userRole: keyValidation.user ? keyValidation.user.role : 'user',
+        
+        // Installation metadata
+        installerMode,
         registeredAt: timestamp || now.toISOString(),
         createdAt: now,
         lastCheckin: now,
-        isActive: true
+        
+        // Status and activity
+        isActive: true,
+        isCurrentForMac: true,
+        installationCount,
+        
+        // Deactivation info (initially null)
+        deactivatedAt: null,
+        deactivationReason: null,
+        
+        // Security keys (embedded)
+        securityKeys: {
+          encryptionKey: {
+            keyValue: securityKeyValue,
+            keyType: 'ENCRYPTION_KEY',
+            createdAt: now,
+            lastUsed: now
+          }
+        },
+        
+        // Installation history tracking
+        installationHistory: {
+          previousInstallations: Math.max(0, installationCount - 1),
+          isReinstallation: installationCount > 1,
+          replacedInstallationId: existingInstallations.length > 0 ? existingInstallations[0].installationId : null
+        },
+        
+        // Default policy
+        policy: {
+          allowWebsiteRequests: true,
+          snoozeEnabled: true,
+          updateCheckInterval: 86400,
+          heartbeatInterval: 300
+        }
       };
 
       // Insert into installations collection
       await this.db.collection('installations').insertOne(installationRecord);
-
-      // Create security key for the client
-      const securityKeyValue = this.generateInstallationKey(); // Generate a secure key
-      await this.createSecurityKeyForMac(
-        macAddress,
-        'ENCRYPTION_KEY',
-        securityKeyValue,
-        installPath,
-        hostname
-      );
 
       // Report the installation
       await this.reportInstallation(
@@ -981,9 +1025,9 @@ class DatabaseOperations {
         message: 'Client installation registered successfully',
         clientId,
         keyId,
-        isNewInstallation: authResult.isNewInstallation,
+        isNewInstallation: installationCount === 1,
         macAddress,
-        clientName: authResult.clientName,
+        clientName,
         policy: {
           allowWebsiteRequests: true,
           snoozeEnabled: true,
@@ -1820,7 +1864,7 @@ class DatabaseOperations {
     }
   }
 
-  // MAC Address-based Client Management Methods
+  // MAC Address-based Client Management Methods (Legacy support)
   async authenticateClientByMac(macAddress, username, installPath, platform, version) {
     try {
       if (this.usesFallback) {
@@ -1840,104 +1884,52 @@ class DatabaseOperations {
       await this.connect();
       const now = new Date();
 
-      // Check if MAC address already exists
-      let macClient = await this.db.collection('macClients').findOne({ macAddress });
+      // Check if MAC address already has installations
+      const existingInstallations = await this.db.collection('installations')
+        .find({ macAddress })
+        .sort({ installationCount: -1 })
+        .toArray();
+      
       let clientName, clientId, isNewInstallation = false;
+      const installationCount = existingInstallations.length + 1;
 
-      if (!macClient) {
+      if (existingInstallations.length === 0) {
         // First installation on this MAC address
         clientName = `${username}1`;
         clientId = `${username}_${macAddress.replace(/:/g, '').substr(-6)}_1`;
         isNewInstallation = true;
-
-        // Create new MAC client record
-        macClient = {
-          macAddress,
-          username,
-          clientName,
-          activeClientId: clientId,
-          installationCount: 1,
-          createdAt: now,
-          lastCheckin: now,
-          platform,
-          isActiveRegistration: true
-        };
-        await this.db.collection('macClients').insertOne(macClient);
-
-        // Create client history record
-        const historyRecord = {
-          macAddress,
-          clientId,
-          clientName,
-          username,
-          installPath,
-          platform,
-          version,
-          isActive: true,
-          createdAt: now,
-          lastCheckin: now
-        };
-        await this.db.collection('clientHistory').insertOne(historyRecord);
-
       } else {
-        // Existing MAC address - deactivate previous installation and create new one
-        if (macClient.activeClientId) {
-          // Deactivate previous client
-          await this.db.collection('clientHistory').updateOne(
-            { clientId: macClient.activeClientId },
-            { 
-              $set: { 
-                isActive: false, 
-                deactivatedAt: now,
-                deactivationReason: 'New installation on same MAC address'
-              }
-            }
-          );
-        }
-
-        // Create new installation
-        const newInstallationNumber = macClient.installationCount + 1;
-        clientName = `${username}${newInstallationNumber}`;
-        clientId = `${username}_${macAddress.replace(/:/g, '').substr(-6)}_${newInstallationNumber}`;
+        // Existing MAC address - this is a new installation
+        clientName = `${username}${installationCount}`;
+        clientId = `${username}_${macAddress.replace(/:/g, '').substr(-6)}_${installationCount}`;
         isNewInstallation = true;
-
-        // Update MAC client record
-        await this.db.collection('macClients').updateOne(
-          { _id: macClient._id },
-          {
-            $set: {
-              activeClientId: clientId,
-              clientName,
-              installationCount: newInstallationNumber,
-              lastCheckin: now,
-              platform
+        
+        // Deactivate any existing current installation for this MAC
+        await this.db.collection('installations').updateMany(
+          { macAddress, isCurrentForMac: true },
+          { 
+            $set: { 
+              isActive: false,
+              isCurrentForMac: false,
+              deactivatedAt: now,
+              deactivationReason: 'New installation on same MAC address'
             }
           }
         );
-
-        // Create new client history record
-        const historyRecord = {
-          macAddress,
-          clientId,
-          clientName,
-          username,
-          installPath,
-          platform,
-          version,
-          isActive: true,
-          createdAt: now,
-          lastCheckin: now
-        };
-        await this.db.collection('clientHistory').insertOne(historyRecord);
       }
 
+      // Note: This method is primarily for legacy authentication
+      // Full registration should use registerClientInstallation
+      // For now, we'll return the generated IDs that would be used
+      
       return {
         success: true,
         clientId,
         clientName,
         isNewInstallation,
         macAddress,
-        message: isNewInstallation ? 'New client installation registered' : 'Client authentication successful'
+        installationCount,
+        message: isNewInstallation ? 'New client installation would be registered' : 'Client authentication successful'
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -3620,6 +3612,209 @@ class DatabaseOperations {
     }
   }
 
+  // Database Cleanup Methods
+  async cleanupUnusedCollections() {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Database cleanup requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      const collectionsToRemove = [
+        'macClients',      // Replaced by installations collection
+        'clientHistory',   // Replaced by installations collection
+        'securityKeys',    // Keys now embedded in installations collection
+        'clientInfo',      // Info now stored in installations collection
+        'clients',         // Legacy client registration, replaced by installations
+        'clientInstallations'  // Old installation tracking, replaced by installations
+      ];
+      
+      const cleanupResults = [];
+      const existingCollections = await this.db.listCollections().toArray();
+      const existingCollectionNames = existingCollections.map(col => col.name);
+      
+      console.log('🔍 Checking for unused collections to cleanup...');
+      console.log(`📋 Database has ${existingCollectionNames.length} collections: ${existingCollectionNames.join(', ')}`);
+      
+      for (const collectionName of collectionsToRemove) {
+        if (existingCollectionNames.includes(collectionName)) {
+          try {
+            // Get document count before deletion
+            const documentCount = await this.db.collection(collectionName).countDocuments();
+            
+            // Drop the collection
+            await this.db.collection(collectionName).drop();
+            
+            cleanupResults.push({
+              collection: collectionName,
+              status: 'removed',
+              documentCount,
+              message: `Removed collection '${collectionName}' with ${documentCount} documents`
+            });
+            
+            console.log(`✅ Removed collection '${collectionName}' (${documentCount} documents)`);
+          } catch (error) {
+            cleanupResults.push({
+              collection: collectionName,
+              status: 'error',
+              documentCount: 0,
+              message: `Failed to remove '${collectionName}': ${error.message}`
+            });
+            
+            console.log(`❌ Failed to remove collection '${collectionName}': ${error.message}`);
+          }
+        } else {
+          cleanupResults.push({
+            collection: collectionName,
+            status: 'not_found',
+            documentCount: 0,
+            message: `Collection '${collectionName}' does not exist`
+          });
+          
+          console.log(`ℹ️ Collection '${collectionName}' does not exist (already cleaned up)`);
+        }
+      }
+      
+      const removedCount = cleanupResults.filter(r => r.status === 'removed').length;
+      const errorCount = cleanupResults.filter(r => r.status === 'error').length;
+      const totalDocuments = cleanupResults.reduce((sum, r) => sum + r.documentCount, 0);
+      
+      console.log(`\n📊 CLEANUP SUMMARY:`);
+      console.log(`   Collections removed: ${removedCount}`);
+      console.log(`   Collections with errors: ${errorCount}`);
+      console.log(`   Total documents removed: ${totalDocuments}`);
+      
+      return {
+        success: true,
+        message: `Database cleanup completed. Removed ${removedCount} collections with ${totalDocuments} total documents.`,
+        results: cleanupResults,
+        summary: {
+          collectionsRemoved: removedCount,
+          collectionsWithErrors: errorCount,
+          totalDocumentsRemoved: totalDocuments,
+          collectionsChecked: collectionsToRemove.length
+        }
+      };
+    } catch (error) {
+      console.error('❌ Database cleanup error:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  async listAllCollections() {
+    try {
+      if (this.usesFallback) {
+        return {
+          success: true,
+          collections: ['fallback_storage'],
+          message: 'Using fallback storage - no MongoDB collections'
+        };
+      }
+
+      await this.connect();
+      
+      const collections = await this.db.listCollections().toArray();
+      const collectionInfo = [];
+      
+      console.log(`📋 Found ${collections.length} collections in database:`);
+      
+      for (const collection of collections) {
+        try {
+          const documentCount = await this.db.collection(collection.name).countDocuments();
+          const collectionStats = await this.db.collection(collection.name).stats();
+          
+          const info = {
+            name: collection.name,
+            documentCount,
+            size: collectionStats.size || 0,
+            storageSize: collectionStats.storageSize || 0,
+            avgDocumentSize: documentCount > 0 ? Math.round((collectionStats.size || 0) / documentCount) : 0
+          };
+          
+          collectionInfo.push(info);
+          console.log(`   📁 ${collection.name}: ${documentCount} documents (${Math.round((collectionStats.size || 0) / 1024)} KB)`);
+        } catch (error) {
+          collectionInfo.push({
+            name: collection.name,
+            documentCount: 0,
+            size: 0,
+            storageSize: 0,
+            avgDocumentSize: 0,
+            error: error.message
+          });
+          console.log(`   ❌ ${collection.name}: Error getting stats - ${error.message}`);
+        }
+      }
+      
+      const totalDocuments = collectionInfo.reduce((sum, col) => sum + col.documentCount, 0);
+      const totalSize = collectionInfo.reduce((sum, col) => sum + col.size, 0);
+      
+      return {
+        success: true,
+        collections: collectionInfo,
+        summary: {
+          totalCollections: collections.length,
+          totalDocuments,
+          totalSize,
+          totalSizeKB: Math.round(totalSize / 1024),
+          totalSizeMB: Math.round(totalSize / (1024 * 1024))
+        },
+        message: `Found ${collections.length} collections with ${totalDocuments} total documents`
+      };
+    } catch (error) {
+      console.error('❌ Error listing collections:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  async backupCollectionBeforeCleanup(collectionName) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Backup requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Check if collection exists
+      const collections = await this.db.listCollections({ name: collectionName }).toArray();
+      if (collections.length === 0) {
+        return { success: false, message: `Collection '${collectionName}' does not exist` };
+      }
+      
+      // Get all documents from the collection
+      const documents = await this.db.collection(collectionName).find({}).toArray();
+      
+      if (documents.length === 0) {
+        return {
+          success: true,
+          message: `Collection '${collectionName}' is empty - no backup needed`,
+          documentCount: 0
+        };
+      }
+      
+      // Create backup collection name with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupCollectionName = `backup_${collectionName}_${timestamp}`;
+      
+      // Insert documents into backup collection
+      await this.db.collection(backupCollectionName).insertMany(documents);
+      
+      console.log(`✅ Backed up ${documents.length} documents from '${collectionName}' to '${backupCollectionName}'`);
+      
+      return {
+        success: true,
+        message: `Backed up ${documents.length} documents to '${backupCollectionName}'`,
+        originalCollection: collectionName,
+        backupCollection: backupCollectionName,
+        documentCount: documents.length
+      };
+    } catch (error) {
+      console.error('❌ Backup error:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
   async close() {
     if (this.client) {
       await this.client.close();
@@ -4444,6 +4639,70 @@ export default async function handler(req, res) {
           params.reason || 'Request denied by administrator',
           validation.user.username || 'Admin'
         );
+        break;
+      }
+      
+      // Database Cleanup Actions (Admin only)
+      case 'listAllCollections': {
+        const listAuthHeader = req.headers.authorization;
+        const listToken = listAuthHeader && listAuthHeader.startsWith('Bearer ')
+          ? listAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(listToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.listAllCollections();
+        break;
+      }
+      
+      case 'cleanupUnusedCollections': {
+        const cleanupAuthHeader = req.headers.authorization;
+        const cleanupToken = cleanupAuthHeader && cleanupAuthHeader.startsWith('Bearer ')
+          ? cleanupAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(cleanupToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.cleanupUnusedCollections();
+        break;
+      }
+      
+      case 'backupCollectionBeforeCleanup': {
+        const backupAuthHeader = req.headers.authorization;
+        const backupToken = backupAuthHeader && backupAuthHeader.startsWith('Bearer ')
+          ? backupAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(backupToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.backupCollectionBeforeCleanup(params.collectionName || '');
         break;
       }
         

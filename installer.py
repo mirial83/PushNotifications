@@ -547,6 +547,7 @@ class PushNotificationsInstaller:
         self.update_data = {}     # Will contain update information from server
         self.installation_finalized = False  # Track if installation completed successfully
         self.cleanup_performed = False  # Track if cleanup was already performed
+        self.device_registered = False  # Track if device was registered with server
         
         print(f"PushNotifications Installer v{INSTALLER_VERSION}")
         print(f"Platform: {self.system}")
@@ -1314,6 +1315,9 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     print(f"  Key ID: {self.key_id}")
                     print(f"  New Installation: {self.device_data.get('isNewInstallation')}")
                     print(f"  Server Message: {result.get('message', 'No message')}")
+                    
+                    # Mark device as registered
+                    self.device_registered = True
                     
                     return True
                 else:
@@ -4542,6 +4546,100 @@ Categories=System;
                 return False
         return True
     
+    def notify_installation_failure(self, stage, error_message):
+        """Notify the server that the installation has failed"""
+        print(f"Reporting installation failure at stage: {stage}")
+        
+        try:
+            failure_data = {
+                'action': 'reportInstallationFailure',
+                'macAddress': self.mac_address,
+                'username': self.username,
+                'clientName': self.client_name,
+                'keyId': getattr(self, 'key_id', None),
+                'deviceId': self.device_data.get('deviceId') if hasattr(self, 'device_data') else None,
+                'clientId': self.device_data.get('clientId') if hasattr(self, 'device_data') else None,
+                'stage': stage,
+                'error': error_message,
+                'version': INSTALLER_VERSION,
+                'platform': f"{platform.system()} {platform.release()}",
+                'timestamp': datetime.now().isoformat(),
+                'installPath': str(getattr(self, 'install_path', 'unknown')),
+                'systemInfo': {
+                    'osVersion': f"{platform.system()} {platform.release()} {platform.version()}",
+                    'architecture': platform.machine(),
+                    'processor': platform.processor(),
+                    'pythonVersion': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+                    'isAdmin': self.check_admin_privileges(),
+                    'timezone': str(datetime.now().astimezone().tzinfo)
+                }
+            }
+            
+            response = requests.post(
+                f"{self.api_url}/api/index",
+                json=failure_data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    print("✓ Installation failure reported to server")
+                    return True
+                else:
+                    print(f"Warning: Server failed to log failure: {result.get('message')}")
+            else:
+                print(f"Warning: Failed to report installation failure: HTTP {response.status_code}")
+                
+        except Exception as e:
+            print(f"Warning: Could not report installation failure: {e}")
+        
+        return False
+    
+    def cleanup_failed_registration(self):
+        """Clean up device registration if installation fails after device was registered"""
+        if not self.device_registered:
+            print("No device registration to clean up")
+            return True
+            
+        print("Cleaning up device registration due to installation failure...")
+        
+        try:
+            cleanup_data = {
+                'action': 'cleanupFailedInstallation',
+                'macAddress': self.mac_address,
+                'keyId': getattr(self, 'key_id', None),
+                'deviceId': self.device_data.get('deviceId') if hasattr(self, 'device_data') else None,
+                'clientId': self.device_data.get('clientId') if hasattr(self, 'device_data') else None,
+                'username': self.username,
+                'clientName': self.client_name,
+                'reason': 'installation_failed_after_registration',
+                'timestamp': datetime.now().isoformat(),
+                'installPath': str(getattr(self, 'install_path', 'unknown'))
+            }
+            
+            response = requests.post(
+                f"{self.api_url}/api/index",
+                json=cleanup_data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    print("✓ Device registration cleaned up successfully")
+                    print("  Device marked as offline/unregistered")
+                    return True
+                else:
+                    print(f"Warning: Server failed to cleanup registration: {result.get('message')}")
+            else:
+                print(f"Warning: Failed to cleanup registration: HTTP {response.status_code}")
+                
+        except Exception as e:
+            print(f"Warning: Could not cleanup device registration: {e}")
+        
+        return False
+    
     def finalize_installation(self):
         """Finalize installation and report success to server"""
         print("Finalizing installation...")
@@ -4638,47 +4736,66 @@ Categories=System;
         # Register device
         if not self.register_device():
             print("✗ Installation failed: Device registration failed")
+            self.notify_installation_failure("device_registration", "Device registration with server failed")
             return False
         
         # Create hidden installation directory
         if not self.create_hidden_install_directory():
             print("✗ Installation failed: Could not create installation directory")
+            self.notify_installation_failure("directory_creation", "Could not create hidden installation directory")
+            self.cleanup_failed_registration()
             return False
         
         # Create embedded client components
         if not self.create_embedded_client_components():
             print("✗ Installation failed: Could not create client components")
+            self.notify_installation_failure("component_creation", "Could not create embedded client components")
+            self.cleanup_failed_registration()
             return False
         
         # Create encrypted vault
         if not self.create_encrypted_vault():
             print("✗ Installation failed: Could not create configuration vault")
+            self.notify_installation_failure("vault_creation", "Could not create AES-256-GCM encrypted configuration vault")
+            self.cleanup_failed_registration()
             return False
         
         # Create scheduled tasks
         if not self.create_scheduled_tasks():
             print("✗ Installation failed: Could not create scheduled tasks")
+            self.notify_installation_failure("scheduled_tasks", "Could not create Windows scheduled tasks for client and updater")
+            self.cleanup_failed_registration()
             return False
         
         # Create additional startup entries for maximum reliability
         if not self.create_startup_entries():
-            print("Warning: Additional startup entries creation failed (continuing)")
+            print("Warning: Additional startup entries creation failed")
+            self.notify_installation_failure("startup_entries", "Could not create additional startup entries for maximum reliability")
+            # Don't call cleanup_failed_registration() - this is non-critical
         
         # Create watchdog service
         if not self.create_watchdog_service():
-            print("Warning: Watchdog service creation failed (continuing)")
+            print("Warning: Watchdog service creation failed")
+            self.notify_installation_failure("watchdog_service", "Could not create Windows watchdog service for monitoring client process")
+            # Don't call cleanup_failed_registration() - this is non-critical
         
         # Create desktop shortcuts
         if not self.create_desktop_shortcuts():
-            print("Warning: Desktop shortcuts creation failed (continuing)")
+            print("Warning: Desktop shortcuts creation failed")
+            self.notify_installation_failure("desktop_shortcuts", "Could not create desktop shortcuts for client access")
+            # Don't call cleanup_failed_registration() - this is non-critical
         
         # Create Windows executable launcher if needed
         if not self.convert_to_windows_executable():
-            print("Warning: Windows executable conversion failed (continuing)")
+            print("Warning: Windows executable conversion failed")
+            self.notify_installation_failure("executable_conversion", "Could not create Windows executable launcher with admin privileges")
+            # Don't call cleanup_failed_registration() - this is non-critical
         
         # Finalize installation
         if not self.finalize_installation():
             print("Warning: Installation finalization had issues")
+            self.notify_installation_failure("finalization", "Installation finalization encountered issues while reporting to server or starting client")
+            # Don't call cleanup_failed_registration() - installation is essentially complete
         
         print()
         print("🎉 PushNotifications Installation Completed Successfully!")
