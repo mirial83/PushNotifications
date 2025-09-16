@@ -810,7 +810,7 @@ class DatabaseOperations {
       { message: 'Current version - Node.js/MongoDB/Vercel implementation', isCurrent: true },
       { message: 'Website authentication and user management', isCurrent: false },
       { message: 'Security features and MAC address client tracking', isCurrent: false },
-      { message: 'Database migration from PHP to Node.js/MongoDB', isCurrent: false },
+      { message: 'Database implementation with Node.js/MongoDB', isCurrent: false },
       { message: 'Client installer improvements', isCurrent: false },
       { message: 'Visual updates and UI improvements', isCurrent: false },
       { message: 'Quick action buttons and notifications', isCurrent: false },
