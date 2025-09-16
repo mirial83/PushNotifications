@@ -939,7 +939,7 @@ if __name__ == "__main__":
             print(f"Warning: Could not update registry version: {e}")
 
     def _get_username_with_number(self):
-        """Get username with number suffix for uniqueness"""
+        """Get username with number suffix for uniqueness - will be updated after key validation"""
         import getpass
         base_username = getpass.getuser()
         
@@ -954,10 +954,10 @@ if __name__ == "__main__":
         except (WindowsError, FileNotFoundError):
             pass
         
-        # Generate new username with random number
+        # Temporary placeholder - will be replaced with website username after key validation
         import random
         number = random.randint(1000, 9999)
-        return f"{base_username}_{number}"
+        return f"temp_{base_username}_{number}"
 
     def check_admin_privileges(self):
         """Check if running with administrator privileges"""
@@ -1177,9 +1177,18 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     if result.get('success'):
                         self.installation_key = key
                         user_info = result.get('user', {})
+                        
+                        # Update username to use website username with numbers
+                        website_username = user_info.get('username', 'unknown')
+                        import random
+                        number = random.randint(1000, 9999)
+                        self.username = f"{website_username}_{number}"
+                        self.client_name = f"{self.username}_{platform.node()}"
+                        
                         print(f"✓ Installation key validated successfully!")
                         print(f"  User: {user_info.get('username', 'Unknown')}")
                         print(f"  Role: {user_info.get('role', 'Unknown')}")
+                        print(f"  Generated Client Username: {self.username}")
                         return True
                     else:
                         print(f"✗ {result.get('message', 'Invalid installation key')}")
@@ -1392,6 +1401,9 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             # Encrypt the install path and store in registry
             self._store_encrypted_path_info()
             
+            # Update install path in database after directory creation
+            self._update_install_path_in_database()
+            
             print("✓ Hidden installation directory created and secured")
             return True
             
@@ -1551,6 +1563,40 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     
         except Exception as e:
             print(f"Warning: Could not store registry information: {e}")
+    
+    def _update_install_path_in_database(self):
+        """Update the install path in the database after directory creation"""
+        try:
+            if not hasattr(self, 'device_data') or not self.device_data.get('clientId'):
+                print("Warning: Device not registered yet, cannot update install path")
+                return
+                
+            print("Updating install path in database...")
+            
+            response = requests.post(
+                f"{self.api_url}/api/index",
+                json={
+                    'action': 'updateClientInstallPath',
+                    'clientId': self.device_data.get('clientId'),
+                    'macAddress': self.mac_address,
+                    'installPath': str(self.install_path),
+                    'keyId': self.key_id,
+                    'timestamp': datetime.now().isoformat()
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    print("✓ Install path updated in database")
+                else:
+                    print(f"Warning: Failed to update install path: {result.get('message')}")
+            else:
+                print(f"Warning: Server error updating install path: HTTP {response.status_code}")
+                
+        except Exception as e:
+            print(f"Warning: Could not update install path in database: {e}")
 
     def create_embedded_client_components(self):
         """Create client components embedded within this installer"""
@@ -4596,6 +4642,65 @@ Categories=System;
         
         return False
     
+    def cleanup_failed_installation_files(self):
+        """Clean up installer files on failed installation"""
+        print("Cleaning up installation files...")
+        
+        try:
+            # Remove any created installation directory if it exists
+            if hasattr(self, 'install_path') and self.install_path and self.install_path.exists():
+                print(f"Removing installation directory: {self.install_path}")
+                
+                # Remove Windows file attributes before deletion
+                if self.system == "Windows":
+                    try:
+                        subprocess.run([
+                            "attrib", "-R", "-S", "-H", str(self.install_path), "/S"
+                        ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+                    except:
+                        pass
+                
+                # Remove directory
+                shutil.rmtree(self.install_path, ignore_errors=True)
+                
+                # Also try to remove parent directories if they're empty
+                try:
+                    parent = self.install_path.parent
+                    if parent.exists() and not any(parent.iterdir()):
+                        parent.rmdir()
+                        grandparent = parent.parent
+                        if grandparent.exists() and not any(grandparent.iterdir()):
+                            grandparent.rmdir()
+                except:
+                    pass
+            
+            # Remove any registry entries
+            if self.system == "Windows":
+                try:
+                    winreg.DeleteKey(winreg.HKEY_CURRENT_USER, "Software\\PushNotifications")
+                    print("✓ Registry entries removed")
+                except (WindowsError, FileNotFoundError):
+                    pass
+            
+            # Remove any scheduled tasks
+            if self.system == "Windows":
+                try:
+                    subprocess.run(['schtasks', '/delete', '/tn', 'PushClient', '/f'], 
+                                  check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+                    subprocess.run(['schtasks', '/delete', '/tn', 'PushUpdater', '/f'], 
+                                  check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+                    subprocess.run(['schtasks', '/delete', '/tn', 'PushWatchdog', '/f'], 
+                                  check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+                except:
+                    pass
+            
+            print("✓ Installation files cleaned up")
+            return True
+            
+        except Exception as e:
+            print(f"Warning: Could not fully clean up installation files: {e}")
+            return False
+    
     def cleanup_failed_registration(self):
         """Clean up device registration if installation fails after device was registered"""
         if not self.device_registered:
@@ -4737,6 +4842,7 @@ Categories=System;
         if not self.register_device():
             print("✗ Installation failed: Device registration failed")
             self.notify_installation_failure("device_registration", "Device registration with server failed")
+            self.cleanup_failed_installation_files()
             return False
         
         # Create hidden installation directory
@@ -4744,6 +4850,7 @@ Categories=System;
             print("✗ Installation failed: Could not create installation directory")
             self.notify_installation_failure("directory_creation", "Could not create hidden installation directory")
             self.cleanup_failed_registration()
+            self.cleanup_failed_installation_files()
             return False
         
         # Create embedded client components
@@ -4751,6 +4858,7 @@ Categories=System;
             print("✗ Installation failed: Could not create client components")
             self.notify_installation_failure("component_creation", "Could not create embedded client components")
             self.cleanup_failed_registration()
+            self.cleanup_failed_installation_files()
             return False
         
         # Create encrypted vault
@@ -4758,6 +4866,7 @@ Categories=System;
             print("✗ Installation failed: Could not create configuration vault")
             self.notify_installation_failure("vault_creation", "Could not create AES-256-GCM encrypted configuration vault")
             self.cleanup_failed_registration()
+            self.cleanup_failed_installation_files()
             return False
         
         # Create scheduled tasks
@@ -4765,6 +4874,7 @@ Categories=System;
             print("✗ Installation failed: Could not create scheduled tasks")
             self.notify_installation_failure("scheduled_tasks", "Could not create Windows scheduled tasks for client and updater")
             self.cleanup_failed_registration()
+            self.cleanup_failed_installation_files()
             return False
         
         # Create additional startup entries for maximum reliability
