@@ -924,7 +924,7 @@ class DatabaseOperations {
         .countDocuments({ macAddress }) + 1;
       
       // Generate client ID and names
-      const clientName = `${username}${installationCount}`;
+      const generatedClientName = clientName || `${username}${installationCount}`;
       const clientId = `${username}_${macAddress.replace(/[:-]/g, '').substr(-6)}_${installationCount}`;
       const installationId = `inst_${macAddress.replace(/[:-]/g, '')}_${installationCount}`;
       const keyId = `key_${macAddress.replace(/[:-]/g, '')}_${Date.now()}`;
@@ -945,7 +945,7 @@ class DatabaseOperations {
         
         // User information
         username,
-        clientName,
+        clientName: generatedClientName,
         userId: keyValidation.user ? new ObjectId(keyValidation.user.id) : null,
         userRole: keyValidation.user ? keyValidation.user.role : 'user',
         
