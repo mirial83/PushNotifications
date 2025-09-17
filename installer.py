@@ -4562,57 +4562,8 @@ def finalize_installation(self):
 
 def run_installation(self):
     """Run the complete installation process with progress tracking"""
-    install_steps = [
-        ("Version Check", 10),
-        ("Admin Privileges", 15), 
-        ("Installation Key", 25),
-        ("Device Registration", 35),
-        ("Installation Directory", 45),
-        ("Client Components", 60),
-        ("Configuration Vault", 70),
-        ("Startup Entries", 80),
-        ("Desktop Shortcuts", 90),
-        ("Finalization", 100)
-    ]
-    
-    current_step = 0
-    
-    def update_progress(step_name, percentage, status=""):
-        if self.progress_dialog:
-            self.progress_dialog.update_progress(percentage, f"{step_name}... {status}")
-            self.progress_dialog.add_log(f"{step_name} - {status}" if status else step_name)
-            self.progress_dialog.update_gui()
-    
     print("Starting PushNotifications Installation")
     print("=" * 60)
-    
-    if self.progress_dialog:
-        self.progress_dialog.add_log("Starting PushNotifications Installation")
-        self.progress_dialog.update_progress(0, "Initializing installation...")
-    
-    # Startup version check (unless in repair mode)
-    if not self.repair_mode:
-        print("Performing startup version check...")
-        if self.check_for_updates():
-            latest_version = self.update_data.get('latestVersion')
-            update_required = self.update_data.get('updateRequired', False)
-            
-            if update_required:
-                print(f"\n⚠️  Critical Update Required: v{INSTALLER_VERSION} → v{latest_version}")
-                print("This update contains important security fixes and must be installed.")
-                
-                if self.download_and_apply_update():
-                    print("\n✅ Critical update applied successfully.")
-                    print("Please restart the installer to continue with the updated version.")
-                    return True
-                else:
-                    print("\n❌ Critical update failed. Installation cannot proceed.")
-                    return False
-                    
-            else:
-                print(f"\nℹ️  Update available: v{INSTALLER_VERSION} → v{latest_version}")
-                print("You can update later using: python installer.py --update")
-                print("Continuing with current version...\n")
     
     # Check admin privileges (skip on macOS since we install in user directory)
     if self.system != "Darwin" and not self.check_admin_privileges():
@@ -4627,117 +4578,30 @@ def run_installation(self):
     else:
         print("✓ Running with administrator privileges")
     
-    # Check for existing installation and handle upgrade/repair
-    has_existing = self._has_existing_installation()
-    if has_existing and not self.repair_mode:
-        print("🔄 Existing installation detected - performing upgrade/update")
-        print("   This will preserve your configuration and upgrade the client")
-        self.repair_mode = True  # Enable repair mode for existing installations
-    
-    # Validate installation key (skip in repair/upgrade mode if we have existing config)
-    if not self.repair_mode or not has_existing:
-        if not self.validate_installation_key():
-            print("✗ Installation failed: Invalid installation key")
-            return False
-    else:
-        print("✓ Using existing installation configuration")
-        self._load_existing_config()
-        
-        # For Unix systems in upgrade mode, we still need to validate the key
-        if self.installation_key == "UPGRADE_MODE":
-            print("🔄 Upgrade mode: Please provide installation key to continue")
-            if not self.validate_installation_key():
-                print("✗ Installation failed: Valid installation key required for upgrade")
-                return False
+    # Validate installation key
+    if not self.validate_installation_key():
+        print("✗ Installation failed: Invalid installation key")
+        return False
     
     # Register device
     if not self.register_device():
         print("✗ Installation failed: Device registration failed")
-        self.notify_installation_failure("device_registration", "Device registration with server failed")
         return False
     
     # Create hidden installation directory
     if not self.create_hidden_install_directory():
         print("✗ Installation failed: Could not create installation directory")
-        self.notify_installation_failure("directory_creation", "Could not create hidden installation directory")
         return False
     
-    # Create embedded client components (will overwrite existing files)
+    # Create embedded client components
     if not self.create_embedded_client_components():
         print("✗ Installation failed: Could not create client components")
-        self.notify_installation_failure("component_creation", "Could not create embedded client components")
         return False
     
-    # Create encrypted vault (will overwrite existing vault)
-    if not self.create_encrypted_vault():
-        print("✗ Installation failed: Could not create configuration vault")
-        self.notify_installation_failure("vault_creation", "Could not create AES-256-GCM encrypted configuration vault")
-        return False
-    
-    # Create scheduled tasks (will overwrite existing tasks)
-    if not self.create_scheduled_tasks():
-        print("✗ Installation failed: Could not create scheduled tasks")
-        self.notify_installation_failure("scheduled_tasks", "Could not create Windows scheduled tasks for client and updater")
-        return False
-    
-    # Create additional startup entries for maximum reliability
-    if not self.create_startup_entries():
-        print("Warning: Additional startup entries creation failed")
-        self.notify_installation_failure("startup_entries", "Could not create additional startup entries for maximum reliability")
-        # Don't call cleanup_failed_registration() - this is non-critical
-    
-    # Watchdog service removed - no longer part of the installation
-    
-    # Create desktop shortcuts
-    if not self.create_desktop_shortcuts():
-        print("Warning: Desktop shortcuts creation failed")
-        self.notify_installation_failure("desktop_shortcuts", "Could not create desktop shortcuts for client access")
-        # Don't call cleanup_failed_registration() - this is non-critical
-    
-    # Pure Python installation - no executable conversion
-    
-    # Finalize installation
-    if not self.finalize_installation():
-        print("Warning: Installation finalization had issues")
-        self.notify_installation_failure("finalization", "Installation finalization encountered issues while reporting to server or starting client")
-        # Don't call cleanup_failed_registration() - installation is essentially complete
-    
-    print()
-    print("🎉 PushNotifications Installation Completed Successfully!")
-    print("=" * 60)
-    print(f"Installation directory: {self.install_path}")
-    print(f"Client version: {INSTALLER_VERSION}")
-    print(f"Device registered as: {self.client_name}")
-    print()
-    print("The client will start automatically and run in the background.")
-    print("Look for the Push Client icon in your system tray.")
-    print()
-    print("To uninstall, right-click the system tray icon and select 'Uninstall'.")
-    print("This will initiate the server-managed uninstallation process.")
-    print()
-    
+    print("✅ Installation completed successfully!")
     return True
-        
-    # Method wrappers for standalone functions
-def notify_installation_failure(self, stage, error_message):
-    """Wrapper method for standalone function - notifies server of installation failure"""
-    return notify_installation_failure(self, stage, error_message)
-    
-def cleanup_failed_registration(self):
-    """Disabled - no cleanup during installation to prevent crashes"""
-    print("Registration cleanup disabled to prevent installation crashes")
-    return True
-    
-def cleanup_failed_installation_files(self):
-    """Disabled - no cleanup during installation to prevent crashes"""
-    print("File cleanup disabled to prevent installation crashes")
-    return True
-    
-def finalize_installation(self):
-    """Wrapper method for standalone function - finalizes installation"""
-    return finalize_installation(self)
 
-
+# Standalone functions outside the class
 def show_help():
     """Display comprehensive help information"""
     print(f"""PushNotifications Universal Installer v{INSTALLER_VERSION}
