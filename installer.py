@@ -4696,64 +4696,22 @@ def show_specific_documentation(doc_type):
 def main():
     """Main installer entry point"""
     try:
-        # Check for administrator privileges on Windows
+        print(f"PushNotifications Installer v{INSTALLER_VERSION}")
+        print("=" * 50)
+        print("Starting installation process...")
+        
+        # Check for administrator privileges on Windows (auto-elevate required)
         if platform.system() == "Windows":
             try:
                 # Check if already running as admin
                 is_admin = bool(ctypes.windll.shell32.IsUserAnAdmin())
                 if not is_admin:
-                    print("Restarting with administrator privileges...")
+                    print("Administrator privileges required. Requesting elevation...")
                     
                     # Use the most reliable elevation method
                     script_path = os.path.abspath(sys.argv[0])
                     script_args = ' '.join([f'"{arg}"' for arg in sys.argv])
                     
-                    # Try Command Prompt method first
-                    try:
-                        # Create a batch file to request elevation
-                        import tempfile
-                        
-                        batch_content = f'''@echo off
-echo Requesting administrator privileges...
-"{sys.executable}" "{script_path}" %*
-pause
-'''
-                        
-                        with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as f:
-                            f.write(batch_content)
-                            temp_batch = f.name
-                        
-                        # Use ShellExecute to run the batch file with elevation
-                        shell32 = ctypes.windll.shell32
-                        result = shell32.ShellExecuteW(
-                            None, "runas", temp_batch, None, None, 1
-                        )
-                        
-                        result_int = ctypes.cast(result, ctypes.c_void_p).value or 0
-                        if result_int > 32:
-                            print("✓ Administrator privileges requested via Command Prompt")
-                            # Clean up temp file after a delay
-                            import threading
-                            def cleanup():
-                                import time
-                                time.sleep(5)
-                                try:
-                                    os.unlink(temp_batch)
-                                except:
-                                    pass
-                            threading.Thread(target=cleanup, daemon=True).start()
-                            sys.exit(0)
-                        else:
-                            print(f"Command Prompt elevation failed with error code: {result_int}")
-                            # Clean up temp file
-                            try:
-                                os.unlink(temp_batch)
-                            except:
-                                pass
-                    except Exception as e:
-                        print(f"Command Prompt elevation failed: {e}")
-                    
-                    # Fallback to direct ctypes ShellExecuteW
                     try:
                         shell32 = ctypes.windll.shell32
                         shell32.ShellExecuteW.argtypes = [
@@ -4768,24 +4726,25 @@ pause
                         
                         result_int = ctypes.cast(result, ctypes.c_void_p).value or 0
                         if result_int > 32:
-                            print("✓ Administrator privileges requested")
+                            print("✓ Administrator privileges requested - elevated window will open")
                             sys.exit(0)
                         else:
-                            print(f"Elevation failed with error code: {result_int}")
+                            print(f"✗ Elevation failed with error code: {result_int}")
+                            print("Installation cannot proceed without administrator privileges.")
+                            input("Press Enter to exit...")
+                            sys.exit(1)
                     except Exception as e:
-                        print(f"Elevation failed: {e}")
-                    
-                    # If all methods fail, show error and exit
-                    print("\n❌ Failed to obtain administrator privileges.")
-                    print("Please right-click this script and select 'Run as administrator'")
-                    print("Administrator privileges are required to prevent system errors.")
-                    input("Press Enter to exit...")
-                    sys.exit(1)
+                        print(f"✗ Elevation failed: {e}")
+                        print("Installation cannot proceed without administrator privileges.")
+                        input("Press Enter to exit...")
+                        sys.exit(1)
                 else:
                     print("✓ Running with administrator privileges")
             except Exception as e:
                 print(f"Error checking administrator privileges: {e}")
-                print("Continuing anyway...")
+                print("Installation cannot proceed without administrator privileges.")
+                input("Press Enter to exit...")
+                sys.exit(1)
         
         # Parse command line arguments
         api_url = None
