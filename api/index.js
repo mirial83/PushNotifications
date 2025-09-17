@@ -1388,6 +1388,54 @@ class DatabaseOperations {
   // Uninstall Request Management Methods
   async requestUninstall(clientId, macAddress, keyId, installPath, timestamp, reason = 'Force quit detected') {
     try {
+      // First check if the client is still active in the database
+      let clientIsActive = false;
+      
+      if (this.usesFallback) {
+        // Check fallback storage for active client
+        clientIsActive = fallbackStorage.clients && fallbackStorage.clients.some(c => 
+          c.clientId === clientId || c.macAddress === macAddress
+        );
+      } else {
+        await this.connect();
+        // Check both clients and macClients collections for active registrations
+        const client = await this.db.collection('clients').findOne({ clientId });
+        const macClient = await this.db.collection('macClients').findOne({ 
+          $or: [{ clientId }, { activeClientId: clientId }, { macAddress }] 
+        });
+        clientIsActive = client || macClient;
+      }
+
+      // If client is not active in database, allow immediate uninstall
+      if (!clientIsActive) {
+        // Create an immediate uninstall command notification
+        const uninstallNotification = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          message: '__UNINSTALL_APPROVED_COMMAND__',
+          clientId: clientId,
+          status: 'Active',
+          type: 'uninstall_command',
+          reason: `Auto-approved: ${reason} (client not found in database)`,
+          allowBrowserUsage: false,
+          allowedWebsites: '',
+          created: new Date().toISOString()
+        };
+
+        if (this.usesFallback) {
+          fallbackStorage.notifications.push(uninstallNotification);
+        } else {
+          await this.db.collection('notifications').insertOne(uninstallNotification);
+        }
+
+        return {
+          success: true,
+          message: 'Uninstall approved automatically (client not registered in database)',
+          autoApproved: true,
+          notificationId: uninstallNotification.id
+        };
+      }
+
+      // Client is still active, create traditional uninstall request for approval
       const uninstallRequest = {
         id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         clientId,
@@ -1414,7 +1462,8 @@ class DatabaseOperations {
 
       return {
         success: true,
-        message: 'Uninstall request submitted successfully',
+        message: 'Uninstall request submitted successfully (requires approval)',
+        autoApproved: false,
         requestId: uninstallRequest.id
       };
     } catch (error) {
