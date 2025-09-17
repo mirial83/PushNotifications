@@ -2451,11 +2451,11 @@ class WindowManager:
         self.minimized_windows = []
         # Process executable names to monitor and potentially terminate
         # These refer to Windows process names (actual .exe files) that may be running
-        self.restricted_processes = {
+        self.restricted_processes = {{
             'browsers': ['chrome.exe', 'firefox.exe', 'msedge.exe', 'opera.exe', 'brave.exe', 'iexplore.exe'],
             'vpn': ['openvpn.exe', 'nordvpn.exe', 'expressvpn.exe', 'cyberghost.exe', 'tunnelbear.exe'],
             'proxy': ['proxifier.exe', 'proxycap.exe', 'sockscap.exe']
-        }
+        }}
         # System processes that should never be terminated even if detected
         self.allowed_processes = ['taskmgr.exe', 'dwm.exe', 'winlogon.exe', 'csrss.exe', 'lsass.exe', 'services.exe']
     
