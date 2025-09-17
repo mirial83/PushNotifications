@@ -3638,6 +3638,56 @@ except ImportError:
     GUI_AVAILABLE = False
     print("Warning: GUI features not available")
 
+# Cross-platform GUI utility functions
+def show_message_dialog(title, message, dialog_type="info", parent=None):
+    """Show a properly configured message dialog for cross-platform compatibility"""
+    if not GUI_AVAILABLE:
+        print(f"{{title}}: {{message}}")
+        return
+    
+    try:
+        # Set environment variable to suppress tkinter deprecation warning on macOS
+        os.environ['TK_SILENCE_DEPRECATION'] = '1'
+        
+        # Create or use existing parent window
+        if parent is None:
+            root = tk.Tk()
+            root.title(title)
+            root.geometry("400x150")
+            
+            # Configure for better visibility on macOS
+            root.attributes('-topmost', True)
+            root.lift()
+            root.focus_force()
+            
+            # Center the window
+            root.update_idletasks()
+            width = root.winfo_width()
+            height = root.winfo_height()
+            x = (root.winfo_screenwidth() // 2) - (width // 2)
+            y = (root.winfo_screenheight() // 2) - (height // 2)
+            root.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
+            
+            parent_window = root
+            should_destroy = True
+        else:
+            parent_window = parent
+            should_destroy = False
+        
+        # Show appropriate dialog type
+        if dialog_type == "error":
+            messagebox.showerror(title, message, parent=parent_window)
+        elif dialog_type == "warning":
+            messagebox.showwarning(title, message, parent=parent_window)
+        else:
+            messagebox.showinfo(title, message, parent=parent_window)
+        
+        if should_destroy:
+            parent_window.destroy()
+            
+    except Exception as e:
+        print(f"GUI dialog failed ({{e}}): {{title}} - {{message}}")
+
 # Client configuration
 CLIENT_VERSION = "{INSTALLER_VERSION}"
 API_URL = "{self.api_url}/api/index"
@@ -4080,7 +4130,7 @@ class NotificationWindow:
                 'website': website
             }})
             if GUI_AVAILABLE:
-                messagebox.showinfo("Request Sent", f"Website access request sent for:\n{{website}}")
+                show_message_dialog("Request Sent", f"Website access request sent for:\n{{website}}")
             self.website_request_var.set("https://")
     
     def snooze_notification(self, minutes):
@@ -4090,7 +4140,7 @@ class NotificationWindow:
             'minutes': minutes
         }})
         if GUI_AVAILABLE:
-            messagebox.showinfo("Snoozed", f"Notification snoozed for {{minutes}} minute(s)")
+            show_message_dialog("Snoozed", f"Notification snoozed for {{minutes}} minute(s)")
         self.close()
     
     def complete_notification(self):
@@ -4099,7 +4149,7 @@ class NotificationWindow:
             'notificationId': self.data.get('id')
         }})
         if GUI_AVAILABLE:
-            messagebox.showinfo("Complete", "Notification marked as complete!")
+            show_message_dialog("Complete", "Notification marked as complete!")
         self.close()
     
     def minimize_notification(self):
@@ -4260,10 +4310,7 @@ class PushNotificationsCrossplatformClient:
         
         if GUI_AVAILABLE:
             try:
-                root = tk.Tk()
-                root.withdraw()
-                messagebox.showinfo("Client Status", status_info)
-                root.destroy()
+                show_message_dialog("Client Status", status_info)
             except Exception as e:
                 print(f"Error showing status dialog: {{e}}")
         else:
@@ -4276,10 +4323,7 @@ class PushNotificationsCrossplatformClient:
         if not active_notifications:
             if GUI_AVAILABLE:
                 try:
-                    root = tk.Tk()
-                    root.withdraw()
-                    messagebox.showinfo("Notifications", "No active notifications")
-                    root.destroy()
+                    show_message_dialog("Notifications", "No active notifications")
                 except:
                     pass
             else:
@@ -4335,10 +4379,7 @@ class PushNotificationsCrossplatformClient:
         else:
             if GUI_AVAILABLE:
                 try:
-                    root = tk.Tk()
-                    root.withdraw()
-                    messagebox.showinfo("No Notifications", "No active notifications to complete.")
-                    root.destroy()
+                    show_message_dialog("No Notifications", "No active notifications to complete.")
                 except:
                     pass
     
@@ -4357,7 +4398,7 @@ class PushNotificationsCrossplatformClient:
                 
                 if website and website != "https://":
                     self.send_website_request(website)
-                    messagebox.showinfo("Request Sent", f"Website access request sent for:\n{{website}}")
+                    show_message_dialog("Request Sent", f"Website access request sent for:\n{{website}}")
             except Exception as e:
                 print(f"Error requesting website access: {{e}}")
     
@@ -4936,6 +4977,45 @@ try:
 except ImportError:
     GUI_AVAILABLE = False
 
+# Cross-platform GUI utility function
+def show_message_dialog(title, message, dialog_type="info"):
+    """Show a properly configured message dialog"""
+    if not GUI_AVAILABLE:
+        print(f"{{title}}: {{message}}")
+        return
+    
+    try:
+        # Set environment variable to suppress tkinter deprecation warning on macOS
+        os.environ['TK_SILENCE_DEPRECATION'] = '1'
+        
+        root = tk.Tk()
+        root.title(title)
+        root.geometry("400x150")
+        root.attributes('-topmost', True)
+        root.lift()
+        root.focus_force()
+        
+        # Center the window
+        root.update_idletasks()
+        width = root.winfo_width()
+        height = root.winfo_height()
+        x = (root.winfo_screenwidth() // 2) - (width // 2)
+        y = (root.winfo_screenheight() // 2) - (height // 2)
+        root.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
+        
+        # Show appropriate dialog type
+        if dialog_type == "error":
+            messagebox.showerror(title, message, parent=root)
+        elif dialog_type == "warning":
+            messagebox.showwarning(title, message, parent=root)
+        else:
+            messagebox.showinfo(title, message, parent=root)
+        
+        root.destroy()
+        
+    except Exception as e:
+        print(f"GUI dialog failed ({{e}}): {{title}} - {{message}}")
+
 API_URL = "{api_url}/api/index"
 MAC_ADDRESS = "{mac_address}"
 CLIENT_ID = "{client_id}"
@@ -4954,15 +5034,7 @@ class PushNotificationsUnixUninstaller:
         
         if GUI_AVAILABLE:
             try:
-                root = tk.Tk()
-                root.withdraw()
-                if message_type == "error":
-                    messagebox.showerror(title, message)
-                elif message_type == "warning":
-                    messagebox.showwarning(title, message)
-                else:
-                    messagebox.showinfo(title, message)
-                root.destroy()
+                show_message_dialog(title, message, message_type)
                 return
             except:
                 pass
