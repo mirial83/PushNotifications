@@ -831,6 +831,26 @@ class PushNotificationsInstaller:
                                   winreg.KEY_READ) as key:
                     # If we can read the key, we have an existing installation
                     return True
+            else:
+                # On Unix-like systems, check for common installation directories
+                common_install_paths = [
+                    Path.home() / ".local" / "share" / "PushNotifications",
+                    Path.home() / "Applications" / "PushNotifications",
+                    Path("/usr/local/share/PushNotifications"),
+                    Path("/opt/PushNotifications"),
+                    # Check current directory for development installs
+                    Path.cwd() / "Client.py"
+                ]
+                
+                for path in common_install_paths:
+                    if path.exists():
+                        if path.name == "Client.py":
+                            # Found client file
+                            return True
+                        elif (path / "Client.py").exists():
+                            # Found installation directory with client
+                            return True
+                        
         except (OSError, FileNotFoundError):
             pass
         return False
@@ -870,6 +890,22 @@ class PushNotificationsInstaller:
                     print(f"  Key ID: {self.key_id}")
                     print(f"  MAC Address: {self.mac_address}")
                     print(f"  Username: {self.username}")
+            else:
+                # On Unix-like systems, we'll use current detected values and assume upgrade
+                print("✓ Unix/macOS upgrade mode - using current system configuration")
+                print(f"  MAC Address: {self.mac_address}")
+                print(f"  Username: {self.username}")
+                print(f"  API URL: {self.api_url}")
+                
+                # Set upgrade installation key - will be validated normally
+                self.installation_key = "UPGRADE_MODE"
+                
+                # Create device data for upgrade
+                self.device_data = {
+                    'deviceId': f"upgrade_{self.mac_address}",
+                    'clientId': f"upgrade_{self.mac_address}",
+                    'isNewInstallation': False
+                }
                     
         except Exception as e:
             print(f"Warning: Could not load existing config for repair: {e}")
@@ -6831,14 +6867,28 @@ def run_installation(self):
         
         print("✓ Running with administrator privileges")
         
-        # Validate installation key (skip in repair mode if we have existing config)
-        if not self.repair_mode or not self._has_existing_installation():
+        # Check for existing installation and handle upgrade/repair
+        has_existing = self._has_existing_installation()
+        if has_existing and not self.repair_mode:
+            print("🔄 Existing installation detected - performing upgrade/update")
+            print("   This will preserve your configuration and upgrade the client")
+            self.repair_mode = True  # Enable repair mode for existing installations
+        
+        # Validate installation key (skip in repair/upgrade mode if we have existing config)
+        if not self.repair_mode or not has_existing:
             if not self.validate_installation_key():
                 print("✗ Installation failed: Invalid installation key")
                 return False
         else:
-            print("✓ Repair mode: Using existing installation key")
+            print("✓ Using existing installation configuration")
             self._load_existing_config()
+            
+            # For Unix systems in upgrade mode, we still need to validate the key
+            if self.installation_key == "UPGRADE_MODE":
+                print("🔄 Upgrade mode: Please provide installation key to continue")
+                if not self.validate_installation_key():
+                    print("✗ Installation failed: Valid installation key required for upgrade")
+                    return False
         
         # Register device
         if not self.register_device():
@@ -7196,7 +7246,7 @@ def main():
                 print("\n✅ Already running the latest version.")
                 sys.exit(0)
         
-        success = installer.run_installation()
+        success = run_installation(installer)
         
         if success:
             if USE_GUI_DIALOGS:
