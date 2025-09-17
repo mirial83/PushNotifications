@@ -632,7 +632,7 @@ class PushNotificationsInstaller:
                                   winreg.KEY_READ) as key:
                     # If we can read the key, we have an existing installation
                     return True
-        except (WindowsError, FileNotFoundError):
+        except (OSError, FileNotFoundError):
             pass
         return False
     
@@ -879,7 +879,7 @@ class PushNotificationsInstaller:
                                   winreg.KEY_READ) as key:
                     existing_username, _ = winreg.QueryValueEx(key, "Username")
                     return existing_username
-        except (WindowsError, FileNotFoundError):
+        except (OSError, FileNotFoundError):
             pass
         
         # Temporary placeholder - will be replaced with website username after key validation
@@ -1449,6 +1449,9 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
     def _disable_indexing(self):
         """Disable Windows Search indexing for the directory"""
         try:
+            import win32file
+            import win32con
+            
             # Set FILE_ATTRIBUTE_NOT_CONTENT_INDEXED
             file_attributes = win32file.GetFileAttributes(str(self.install_path))
             win32file.SetFileAttributes(
@@ -2157,9 +2160,25 @@ class NotificationWindow:
             if allowed_websites:
                 websites_label = tk.Label(content_frame, 
                                         text=f"Allowed websites: {{', '.join(allowed_websites)}}", 
-                                        bg=bg_color, wraplength=360, justify=tk.LEFT,
+                                        bg=colors['bg'], wraplength=360, justify=tk.LEFT,
                                         font=("Arial", 9), fg="#666")
                 websites_label.pack(pady=(0, 10))
+            
+            # Define the create_button function for use throughout the window creation
+            def create_button(parent, text, command, color, is_primary=False):
+                """Create a modern styled button"""
+                btn = tk.Button(parent, text=text, command=command,
+                              font=("Segoe UI", 10),
+                              fg="white" if is_primary else colors['text'],
+                              bg=color if is_primary else colors['bg'],
+                              activebackground=color if is_primary else colors['border'],
+                              activeforeground="white" if is_primary else colors['text'],
+                              relief='flat', bd=1,
+                              padx=15, pady=5)
+                if not is_primary:
+                    btn.configure(bd=1, highlightthickness=1,
+                                highlightbackground=colors['border'])
+                return btn
             
             # Website request section with modern styling
             if self.data.get('allowWebsiteRequests', False):
@@ -2195,21 +2214,6 @@ class NotificationWindow:
             # Button container with modern styling
             button_frame = tk.Frame(main_frame, bg=colors['bg'])
             button_frame.pack(fill=tk.X, padx=20, pady=(0, 15))
-            
-            def create_button(parent, text, command, color, is_primary=False):
-                """Create a modern styled button"""
-                btn = tk.Button(parent, text=text, command=command,
-                              font=("Segoe UI", 10),
-                              fg="white" if is_primary else colors['text'],
-                              bg=color if is_primary else colors['bg'],
-                              activebackground=color if is_primary else colors['border'],
-                              activeforeground="white" if is_primary else colors['text'],
-                              relief='flat', bd=1,
-                              padx=15, pady=5)
-                if not is_primary:
-                    btn.configure(bd=1, highlightthickness=1,
-                                highlightbackground=colors['border'])
-                return btn
             
             # Snooze options in dropdown
             snooze_var = tk.StringVar(value="Snooze")
@@ -4555,7 +4559,7 @@ def cleanup_failed_installation_files(self):
                 try:
                     winreg.DeleteKey(winreg.HKEY_CURRENT_USER, "Software\\PushNotifications")
                     print("✓ Registry entries removed")
-                except (WindowsError, FileNotFoundError):
+                except (OSError, FileNotFoundError):
                     pass
             
             # Remove any scheduled tasks
