@@ -3405,8 +3405,62 @@ class PushNotificationsClient:
     
     def show_notification(self, notification):
         message = notification.get('message', '')
-        print(f"Notification: {{message}}")
-        # TODO: Implement Unix-specific notification display
+        title = notification.get('title', 'Push Notification')
+        print(f"Notification: {message}")
+        
+        # Try multiple Unix notification methods
+        try:
+            # Method 1: notify-send (most common on Linux)
+            if subprocess.run(['which', 'notify-send'], capture_output=True).returncode == 0:
+                subprocess.run([
+                    'notify-send', 
+                    '--app-name=PushNotifications',
+                    '--urgency=normal',
+                    '--expire-time=10000',
+                    title, 
+                    message
+                ], check=False)
+                return
+            
+            # Method 2: osascript for macOS
+            if subprocess.run(['which', 'osascript'], capture_output=True).returncode == 0:
+                applescript = f'display notification "{message}" with title "{title}" sound name "default"'
+                subprocess.run(['osascript', '-e', applescript], check=False)
+                return
+            
+            # Method 3: terminal-notifier for macOS (if installed via Homebrew)
+            if subprocess.run(['which', 'terminal-notifier'], capture_output=True).returncode == 0:
+                subprocess.run([
+                    'terminal-notifier',
+                    '-title', title,
+                    '-message', message,
+                    '-appIcon', 'https://example.com/icon.png'
+                ], check=False)
+                return
+            
+            # Method 4: Fallback to zenity dialog (GUI systems)
+            if subprocess.run(['which', 'zenity'], capture_output=True).returncode == 0:
+                subprocess.run([
+                    'zenity', '--info',
+                    '--title=' + title,
+                    '--text=' + message,
+                    '--timeout=10'
+                ], check=False)
+                return
+            
+            # Method 5: kdialog for KDE environments
+            if subprocess.run(['which', 'kdialog'], capture_output=True).returncode == 0:
+                subprocess.run([
+                    'kdialog', '--msgbox', message,
+                    '--title', title
+                ], check=False)
+                return
+                
+        except Exception as e:
+            print(f"Error showing notification via system methods: {e}")
+        
+        # Final fallback: Terminal bell and message
+        print(f"\a🔔 {title}: {message}")
         
     def run(self):
         print(f"Push Client v{{CLIENT_VERSION}} started (Unix mode)")
