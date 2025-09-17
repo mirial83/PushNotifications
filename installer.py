@@ -6865,15 +6865,18 @@ def run_installation(self):
                     print("You can update later using: python installer.py --update")
                     print("Continuing with current version...\n")
         
-        # Check admin privileges
-        if not self.check_admin_privileges():
+        # Check admin privileges (skip on macOS since we install in user directory)
+        if self.system != "Darwin" and not self.check_admin_privileges():
             print("Administrator privileges required for installation.")
             if not self.restart_with_admin():
                 print("✗ Installation failed: Could not obtain administrator privileges")
                 return False
             return True  # Process will restart with admin
         
-        print("✓ Running with administrator privileges")
+        if self.system == "Darwin":
+            print("✓ Running with user privileges (macOS install in user directory)")
+        else:
+            print("✓ Running with administrator privileges")
         
         # Check for existing installation and handle upgrade/repair
         has_existing = self._has_existing_installation()
