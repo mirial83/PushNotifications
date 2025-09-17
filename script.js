@@ -738,25 +738,15 @@ async function handleSendNotification() {
 
 async function acknowledgeNotification(notificationId) {
     try {
-        const response = await fetch(`${config.API_BASE_URL}/api/index`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                action: 'acknowledgeNotification',
-                
-                notificationId: notificationId
-            })
+        const result = await apiCall('acknowledgeNotification', {
+            notificationId: notificationId
         });
         
-        const result = await response.json();
-        
-        if (result.success) {
+        if (result && result.success) {
             showStatus('Notification marked as complete!', 'success');
             refreshNotifications();
         } else {
-            showStatus(`Failed to complete notification: ${result.error}`, 'error');
+            showStatus(`Failed to complete notification: ${result ? result.message : 'Unknown error'}`, 'error');
         }
     } catch (error) {
         console.error('Error acknowledging notification:', error);
@@ -781,26 +771,16 @@ async function snoozeNotification(notificationId) {
             }
             
             try {
-                const response = await fetch(`${config.API_BASE_URL}/api/index`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        action: 'snoozeNotification',
-                        
-                        notificationId: notificationId,
-                        minutes: parseInt(minutes)
-                    })
+                const result = await apiCall('snoozeNotification', {
+                    notificationId: notificationId,
+                    minutes: parseInt(minutes)
                 });
                 
-                const result = await response.json();
-                
-                if (result.success) {
+                if (result && result.success) {
                     showStatus(`Notification snoozed for ${minutes} minutes!`, 'success');
                     refreshNotifications();
                 } else {
-                    showStatus(`Failed to snooze notification: ${result.error}`, 'error');
+                    showStatus(`Failed to snooze notification: ${result ? result.message : 'Unknown error'}`, 'error');
                 }
             } catch (error) {
                 console.error('Error snoozing notification:', error);
