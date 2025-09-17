@@ -2645,7 +2645,7 @@ class NotificationWindow:
             x = max(0, min(x, self.window.winfo_screenwidth() - width))
             y = max(0, min(y, self.window.winfo_screenheight() - height))
             
-            self.window.geometry(f"{width}x{height}+{x}+{y}")
+            self.window.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
             self.window.update()
             
             # Modern design theme colors
