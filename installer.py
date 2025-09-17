@@ -829,11 +829,45 @@ class PushNotificationsInstaller:
         """Check if there's an existing installation to repair"""
         try:
             if self.system == "Windows":
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
-                                  "Software\\PushNotifications", 0, 
-                                  winreg.KEY_READ) as key:
-                    # If we can read the key, we have an existing installation
-                    return True
+                # Check registry key first
+                try:
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
+                                      "Software\\PushNotifications", 0, 
+                                      winreg.KEY_READ) as key:
+                        # Registry key exists, but verify actual installation files
+                        try:
+                            install_path_hash, _ = winreg.QueryValueEx(key, "PathHash")
+                            # We have a path hash, but we need to verify the files actually exist
+                            # Since we don't know the exact path (it's encrypted), check for
+                            # any valid installation in common locations
+                            base_paths = [
+                                Path(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)')) / "SystemResources",
+                                Path(os.environ.get('PROGRAMFILES', 'C:\\Program Files')) / "SystemResources"
+                            ]
+                            
+                            for base_path in base_paths:
+                                if base_path.exists():
+                                    # Look for nested GUID directories with Client.py
+                                    for guid1_dir in base_path.glob('*'):
+                                        if guid1_dir.is_dir():
+                                            for guid2_dir in guid1_dir.glob('*'):
+                                                if guid2_dir.is_dir():
+                                                    client_file = guid2_dir / "Client.py"
+                                                    if client_file.exists():
+                                                        print(f"✓ Found existing installation: {guid2_dir}")
+                                                        return True
+                            
+                            # Registry exists but no installation files found
+                            print("⚠️  Registry entry found but installation files missing - treating as new installation")
+                            return False
+                        except:
+                            # Registry key exists but incomplete - check for any installation
+                            print("⚠️  Incomplete registry data - checking for actual installation files")
+                            return False
+                except (OSError, FileNotFoundError):
+                    # No registry key at all
+                    return False
+                    
             else:
                 # On Unix-like systems, check for common installation directories
                 common_install_paths = [
@@ -849,13 +883,15 @@ class PushNotificationsInstaller:
                     if path.exists():
                         if path.name == "Client.py":
                             # Found client file
+                            print(f"✓ Found existing installation: {path.parent}")
                             return True
                         elif (path / "Client.py").exists():
                             # Found installation directory with client
+                            print(f"✓ Found existing installation: {path}")
                             return True
                         
-        except (OSError, FileNotFoundError):
-            pass
+        except Exception as e:
+            print(f"Warning: Error checking for existing installation: {e}")
         return False
     
     def _load_existing_config(self):
@@ -7286,7 +7322,7 @@ def main():
                 print("\n✅ Already running the latest version.")
                 sys.exit(0)
         
-        success = run_installation(installer)
+        success = installer.run_installation()
         
         if success:
             if USE_GUI_DIALOGS:
