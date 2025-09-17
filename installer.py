@@ -3166,7 +3166,7 @@ if __name__ == "__main__":
         sys.exit(1)
         '''
 
-    def _get_embedded_windows_uninstaller_code(self):
+def _get_embedded_windows_uninstaller_code(self):
         """Get the embedded Windows uninstaller code"""
         # Properly format variables for the embedded code
         api_url = self.api_url
@@ -3347,7 +3347,7 @@ if __name__ == "__main__":
 '''
     
     
-    def _get_embedded_unix_client_code(self):
+def _get_embedded_unix_client_code(self):
         """Get the embedded Unix client code"""
         return f'''#!/usr/bin/env python3
 """
@@ -3470,7 +3470,7 @@ if __name__ == "__main__":
     client.run()
 '''
     
-    def _get_embedded_unix_uninstaller_code(self):
+def _get_embedded_unix_uninstaller_code(self):
         """Get the embedded Unix uninstaller code"""
         return f'''#!/usr/bin/env python3
 """
@@ -3513,7 +3513,7 @@ if __name__ == "__main__":
 '''
     
     
-    def _get_embedded_file_protection_code(self):
+def _get_embedded_file_protection_code(self):
         """Get the embedded file protection service code for Windows"""
         return f'''#!/usr/bin/env python3
 """
@@ -4071,7 +4071,7 @@ if __name__ == "__main__":
         sys.exit(1)
 '''
 
-    def create_encrypted_vault(self):
+def create_encrypted_vault(self):
         """Create AES-256-GCM encrypted configuration vault"""
         print("Creating encrypted configuration vault...")
         
@@ -4200,7 +4200,7 @@ if __name__ == "__main__":
             traceback.print_exc()
             return False
 
-    def create_scheduled_tasks(self):
+def create_scheduled_tasks(self):
         """Create Windows scheduled tasks for client and updater"""
         if self.system != "Windows":
             return True
@@ -4338,7 +4338,7 @@ if __name__ == "__main__":
             print(f"✗ Failed to create scheduled tasks: {e}")
             return False
     
-    def create_startup_entries(self):
+def create_startup_entries(self):
         """Create additional startup entries for maximum reliability"""
         if self.system != "Windows":
             return True
@@ -4393,7 +4393,7 @@ if __name__ == "__main__":
 
     
 
-    def create_desktop_shortcuts(self):
+def create_desktop_shortcuts(self):
         """Create desktop shortcuts for client and installer"""
         print("Creating desktop shortcuts...")
         
@@ -4468,7 +4468,7 @@ Categories=System;
     # Executable conversion is no longer used - all Python scripts
     # Method kept for compatibility but does nothing
     
-    def notify_installation_failure(self, stage, error_message):
+def notify_installation_failure(self, stage, error_message):
         """Notify the server that the installation has failed"""
         print(f"Reporting installation failure at stage: {stage}")
         
@@ -4518,7 +4518,7 @@ Categories=System;
         
         return False
     
-    def cleanup_failed_installation_files(self):
+def cleanup_failed_installation_files(self):
         """Clean up installer files on failed installation"""
         print("Cleaning up installation files...")
         
@@ -4577,7 +4577,7 @@ Categories=System;
             print(f"Warning: Could not fully clean up installation files: {e}")
             return False
     
-    def cleanup_failed_registration(self):
+def cleanup_failed_registration(self):
         """Clean up device registration if installation fails after device was registered"""
         if not self.device_registered:
             print("No device registration to clean up")
@@ -4621,7 +4621,7 @@ Categories=System;
         
         return False
     
-    def finalize_installation(self):
+def finalize_installation(self):
         """Finalize installation and report success to server"""
         print("Finalizing installation...")
         
@@ -4671,7 +4671,7 @@ Categories=System;
             print(f"Warning: Finalization error: {e}")
             return True  # Don't fail installation for this
 
-    def run_installation(self):
+def run_installation(self):
         """Run the complete installation process"""
         print("Starting PushNotifications Installation")
         print("=" * 60)
