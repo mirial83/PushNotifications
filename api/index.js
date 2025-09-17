@@ -1634,6 +1634,394 @@ class DatabaseOperations {
     }
   }
 
+  // Website Request Management Methods
+  async approveWebsiteRequest(requestId, adminUsername) {
+    try {
+      if (this.usesFallback) {
+        // Look for website request in notifications (since they might be stored there)
+        const requestIndex = fallbackStorage.notifications.findIndex(
+          n => (n.id === requestId || n._id === requestId) && n.type === 'website_request' && n.status === 'pending'
+        );
+        
+        if (requestIndex === -1) {
+          return { success: false, message: 'Website request not found or already processed' };
+        }
+        
+        const request = fallbackStorage.notifications[requestIndex];
+        
+        // Update the request status
+        request.status = 'approved';
+        request.approvedBy = adminUsername;
+        request.approvedAt = new Date().toISOString();
+        
+        // Create a website approval notification for the client
+        const approvalNotification = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          message: '__WEBSITE_APPROVED_COMMAND__',
+          clientId: request.clientId,
+          websiteUrl: request.websiteUrl || request.url,
+          status: 'Active',
+          type: 'website_approval',
+          allowBrowserUsage: false,
+          allowedWebsites: '',
+          created: new Date().toISOString()
+        };
+        
+        fallbackStorage.notifications.push(approvalNotification);
+        
+        // Remove the original request from active notifications list
+        fallbackStorage.notifications.splice(requestIndex, 1);
+        
+        return {
+          success: true,
+          message: `Website access approved for ${request.websiteUrl || request.url}`,
+          clientId: request.clientId,
+          websiteUrl: request.websiteUrl || request.url
+        };
+      } else {
+        await this.connect();
+        
+        // Look in both notifications and websiteRequests collections
+        let request;
+        
+        // Try with string ID first, then ObjectId if it's a valid ObjectId
+        const query = { type: 'website_request', status: 'pending' };
+        if (requestId.length === 24) {
+          // Might be an ObjectId
+          query.$or = [{ id: requestId }, { _id: new ObjectId(requestId) }];
+        } else {
+          query.id = requestId;
+        }
+        
+        request = await this.db.collection('notifications').findOne(query);
+        
+        if (!request) {
+          // Try websiteRequests collection as backup
+          const websiteQuery = { status: 'pending' };
+          if (requestId.length === 24) {
+            websiteQuery.$or = [{ id: requestId }, { _id: new ObjectId(requestId) }];
+          } else {
+            websiteQuery.id = requestId;
+          }
+          request = await this.db.collection('websiteRequests').findOne(websiteQuery);
+        }
+        
+        if (!request) {
+          return { success: false, message: 'Website request not found or already processed' };
+        }
+        
+        // Update the request status in the original collection
+        const updateData = {
+          status: 'approved',
+          approvedBy: adminUsername,
+          approvedAt: new Date().toISOString()
+        };
+        
+        if (request.type === 'website_request') {
+          const updateQuery = requestId.length === 24 ? 
+            { $or: [{ id: requestId }, { _id: new ObjectId(requestId) }] } : 
+            { id: requestId };
+          await this.db.collection('notifications').updateOne(updateQuery, { $set: updateData });
+        } else {
+          const updateQuery = requestId.length === 24 ? 
+            { $or: [{ id: requestId }, { _id: new ObjectId(requestId) }] } : 
+            { id: requestId };
+          await this.db.collection('websiteRequests').updateOne(updateQuery, { $set: updateData });
+        }
+        
+        // Create a website approval notification for the client
+        const approvalNotification = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          message: '__WEBSITE_APPROVED_COMMAND__',
+          clientId: request.clientId,
+          websiteUrl: request.websiteUrl || request.url,
+          status: 'Active',
+          type: 'website_approval',
+          allowBrowserUsage: false,
+          allowedWebsites: '',
+          created: new Date().toISOString()
+        };
+        
+        await this.db.collection('notifications').insertOne(approvalNotification);
+        
+        return {
+          success: true,
+          message: `Website access approved for ${request.websiteUrl || request.url}`,
+          clientId: request.clientId,
+          websiteUrl: request.websiteUrl || request.url
+        };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+  
+  async denyWebsiteRequest(requestId, reason, adminUsername) {
+    try {
+      if (this.usesFallback) {
+        // Look for website request in notifications
+        const requestIndex = fallbackStorage.notifications.findIndex(
+          n => (n.id === requestId || n._id === requestId) && n.type === 'website_request' && n.status === 'pending'
+        );
+        
+        if (requestIndex === -1) {
+          return { success: false, message: 'Website request not found or already processed' };
+        }
+        
+        const request = fallbackStorage.notifications[requestIndex];
+        
+        // Update the request status
+        request.status = 'denied';
+        request.deniedBy = adminUsername;
+        request.deniedAt = new Date().toISOString();
+        request.denialReason = reason;
+        
+        // Create a website denial notification for the client
+        const denialNotification = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          message: '__WEBSITE_DENIED_COMMAND__',
+          clientId: request.clientId,
+          websiteUrl: request.websiteUrl || request.url,
+          denialReason: reason,
+          status: 'Active',
+          type: 'website_denial',
+          allowBrowserUsage: false,
+          allowedWebsites: '',
+          created: new Date().toISOString()
+        };
+        
+        fallbackStorage.notifications.push(denialNotification);
+        
+        // Remove the original request from active notifications list
+        fallbackStorage.notifications.splice(requestIndex, 1);
+        
+        return {
+          success: true,
+          message: `Website access denied for ${request.websiteUrl || request.url}`,
+          clientId: request.clientId,
+          websiteUrl: request.websiteUrl || request.url
+        };
+      } else {
+        await this.connect();
+        
+        // Look in both notifications and websiteRequests collections
+        let request;
+        
+        // Try with string ID first, then ObjectId if it's a valid ObjectId
+        const query = { type: 'website_request', status: 'pending' };
+        if (requestId.length === 24) {
+          // Might be an ObjectId
+          query.$or = [{ id: requestId }, { _id: new ObjectId(requestId) }];
+        } else {
+          query.id = requestId;
+        }
+        
+        request = await this.db.collection('notifications').findOne(query);
+        
+        if (!request) {
+          // Try websiteRequests collection as backup
+          const websiteQuery = { status: 'pending' };
+          if (requestId.length === 24) {
+            websiteQuery.$or = [{ id: requestId }, { _id: new ObjectId(requestId) }];
+          } else {
+            websiteQuery.id = requestId;
+          }
+          request = await this.db.collection('websiteRequests').findOne(websiteQuery);
+        }
+        
+        if (!request) {
+          return { success: false, message: 'Website request not found or already processed' };
+        }
+        
+        // Update the request status in the original collection
+        const updateData = {
+          status: 'denied',
+          deniedBy: adminUsername,
+          deniedAt: new Date().toISOString(),
+          denialReason: reason
+        };
+        
+        if (request.type === 'website_request') {
+          const updateQuery = requestId.length === 24 ? 
+            { $or: [{ id: requestId }, { _id: new ObjectId(requestId) }] } : 
+            { id: requestId };
+          await this.db.collection('notifications').updateOne(updateQuery, { $set: updateData });
+        } else {
+          const updateQuery = requestId.length === 24 ? 
+            { $or: [{ id: requestId }, { _id: new ObjectId(requestId) }] } : 
+            { id: requestId };
+          await this.db.collection('websiteRequests').updateOne(updateQuery, { $set: updateData });
+        }
+        
+        // Create a website denial notification for the client
+        const denialNotification = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          message: '__WEBSITE_DENIED_COMMAND__',
+          clientId: request.clientId,
+          websiteUrl: request.websiteUrl || request.url,
+          denialReason: reason,
+          status: 'Active',
+          type: 'website_denial',
+          allowBrowserUsage: false,
+          allowedWebsites: '',
+          created: new Date().toISOString()
+        };
+        
+        await this.db.collection('notifications').insertOne(denialNotification);
+        
+        return {
+          success: true,
+          message: `Website access denied for ${request.websiteUrl || request.url}`,
+          clientId: request.clientId,
+          websiteUrl: request.websiteUrl || request.url
+        };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Notification Management Methods
+  async acknowledgeNotification(notificationId, adminUsername) {
+    try {
+      if (this.usesFallback) {
+        const notificationIndex = fallbackStorage.notifications.findIndex(
+          n => (n.id === notificationId || n._id === notificationId) && n.status !== 'completed'
+        );
+        
+        if (notificationIndex === -1) {
+          return { success: false, message: 'Notification not found or already completed' };
+        }
+        
+        const notification = fallbackStorage.notifications[notificationIndex];
+        
+        // Update the notification status
+        notification.status = 'completed';
+        notification.acknowledgedBy = adminUsername;
+        notification.acknowledgedAt = new Date().toISOString();
+        
+        return {
+          success: true,
+          message: `Notification acknowledged and marked as complete`,
+          clientId: notification.clientId
+        };
+      } else {
+        await this.connect();
+        
+        // Look for notification in notifications collection
+        const query = notificationId.length === 24 ? 
+          { $or: [{ id: notificationId }, { _id: new ObjectId(notificationId) }] } : 
+          { id: notificationId };
+        
+        const notification = await this.db.collection('notifications').findOne({
+          ...query,
+          status: { $ne: 'completed' }
+        });
+        
+        if (!notification) {
+          return { success: false, message: 'Notification not found or already completed' };
+        }
+        
+        // Update the notification status
+        await this.db.collection('notifications').updateOne(
+          query,
+          {
+            $set: {
+              status: 'completed',
+              acknowledgedBy: adminUsername,
+              acknowledgedAt: new Date().toISOString()
+            }
+          }
+        );
+        
+        return {
+          success: true,
+          message: `Notification acknowledged and marked as complete`,
+          clientId: notification.clientId
+        };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async snoozeNotification(notificationId, minutes, adminUsername) {
+    try {
+      if (this.usesFallback) {
+        const notificationIndex = fallbackStorage.notifications.findIndex(
+          n => (n.id === notificationId || n._id === notificationId) && n.status !== 'completed'
+        );
+        
+        if (notificationIndex === -1) {
+          return { success: false, message: 'Notification not found or already completed' };
+        }
+        
+        const notification = fallbackStorage.notifications[notificationIndex];
+        
+        // Calculate snooze until time
+        const snoozeUntil = new Date();
+        snoozeUntil.setMinutes(snoozeUntil.getMinutes() + minutes);
+        
+        // Update the notification status
+        notification.status = 'snoozed';
+        notification.snoozeUntil = snoozeUntil.toISOString();
+        notification.snoozedBy = adminUsername;
+        notification.snoozedAt = new Date().toISOString();
+        notification.snoozeMinutes = minutes;
+        
+        return {
+          success: true,
+          message: `Notification snoozed for ${minutes} minutes`,
+          clientId: notification.clientId,
+          snoozeUntil: snoozeUntil.toISOString()
+        };
+      } else {
+        await this.connect();
+        
+        // Look for notification in notifications collection
+        const query = notificationId.length === 24 ? 
+          { $or: [{ id: notificationId }, { _id: new ObjectId(notificationId) }] } : 
+          { id: notificationId };
+        
+        const notification = await this.db.collection('notifications').findOne({
+          ...query,
+          status: { $ne: 'completed' }
+        });
+        
+        if (!notification) {
+          return { success: false, message: 'Notification not found or already completed' };
+        }
+        
+        // Calculate snooze until time
+        const snoozeUntil = new Date();
+        snoozeUntil.setMinutes(snoozeUntil.getMinutes() + minutes);
+        
+        // Update the notification status
+        await this.db.collection('notifications').updateOne(
+          query,
+          {
+            $set: {
+              status: 'snoozed',
+              snoozeUntil: snoozeUntil.toISOString(),
+              snoozedBy: adminUsername,
+              snoozedAt: new Date().toISOString(),
+              snoozeMinutes: minutes
+            }
+          }
+        );
+        
+        return {
+          success: true,
+          message: `Notification snoozed for ${minutes} minutes`,
+          clientId: notification.clientId,
+          snoozeUntil: snoozeUntil.toISOString()
+        };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   // Security Key Management Methods
   async getSecurityKey(clientId, keyType) {
     try {
@@ -5364,6 +5752,106 @@ module.exports = async function handler(req, res) {
         result = await db.denyUninstallRequest(
           params.requestId || '',
           params.reason || 'Request denied by administrator',
+          validation.user.username || 'Admin'
+        );
+        break;
+      }
+      
+      // Website Request Approval Actions
+      case 'approveWebsiteRequest': {
+        const approveAuthHeader = req.headers.authorization;
+        const approveToken = approveAuthHeader && approveAuthHeader.startsWith('Bearer ')
+          ? approveAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(approveToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.approveWebsiteRequest(
+          params.requestId || '',
+          validation.user.username || 'Admin'
+        );
+        break;
+      }
+      
+      case 'denyWebsiteRequest': {
+        const denyAuthHeader = req.headers.authorization;
+        const denyToken = denyAuthHeader && denyAuthHeader.startsWith('Bearer ')
+          ? denyAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(denyToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.denyWebsiteRequest(
+          params.requestId || '',
+          params.reason || 'Request denied by administrator',
+          validation.user.username || 'Admin'
+        );
+        break;
+      }
+      
+      // Notification Management Actions
+      case 'acknowledgeNotification': {
+        const ackAuthHeader = req.headers.authorization;
+        const ackToken = ackAuthHeader && ackAuthHeader.startsWith('Bearer ')
+          ? ackAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(ackToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.acknowledgeNotification(
+          params.notificationId || '',
+          validation.user.username || 'Admin'
+        );
+        break;
+      }
+      
+      case 'snoozeNotification': {
+        const snoozeAuthHeader = req.headers.authorization;
+        const snoozeToken = snoozeAuthHeader && snoozeAuthHeader.startsWith('Bearer ')
+          ? snoozeAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(snoozeToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.snoozeNotification(
+          params.notificationId || '',
+          parseInt(params.minutes) || 15,
           validation.user.username || 'Admin'
         );
         break;
