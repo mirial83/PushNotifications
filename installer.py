@@ -3066,12 +3066,12 @@ import platform
 if platform.system() == "Darwin":
     # macOS - Use AppleScript
     import subprocess
-    script = \'\'\'display dialog "Push Notifications client Uninstalled Successfully" buttons {{"OK"}} default button 1 with icon note\'\'\'
+    script = '''display dialog "Push Notifications client Uninstalled Successfully" buttons {{"OK"}} default button 1 with icon note'''
     subprocess.run(["osascript", "-e", script])
 elif platform.system() == "Windows":
     # Windows - Use VBScript to avoid PowerShell window
     import tempfile
-    vbs_script = \'\'\'MsgBox "Push Notifications client Uninstalled Successfully", 64, "Uninstall Complete"\'\'\'
+    vbs_script = '''MsgBox "Push Notifications client Uninstalled Successfully", 64, "Uninstall Complete"'''
     with tempfile.NamedTemporaryFile(mode="w", suffix=".vbs", delete=False) as f:
         f.write(vbs_script)
         vbs_path = f.name
