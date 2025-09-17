@@ -1262,11 +1262,31 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         for attempt in range(1, max_attempts + 1):
             if GUI_AVAILABLE:
                 try:
+                    # Set environment variable to suppress tkinter deprecation warning on macOS
+                    os.environ['TK_SILENCE_DEPRECATION'] = '1'
+                    
                     root = tk.Tk()
-                    root.withdraw()
+                    root.title("PushNotifications Installation")
+                    
+                    # Configure root window for better visibility on macOS
+                    root.geometry("400x150")
+                    root.attributes('-topmost', True)
+                    root.lift()
+                    root.focus_force()
+                    
+                    # Center the window on screen
+                    root.update_idletasks()
+                    width = root.winfo_width()
+                    height = root.winfo_height()
+                    x = (root.winfo_screenwidth() // 2) - (width // 2)
+                    y = (root.winfo_screenheight() // 2) - (height // 2)
+                    root.geometry(f"{width}x{height}+{x}+{y}")
+                    
+                    # Show the dialog
                     key = simpledialog.askstring(
-                        "PushNotifications Installation",
+                        "Installation Key Required",
                         f"Enter installation key (attempt {attempt}/{max_attempts}):",
+                        parent=root,
                         show='*'
                     )
                     root.destroy()
@@ -1275,7 +1295,8 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                         print("Installation cancelled by user.")
                         return False
                         
-                except:
+                except Exception as e:
+                    print(f"GUI dialog failed ({e}), falling back to console input")
                     key = input(f"Installation key (attempt {attempt}/{max_attempts}): ").strip()
             else:
                 key = input(f"Installation key (attempt {attempt}/{max_attempts}): ").strip()
