@@ -1591,8 +1591,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         
         print("✓ Uninstaller Python script created")
     
-    
-def _create_installer_copy(self):
+    def _create_installer_copy(self):
         """Create a copy of the installer for repair/maintenance functionality"""
         try:
             # Copy the current installer script to the installation directory
