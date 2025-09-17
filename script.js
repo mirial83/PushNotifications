@@ -4382,3 +4382,56 @@ window.handleDownloadClient = handleDownloadClient;
 window.closeModal = closeModal;
 window.showClientSelectionModal = showClientSelectionModal;
 window.handleUninstallSpecificClientModal = handleUninstallSpecificClientModal;
+
+// Export modal and UI helper functions for global access
+window.showConfirmationModal = showConfirmationModal;
+window.showPasswordModal = showPasswordModal;
+window.showInstallationKeyModal = showInstallationKeyModal;
+window.updateWebsiteCount = updateWebsiteCount;
+window.updateQuickAddButtons = updateQuickAddButtons;
+window.generateRandomPassword = generateRandomPassword;
+
+// Export administration functions for global access
+window.showCreateUserModal = showCreateUserModal;
+window.showResetPasswordModal = showResetPasswordModal;
+window.handleCreateUser = handleCreateUser;
+window.handleResetUserPassword = handleResetUserPassword;
+window.handleRemoveUserAccount = handleRemoveUserAccount;
+window.loadUsersIntoDropdowns = loadUsersIntoDropdowns;
+window.loadVersionHistory = loadVersionHistory;
+window.initializeClientAdministration = initializeClientAdministration;
+window.displayVersionHistory = displayVersionHistory;
+
+// Export utility and helper functions for global access
+window.escapeHtml = escapeHtml;
+window.formatTimestamp = formatTimestamp;
+window.toggleMessageType = toggleMessageType;
+window.toggleBrowserUsageUI = toggleBrowserUsageUI;
+window.saveCustomMessage = saveCustomMessage;
+window.addWebsiteGroup = addWebsiteGroup;
+window.switchSecurityTab = switchSecurityTab;
+window.dismissIncompleteNotification = dismissIncompleteNotification;
+window.updateWorkModeDescription = updateWorkModeDescription;
+window.updateBrowserUsageDescription = updateBrowserUsageDescription;
+window.loadAndUpdateVersion = loadAndUpdateVersion;
+
+// Export data management functions for global access
+window.exportUserData = exportUserData;
+window.exportClientData = exportClientData;
+window.backupDatabase = backupDatabase;
+window.deactivateAllClients = deactivateAllClients;
+window.handleLogout = handleLogout;
+window.handleCleanupOldData = handleCleanupOldData;
+window.exportNotifications = exportNotifications;
+
+// Export additional helper functions for global access
+window.startBackgroundProcesses = startBackgroundProcesses;
+window.stopBackgroundProcesses = stopBackgroundProcesses;
+window.setupAdminPanel = setupAdminPanel;
+window.switchAdminSection = switchAdminSection;
+window.displayUsersTable = displayUsersTable;
+window.displayRegisteredClientsList = displayRegisteredClientsList;
+window.loadRegisteredClients = loadRegisteredClients;
+window.getTimeSinceRemoved = getTimeSinceRemoved;
+window.addQuickMessage = addQuickMessage;
+window.addQuickWebsite = addQuickWebsite;
