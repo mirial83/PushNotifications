@@ -236,6 +236,9 @@ class DatabaseOperations {
 
       await this.connect();
       
+      // Check for and sync any new commits (lightweight sync) to ensure current version is up-to-date
+      await this.syncNewestCommits();
+      
       // Get the current version (highest version number) from database
       const currentVersion = await this.db.collection('versionHistory')
         .findOne({ isCurrent: true });
