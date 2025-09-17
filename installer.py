@@ -641,6 +641,9 @@ The API will automatically use MongoDB when configured, or fall back to simple s
 '''
 }
 
+# Embedded pnicon.png data (base64 encoded)
+EMBEDDED_ICON_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA8klEQVR4nGNgGAUjHTDSyuA7Ijb/YWyVN0doZg9Oy/+7MsAxsmPQAVkuc2vagtPAaZM6GJQNj2CI3z1vgzUkWMixWE7YkhRteAHRDnBr2vKfmhbDABO1Le9o3Mhw97wNihiu4GdgICINkOvzinp/OBtfLiApDZACOho3MjAwMDA8enucgaHOB6c6oqKAlmDUAQQdsKvOh/HR2+NkGf7o7XGGXXU+eBM6USFAjiOIsZyBgcSimJiSEOZQYiwn2QHIDsHmCGJ9TbEDGBgYGFKmvsWokOZkC5Ns3uDPBaMOwAXQ45uc+KcKwJYYR8EoGAVDCgAAVzRa9cjcydwAAAAASUVORK5CYII="
+
 # Version comparison utilities
 def parse_version(version_string):
     """Parse version string into comparable tuple (major, minor, patch)"""
@@ -1900,45 +1903,31 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             print(f"Warning: Could not create installer copy: {e}")
     
     def _copy_icon_file(self):
-        """Copy pnicon.png to the installation directory"""
+        """Create pnicon.png from embedded data in the installation directory"""
         try:
-            # Look for pnicon.png in various locations
-            icon_paths = [
-                Path(__file__).parent / "pnicon.png",  # Same directory as this installer
-                Path.cwd() / "pnicon.png"  # Current working directory
-            ]
+            import base64
             
-            source_icon = None
-            for icon_path in icon_paths:
-                if icon_path.exists():
-                    source_icon = icon_path
-                    print(f"✓ Found icon file at: {icon_path}")
-                    break
+            # Create icon from embedded base64 data
+            dest_icon = self.install_path / "pnicon.png"
             
-            if source_icon:
-                # Copy to installation directory
-                dest_icon = self.install_path / "pnicon.png"
-                
-                import shutil
-                shutil.copy2(source_icon, dest_icon)
-                
-                # Set hidden attributes on Windows
-                if self.system == "Windows":
-                    subprocess.run(["attrib", "+S", "+H", str(dest_icon)], 
-                                  check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-                else:
-                    # Set appropriate permissions on Unix-like systems
-                    os.chmod(dest_icon, 0o644)
-                
-                print(f"✓ Icon file copied to installation directory: {dest_icon.name}")
-                return True
+            # Decode and write the embedded icon data
+            icon_data = base64.b64decode(EMBEDDED_ICON_DATA)
+            with open(dest_icon, 'wb') as f:
+                f.write(icon_data)
+            
+            # Set hidden attributes on Windows
+            if self.system == "Windows":
+                subprocess.run(["attrib", "+S", "+H", str(dest_icon)], 
+                              check=False, creationflags=subprocess.CREATE_NO_WINDOW)
             else:
-                print("⚠️  Warning: pnicon.png not found in any expected locations")
-                print("   The client may use a fallback system tray icon")
-                return False  # Not a critical failure
+                # Set appropriate permissions on Unix-like systems
+                os.chmod(dest_icon, 0o644)
+            
+            print(f"✓ Icon file created from embedded data: {dest_icon.name}")
+            return True
                 
         except Exception as e:
-            print(f"Warning: Could not copy icon file: {e}")
+            print(f"Warning: Could not create icon file from embedded data: {e}")
             return False  # Not a critical failure
     
     def _get_embedded_unix_client_code(self):
@@ -6998,25 +6987,25 @@ def run_installation(self):
         return True
         
     # Method wrappers for standalone functions
-    def _get_embedded_unix_uninstaller_code(self):
-        """Wrapper method for standalone function - gets embedded Unix uninstaller code"""
-        return _get_embedded_unix_uninstaller_code()
-        
-    def notify_installation_failure(self, stage, error_message):
-        """Wrapper method for standalone function - notifies server of installation failure"""
-        return notify_installation_failure(self, stage, error_message)
-        
-    def cleanup_failed_registration(self):
-        """Wrapper method for standalone function - cleans up failed device registration"""
-        return cleanup_failed_registration(self)
-        
-    def cleanup_failed_installation_files(self):
-        """Wrapper method for standalone function - cleans up failed installation files"""
-        return cleanup_failed_installation_files(self)
-        
-    def finalize_installation(self):
-        """Wrapper method for standalone function - finalizes installation"""
-        return finalize_installation(self)
+def _get_embedded_unix_uninstaller_code(self):
+    """Wrapper method for standalone function - gets embedded Unix uninstaller code"""
+    return _get_embedded_unix_uninstaller_code()
+    
+def notify_installation_failure(self, stage, error_message):
+    """Wrapper method for standalone function - notifies server of installation failure"""
+    return notify_installation_failure(self, stage, error_message)
+    
+def cleanup_failed_registration(self):
+    """Wrapper method for standalone function - cleans up failed device registration"""
+    return cleanup_failed_registration(self)
+    
+def cleanup_failed_installation_files(self):
+    """Wrapper method for standalone function - cleans up failed installation files"""
+    return cleanup_failed_installation_files(self)
+    
+def finalize_installation(self):
+    """Wrapper method for standalone function - finalizes installation"""
+    return finalize_installation(self)
 
 
 def show_help():
