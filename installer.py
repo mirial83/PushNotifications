@@ -3763,20 +3763,20 @@ class WindowManager:
         try:
             if self.system == "Darwin":  # macOS
                 # Use AppleScript to minimize windows
-                applescript = '''
-                tell application "System Events"
-                    set visibleApps to name of every application process whose visible is true
-                    repeat with appName in visibleApps
-                        if appName is not "PushNotifications" and appName is not "Finder" then
-                            try
-                                tell application process appName
-                                    set visible to false
-                                end tell
-                            end try
-                        end if
-                    end repeat
-                end tell
-                '''
+                applescript = (
+                    'tell application "System Events"\n'
+                    'set visibleApps to name of every application process whose visible is true\n'
+                    'repeat with appName in visibleApps\n'
+                    'if appName is not "PushNotifications" and appName is not "Finder" then\n'
+                    'try\n'
+                    'tell application process appName\n'
+                    'set visible to false\n'
+                    'end tell\n'
+                    'end try\n'
+                    'end if\n'
+                    'end repeat\n'
+                    'end tell'
+                )
                 subprocess.run(['osascript', '-e', applescript], check=False)
                 
             elif self.system == "Linux":
@@ -6153,9 +6153,8 @@ def create_startup_entries(self):
         else:
             return self._create_unix_startup_entries()
     
-    def _create_windows_startup_entries(self):
+def _create_windows_startup_entries(self):
         """Create Windows-specific startup entries"""
-            
         print("Creating additional startup entries...")
         
         try:
@@ -6204,7 +6203,7 @@ def create_startup_entries(self):
             print(f"Warning: Could not create all startup entries: {e}")
             return False  # Continue installation even if this fails
     
-    def _create_unix_startup_entries(self):
+def _create_unix_startup_entries(self):
         """Create Unix/Linux/macOS startup entries"""
         try:
             if self.system == "Darwin":  # macOS
@@ -6215,7 +6214,7 @@ def create_startup_entries(self):
             print(f"Warning: Could not create Unix startup entries: {e}")
             return False
     
-    def _create_macos_startup_entries(self):
+def _create_macos_startup_entries(self):
         """Create macOS Launch Agent for startup"""
         try:
             # Create Launch Agent plist file
@@ -6264,7 +6263,7 @@ def create_startup_entries(self):
             print(f"Warning: Could not create macOS startup entry: {e}")
             return False
     
-    def _create_linux_startup_entries(self):
+def _create_linux_startup_entries(self):
         """Create Linux autostart entry"""
         try:
             # Create autostart directory
