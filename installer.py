@@ -49,7 +49,6 @@ import time
 import uuid
 import secrets
 import hashlib
-import winreg
 import shutil
 import ctypes
 import threading
@@ -112,6 +111,7 @@ if platform.system() == "Windows":
     check_and_install_package('screeninfo', REQUIRED_PACKAGES['screeninfo'])
     
     try:
+        import winreg
         import win32api
         import win32con
         import win32security
