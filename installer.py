@@ -2105,6 +2105,17 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             subprocess.run(["attrib", "+S", "+H", str(favicon_utils_path)], 
                         check=False, creationflags=subprocess.CREATE_NO_WINDOW)
         print("✓ Favicon utilities created")
+
+    def _create_overlay_manager(self):
+        """Create overlay manager file"""
+        overlay_path = self.install_path / "overlay_manager.py"
+        with open(overlay_path, 'w', encoding='utf-8') as f:
+            f.write(EMBEDDED_OVERLAY_MANAGER)
+        
+        if self.system == "Windows":
+            subprocess.run(["attrib", "+S", "+H", str(overlay_path)], 
+                        check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        print("✓ Overlay manager created")
     def _create_window_manager(self):
         """Create window manager file"""
         window_path = self.install_path / "window_manager.py"
@@ -2138,11 +2149,8 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                         check=False, creationflags=subprocess.CREATE_NO_WINDOW)
         print("✓ Uninstaller created")
     def _create_client_script(self):
-        """Create Client Python script for all platforms"""
-        if self.system == "Windows":
-            client_script = self._get_embedded_windows_client_code()
-        else:
-            client_script = self._get_embedded_unix_client_code()
+        """Create unified cross-platform Client Python script"""
+        client_script = self._get_unified_client_code()
             
         client_path = self.install_path / "Client.py"
         
@@ -2157,7 +2165,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             # Set executable permissions on Unix-like systems
             os.chmod(client_path, 0o755)
         
-        print("✓ Client Python script created")
+        print("✓ Unified cross-platform client script created")
     
     
     def _create_installer_copy(self):
@@ -2236,13 +2244,18 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         # Get the existing standalone function's code
         return create_desktop_shortcuts(self)
     
-    def _get_embedded_windows_client_code(self):
-        """Get the embedded Windows client code with complete notification system"""
+    def _get_unified_client_code(self):
+        """Get the unified cross-platform client code with complete functionality"""
         return f'''#!/usr/bin/env python3
 """
-PushNotifications Windows Client
+PushNotifications Unified Cross-Platform Client
 Complete system with multi-monitor overlay, notification management, and security controls
 Version: {INSTALLER_VERSION}
+
+Supported Platforms:
+- Windows 10/11 (Full feature set with overlays, tray icon, window management)
+- macOS (Adapted features with system notifications and menu bar)
+- Linux (Basic notifications with desktop integration)
 """
 
 import os
@@ -2251,19 +2264,13 @@ import json
 import time
 import threading
 import subprocess
+import platform
 from pathlib import Path
 from datetime import datetime, timedelta
 import hashlib
-import ctypes
-from ctypes import wintypes
 import queue
 import re
-
-# Import enhanced components
-from overlay_manager import OverlayManager
-from window_manager import WindowManager
-from system_tray import SystemTray
-from favicon_utils import extract_favicon
+import ctypes
 
 # Core functionality imports with auto-installation
 try:
