@@ -2022,6 +2022,130 @@ class DatabaseOperations {
     }
   }
 
+  // Custom Message Management Methods
+  async saveCustomMessage(text, description, allowBrowserUsage, allowedWebsites, adminUsername) {
+    try {
+      // Validate required fields
+      if (!text || text.trim().length === 0) {
+        return { success: false, message: 'Message text is required' };
+      }
+
+      if (this.usesFallback) {
+        // For fallback mode, store in memory (won't persist)
+        if (!fallbackStorage.customMessages) {
+          fallbackStorage.customMessages = [];
+        }
+        
+        // Check if message already exists
+        const existingMessage = fallbackStorage.customMessages.find(msg => msg.text.trim() === text.trim());
+        if (existingMessage) {
+          return { success: false, message: 'A message with this text already exists' };
+        }
+        
+        const messageData = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          text: text.trim(),
+          description: description?.trim() || 'Custom message',
+          allowBrowserUsage: Boolean(allowBrowserUsage),
+          allowedWebsites: Array.isArray(allowedWebsites) ? allowedWebsites : [],
+          createdBy: adminUsername,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        fallbackStorage.customMessages.push(messageData);
+        return {
+          success: true,
+          message: 'Custom message saved successfully (in memory)',
+          data: messageData
+        };
+      } else {
+        await this.connect();
+        
+        // Check if a message with the same text already exists
+        const existingMessage = await this.db.collection('customMessages').findOne({ text: text.trim() });
+        if (existingMessage) {
+          return { success: false, message: 'A message with this text already exists' };
+        }
+        
+        // Prepare the message data
+        const messageData = {
+          text: text.trim(),
+          description: description?.trim() || 'Custom message',
+          allowBrowserUsage: Boolean(allowBrowserUsage),
+          allowedWebsites: Array.isArray(allowedWebsites) ? allowedWebsites : [],
+          createdBy: adminUsername,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        
+        // Insert the new custom message
+        const result = await this.db.collection('customMessages').insertOne(messageData);
+        
+        return {
+          success: true,
+          message: 'Custom message saved successfully',
+          data: {
+            _id: result.insertedId.toString(),
+            ...messageData
+          }
+        };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async deleteCustomMessage(messageId, adminUsername) {
+    try {
+      if (!messageId) {
+        return { success: false, message: 'Message ID is required' };
+      }
+
+      if (this.usesFallback) {
+        if (!fallbackStorage.customMessages) {
+          fallbackStorage.customMessages = [];
+        }
+        
+        const messageIndex = fallbackStorage.customMessages.findIndex(
+          msg => msg.id === messageId || msg._id === messageId
+        );
+        
+        if (messageIndex === -1) {
+          return { success: false, message: 'Custom message not found' };
+        }
+        
+        const deletedMessage = fallbackStorage.customMessages.splice(messageIndex, 1)[0];
+        return {
+          success: true,
+          message: 'Custom message deleted successfully (from memory)',
+          deletedMessage: deletedMessage
+        };
+      } else {
+        await this.connect();
+        
+        // Build query for different ID formats
+        const query = messageId.length === 24 ? 
+          { $or: [{ _id: new ObjectId(messageId) }, { id: messageId }] } : 
+          { id: messageId };
+        
+        const result = await this.db.collection('customMessages').deleteOne(query);
+        
+        if (result.deletedCount === 0) {
+          return { success: false, message: 'Custom message not found' };
+        }
+        
+        return {
+          success: true,
+          message: 'Custom message deleted successfully',
+          deletedCount: result.deletedCount
+        };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   // Security Key Management Methods
   async getSecurityKey(clientId, keyType) {
     try {
@@ -5852,6 +5976,59 @@ module.exports = async function handler(req, res) {
         result = await db.snoozeNotification(
           params.notificationId || '',
           parseInt(params.minutes) || 15,
+          validation.user.username || 'Admin'
+        );
+        break;
+      }
+      
+      // Save Custom Message Action
+      case 'saveCustomMessage': {
+        const saveAuthHeader = req.headers.authorization;
+        const saveToken = saveAuthHeader && saveAuthHeader.startsWith('Bearer ')
+          ? saveAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(saveToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.saveCustomMessage(
+          params.text || '',
+          params.description || '',
+          params.allowBrowserUsage || false,
+          params.allowedWebsites || [],
+          validation.user.username || 'Admin'
+        );
+        break;
+      }
+      
+      // Delete Custom Message Action
+      case 'deleteCustomMessage': {
+        const deleteAuthHeader = req.headers.authorization;
+        const deleteToken = deleteAuthHeader && deleteAuthHeader.startsWith('Bearer ')
+          ? deleteAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(deleteToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.deleteCustomMessage(
+          params.messageId || '',
           validation.user.username || 'Admin'
         );
         break;

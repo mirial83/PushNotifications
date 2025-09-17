@@ -1503,6 +1503,7 @@ window.approveWebsiteRequest = approveWebsiteRequest;
 window.denyWebsiteRequest = denyWebsiteRequest;
 window.approveUninstallRequest = approveUninstallRequest;
 window.denyUninstallRequest = denyUninstallRequest;
+window.deleteCustomMessage = deleteCustomMessage;
 window.refreshNotifications = refreshNotifications;
 
 // Helper functions for preset message handling
@@ -1600,18 +1601,15 @@ async function saveCustomMessage() {
             saveButton.textContent = 'Saving...';
         }
         
-        // Send request to save custom message
-        const response = await fetch(`${config.API_BASE_URL}/api/config`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(messageData)
+        // Send request to save custom message with authentication
+        const result = await apiCall('saveCustomMessage', {
+            text: messageText,
+            description: description,
+            allowBrowserUsage: allowBrowserUsage,
+            allowedWebsites: allowedWebsites
         });
         
-        const result = await response.json();
-        
-        if (result.success) {
+        if (result && result.success) {
             showStatus('Custom message saved successfully!', 'success');
             
             // Clear the save message name input
@@ -1623,7 +1621,7 @@ async function saveCustomMessage() {
             // Reload the preset messages to include the new custom message
             await loadPresetMessages();
         } else {
-            showStatus(`Failed to save custom message: ${result.message}`, 'error');
+            showStatus(`Failed to save custom message: ${result ? result.message : 'Unknown error'}`, 'error');
         }
     } catch (error) {
         console.error('Error saving custom message:', error);
@@ -1635,6 +1633,33 @@ async function saveCustomMessage() {
             saveButton.disabled = false;
             saveButton.textContent = 'Save Preset';
         }
+    }
+}
+
+// Delete Custom Message functionality
+async function deleteCustomMessage(messageId, messageName) {
+    if (!confirm(`Are you sure you want to delete the custom message "${messageName}"? This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        showStatus('Deleting custom message...', 'info');
+        
+        const result = await apiCall('deleteCustomMessage', {
+            messageId: messageId
+        });
+        
+        if (result && result.success) {
+            showStatus('Custom message deleted successfully!', 'success');
+            
+            // Reload the preset messages to remove the deleted message
+            await loadPresetMessages();
+        } else {
+            showStatus(`Failed to delete custom message: ${result ? result.message : 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting custom message:', error);
+        showStatus('Failed to delete custom message.', 'error');
     }
 }
 

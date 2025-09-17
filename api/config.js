@@ -1,6 +1,11 @@
 // Config endpoint for PushNotifications
 const { MongoClient } = require('mongodb');
 
+// Fallback storage for when database is unavailable
+const fallbackStorage = {
+  customMessages: []
+};
+
 // Database connection setup
 let client;
 let db;
@@ -446,7 +451,7 @@ module.exports = async function handler(req, res) {
       }
     ];
     
-    // Load custom messages from database
+    // Load custom messages from database or fallback storage
     let customMessages = [];
     try {
       const database = await connectToDatabase();
@@ -458,8 +463,13 @@ module.exports = async function handler(req, res) {
         _id: msg._id.toString() // Convert ObjectId to string
       }));
     } catch (error) {
-      console.error('Error loading custom messages:', error);
-      // Continue with built-in messages only if database fails
+      console.error('Error loading custom messages from database:', error);
+      // Use fallback storage if database fails
+      customMessages = fallbackStorage.customMessages.map(msg => ({
+        ...msg,
+        isBuiltIn: false,
+        _id: msg.id || msg._id // Use id for fallback messages
+      }));
     }
     
     // Combine built-in and custom messages
