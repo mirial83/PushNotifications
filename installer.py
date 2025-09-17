@@ -2649,7 +2649,7 @@ class NotificationWindow:
             self.window.update()
             
             # Modern design theme colors
-            colors = {
+            colors = {{
                 'bg': "#ffffff",
                 'header': "#1a73e8",  # Google Blue
                 'text': "#202124",    # Dark Gray
@@ -2658,7 +2658,7 @@ class NotificationWindow:
                 'button_secondary': "#5f6368",
                 'button_warning': "#f29900",
                 'shadow': "#0000001a"  # 10% black shadow
-            }
+            }}
             
             # Set base window style
             self.window.configure(bg=colors['bg'])
