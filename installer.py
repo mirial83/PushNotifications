@@ -2546,10 +2546,13 @@ class NotificationWindow:
             self.window = tk.Toplevel()
             self.window.title("Push Notification")
             
-            # Configure window properties
-            self.window.attributes('-topmost', True)
+            # Configure window properties for maximum visibility
+            self.window.attributes('-topmost', True)  # Always on top
+            self.window.attributes('-alpha', 1.0)  # Fully opaque
             self.window.resizable(False, False)
             self.window.protocol("WM_DELETE_WINDOW", self.on_close)
+            self.window.focus_force()  # Force focus
+            self.window.lift()  # Bring to front
             
             if platform.system() == "Windows":
                 try:
@@ -2568,13 +2571,13 @@ class NotificationWindow:
                     # Get current style
                     style = win32gui.GetWindowLong(hwnd, GWL_EXSTYLE)
                     
-                    # Add app window style and remove tool window style
+                    # Ensure notification window is visible in taskbar and on top
                     style = (style | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW
                     
                     # Apply new style
                     win32gui.SetWindowLong(hwnd, GWL_EXSTYLE, style)
                     
-                    # Update window frame
+                    # Update window frame and ensure visibility
                     win32gui.SetWindowPos(
                         hwnd, win32con.HWND_TOPMOST,
                         0, 0, 0, 0,
@@ -2582,42 +2585,17 @@ class NotificationWindow:
                         win32con.SWP_FRAMECHANGED | win32con.SWP_SHOWWINDOW
                     )
                     
-                    # Force active state
+                    # Force window to be active and visible
+                    win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
                     win32gui.SetActiveWindow(hwnd)
                     win32gui.SetForegroundWindow(hwnd)
+                    
+                    # Flash window to get attention
+                    win32gui.FlashWindow(hwnd, True)
                     
                 except Exception as e:
                     print(f"Warning: Could not set window styles: {e}")
             
-            # Set proper taskbar state and window styles
-            if platform.system() == "Windows":
-                try:
-                    import win32gui
-                    import win32con
-                    
-                    # Get window handle
-                    hwnd = self.window.winfo_id()
-                    
-                    # Set window styles for proper layering
-                    GWL_EXSTYLE = -20
-                    WS_EX_APPWINDOW = 0x00040000
-                    WS_EX_NOACTIVATE = 0x08000000
-                    
-                    style = win32gui.GetWindowLong(hwnd, GWL_EXSTYLE)
-                    style |= WS_EX_APPWINDOW | WS_EX_NOACTIVATE
-                    win32gui.SetWindowLong(hwnd, GWL_EXSTYLE, style)
-                    
-                    # Ensure proper taskbar behavior
-                    win32gui.SetWindowPos(
-                        hwnd, win32con.HWND_TOPMOST,
-                        0, 0, 0, 0,
-                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_FRAMECHANGED
-                    )
-                    
-                    # Force window activation
-                    win32gui.SetForegroundWindow(hwnd)
-                except Exception as e:
-                    print(f"Warning: Could not set window styles: {e}")
             
             # Force window redraw and ensure proper DPI scaling
             self.window.update_idletasks()
@@ -2931,19 +2909,45 @@ class PushNotificationsClient:
         # Set proper process title for Task Manager
         self._set_process_title()
         
-        # Initialize Tkinter root
+        # Initialize Tkinter root - completely hidden
         self.root = tk.Tk()
-        self.root.withdraw()  # Hide main window
+        self.root.withdraw()  # Hide main window immediately
         self.root.title("Push Notifications")
+        
+        # Make the root window completely invisible
+        self.root.attributes('-alpha', 0.0)  # Fully transparent
+        self.root.geometry('1x1+0+0')  # Minimal size
+        self.root.overrideredirect(True)  # Remove window decorations
+        
+        # Hide from taskbar on Windows
+        if platform.system() == "Windows":
+            try:
+                import win32gui
+                import win32con
+                hwnd = self.root.winfo_id()
+                # Set window styles to hide from taskbar
+                win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, 
+                                     win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) | win32con.WS_EX_TOOLWINDOW)
+            except Exception as e:
+                print(f"Warning: Could not hide from taskbar: {e}")
     
     def _set_process_title(self):
-        """Set proper process title for Task Manager"""
+        """Set proper process title for Task Manager and hide console"""
         try:
             import ctypes
             # Set console window title to show "Push Notifications" in Task Manager
             ctypes.windll.kernel32.SetConsoleTitleW("Push Notifications")
+            
+            # Hide console window on Windows
+            if platform.system() == "Windows":
+                # Get console window handle
+                console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+                if console_hwnd != 0:
+                    # Hide the console window (SW_HIDE = 0)
+                    ctypes.windll.user32.ShowWindow(console_hwnd, 0)
+                    
         except Exception as e:
-            print(f"Warning: Could not set process title: {e}")
+            print(f"Warning: Could not set process title or hide console: {e}")
         
     def create_tray_icon(self):
         """Create system tray icon with enhanced quick actions menu"""
@@ -3666,10 +3670,20 @@ Features:
 
 if __name__ == "__main__":
     try:
+        # Ensure completely silent startup on Windows
+        if platform.system() == "Windows":
+            import ctypes
+            # Hide console window immediately on startup
+            console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if console_hwnd != 0:
+                ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
+        
         client = PushNotificationsClient()
         client.run()
     except Exception as e:
-        print(f"Fatal error: {e}")
+        # Only show error if we can't hide console
+        if platform.system() != "Windows":
+            print(f"Fatal error: {e}")
         sys.exit(1)
 
         # File/directory monitoring patterns
@@ -4830,30 +4844,52 @@ def main():
                     script_path = os.path.abspath(sys.argv[0])
                     script_args = ' '.join([f'"{arg}"' for arg in sys.argv])
                     
-                    # Try PowerShell first (most reliable on Windows 10/11)
+                    # Try Command Prompt method first
                     try:
-                        # Build argument list properly for PowerShell
-                        if len(sys.argv) > 1:
-                            args_list = f"'{script_path}', " + ", ".join([f"'{arg}'" for arg in sys.argv[1:]])
-                        else:
-                            args_list = f"'{script_path}'"
+                        # Create a batch file to request elevation
+                        import tempfile
                         
-                        powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList {args_list} -Verb RunAs -Wait'
+                        batch_content = f'''@echo off
+echo Requesting administrator privileges...
+"{sys.executable}" "{script_path}" %*
+pause
+'''
                         
-                        print(f"Executing: {powershell_cmd}")
-                        result = subprocess.run([
-                            'powershell.exe', '-Command', powershell_cmd
-                        ], timeout=60)
+                        with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as f:
+                            f.write(batch_content)
+                            temp_batch = f.name
                         
-                        if result.returncode == 0:
-                            print("✓ Elevated process completed")
+                        # Use ShellExecute to run the batch file with elevation
+                        shell32 = ctypes.windll.shell32
+                        result = shell32.ShellExecuteW(
+                            None, "runas", temp_batch, None, None, 1
+                        )
+                        
+                        result_int = ctypes.cast(result, ctypes.c_void_p).value or 0
+                        if result_int > 32:
+                            print("✓ Administrator privileges requested via Command Prompt")
+                            # Clean up temp file after a delay
+                            import threading
+                            def cleanup():
+                                import time
+                                time.sleep(5)
+                                try:
+                                    os.unlink(temp_batch)
+                                except:
+                                    pass
+                            threading.Thread(target=cleanup, daemon=True).start()
                             sys.exit(0)
                         else:
-                            print(f"PowerShell elevation returned code: {result.returncode}")
+                            print(f"Command Prompt elevation failed with error code: {result_int}")
+                            # Clean up temp file
+                            try:
+                                os.unlink(temp_batch)
+                            except:
+                                pass
                     except Exception as e:
-                        print(f"PowerShell elevation failed: {e}")
+                        print(f"Command Prompt elevation failed: {e}")
                     
-                    # Fallback to ctypes ShellExecuteW
+                    # Fallback to direct ctypes ShellExecuteW
                     try:
                         shell32 = ctypes.windll.shell32
                         shell32.ShellExecuteW.argtypes = [
