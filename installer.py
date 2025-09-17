@@ -1342,13 +1342,21 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 # Use console input for macOS, Linux, and fallback cases
                 print(f"\n📝 Please enter your installation key:")
                 print(f"   (Attempt {attempt} of {max_attempts})")
-                print(f"   💡 Tip: You can paste your key using Cmd+V (macOS) or Ctrl+V (Linux)")
-                print(f"   🔒 Note: Key will be visible while typing for paste support")
+                print(f"   💡 Tip: Right-click and paste, or use Cmd+V (macOS) / Ctrl+V (Linux)")
+                print(f"   🔓 Note: Key will be visible for easy pasting and verification")
+                print(f"   ⏎ Press Enter when done")
+                print()
                 try:
-                    key = input("Installation Key: ").strip()
-                    # Clear the line after input for security
-                    print("\033[A\033[2K", end="", flush=True)  # Move cursor up and clear line
-                    print("Installation Key: [ENTERED]")  # Show confirmation without revealing key
+                    sys.stdout.write("Installation Key: ")
+                    sys.stdout.flush()
+                    key = sys.stdin.readline().strip()
+                    
+                    if key:
+                        # Clear the line after input for cleaner output
+                        print("\033[A\033[2K", end="", flush=True)  # Move cursor up and clear line
+                        print("Installation Key: [ENTERED - " + str(len(key)) + " characters]")  # Show confirmation
+                    else:
+                        print("No key entered")
                 except (EOFError, KeyboardInterrupt):
                     print("\nInstallation cancelled by user.")
                     return False
