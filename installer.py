@@ -1592,11 +1592,11 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         print("✓ Uninstaller Python script created")
     
     
-    def _create_installer_copy(self):
+def _create_installer_copy(self):
         """Create a copy of the installer for repair/maintenance functionality"""
         try:
             # Copy the current installer script to the installation directory
-            current_installer = Path(__file__)
+            current_installer = Path(__file__).resolve()
             installer_copy_path = self.install_path / "Installer.py"
             
             # Read current installer content
@@ -1771,11 +1771,39 @@ class OverlayManager:
             overlay.withdraw()  # Hide initially
             
             # Configure overlay properties
-            overlay.overrideredirect(True)
+            overlay.overrideredirect(True)  # No window decorations
             overlay.attributes('-alpha', 0.25)  # 25% opacity
-            overlay.attributes('-topmost', True)
+            overlay.attributes('-topmost', True)  # Keep above other windows
             overlay.attributes('-disabled', True)  # Click-through
             overlay.configure(bg='gray')
+            
+            # Set proper window styles for layering
+            if platform.system() == "Windows":
+                try:
+                    import win32gui
+                    import win32con
+                    
+                    # Get window handle
+                    hwnd = overlay.winfo_id()
+                    
+                    # Set extended window styles
+                    GWL_EXSTYLE = -20
+                    WS_EX_LAYERED = 0x00080000
+                    WS_EX_TRANSPARENT = 0x00000020
+                    WS_EX_NOACTIVATE = 0x08000000
+                    
+                    style = win32gui.GetWindowLong(hwnd, GWL_EXSTYLE)
+                    style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
+                    win32gui.SetWindowLong(hwnd, GWL_EXSTYLE, style)
+                    
+                    # Set proper window z-order
+                    win32gui.SetWindowPos(
+                        hwnd, win32con.HWND_TOPMOST,
+                        0, 0, 0, 0,
+                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE
+                    )
+                except Exception as e:
+                    print(f"Warning: Could not set overlay window styles: {e}")
             
             # Position on monitor
             x, y = monitor.x, monitor.y
@@ -1897,6 +1925,22 @@ class WindowManager:
         except Exception as e:
             print(f"Error blocking processes: {{e}}")
 
+def enable_dpi_awareness():
+    """Enable DPI awareness for proper scaling on high-DPI displays"""
+    if platform.system() == "Windows":
+        try:
+            # Try Windows 8.1+ API first
+            try:
+                import ctypes
+                ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
+            except (AttributeError, OSError):
+                # Fallback to Windows 8 API
+                ctypes.windll.user32.SetProcessDPIAware()
+            return True
+        except Exception as e:
+            print(f"Warning: Could not enable DPI awareness: {e}")
+    return False
+
 class NotificationWindow:
     """Individual notification window with website-style formatting"""
     
@@ -1910,6 +1954,14 @@ class NotificationWindow:
     def create_window(self):
         """Create notification window with website-style formatting"""
         try:
+            # Enable DPI awareness for this window
+            if platform.system() == "Windows":
+                try:
+                    import ctypes
+                    ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+                except Exception as e:
+                    print(f"Warning: Could not set DPI awareness: {e}")
+
             self.window = tk.Toplevel()
             self.window.title("Push Notification")
             
@@ -1918,39 +1970,188 @@ class NotificationWindow:
             self.window.resizable(False, False)
             self.window.protocol("WM_DELETE_WINDOW", self.on_close)
             
+            if platform.system() == "Windows":
+                try:
+                    import win32gui
+                    import win32con
+                    import win32api
+                    
+                    # Get window handle
+                    hwnd = self.window.winfo_id()
+                    
+                    # Set extended window styles
+                    GWL_EXSTYLE = -20
+                    WS_EX_APPWINDOW = 0x00040000
+                    WS_EX_TOOLWINDOW = 0x00000080
+                    
+                    # Get current style
+                    style = win32gui.GetWindowLong(hwnd, GWL_EXSTYLE)
+                    
+                    # Add app window style and remove tool window style
+                    style = (style | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW
+                    
+                    # Apply new style
+                    win32gui.SetWindowLong(hwnd, GWL_EXSTYLE, style)
+                    
+                    # Update window frame
+                    win32gui.SetWindowPos(
+                        hwnd, win32con.HWND_TOPMOST,
+                        0, 0, 0, 0,
+                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | 
+                        win32con.SWP_FRAMECHANGED | win32con.SWP_SHOWWINDOW
+                    )
+                    
+                    # Force active state
+                    win32gui.SetActiveWindow(hwnd)
+                    win32gui.SetForegroundWindow(hwnd)
+                    
+                except Exception as e:
+                    print(f"Warning: Could not set window styles: {e}")
+            
+            # Set proper taskbar state and window styles
+            if platform.system() == "Windows":
+                try:
+                    import win32gui
+                    import win32con
+                    
+                    # Get window handle
+                    hwnd = self.window.winfo_id()
+                    
+                    # Set window styles for proper layering
+                    GWL_EXSTYLE = -20
+                    WS_EX_APPWINDOW = 0x00040000
+                    WS_EX_NOACTIVATE = 0x08000000
+                    
+                    style = win32gui.GetWindowLong(hwnd, GWL_EXSTYLE)
+                    style |= WS_EX_APPWINDOW | WS_EX_NOACTIVATE
+                    win32gui.SetWindowLong(hwnd, GWL_EXSTYLE, style)
+                    
+                    # Ensure proper taskbar behavior
+                    win32gui.SetWindowPos(
+                        hwnd, win32con.HWND_TOPMOST,
+                        0, 0, 0, 0,
+                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_FRAMECHANGED
+                    )
+                    
+                    # Force window activation
+                    win32gui.SetForegroundWindow(hwnd)
+                except Exception as e:
+                    print(f"Warning: Could not set window styles: {e}")
+            
+            # Force window redraw and ensure proper DPI scaling
+            self.window.update_idletasks()
+            
+            # Set initial size before positioning
+            self.window.geometry("400x300")
+            self.window.update()
+            
             # Center on screen
             width, height = 400, 300
-            x = (self.window.winfo_screenwidth() // 2) - (width // 2)
-            y = (self.window.winfo_screenheight() // 2) - (height // 2)
-            self.window.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
+            # Get the screen the mouse is on
+            mouse_x = self.window.winfo_pointerx()
+            mouse_y = self.window.winfo_pointery()
             
-            # Website-style colors and fonts
-            bg_color = "#f8f9fa"
-            header_color = "#007bff"
-            button_color = "#28a745"
+            try:
+                import screeninfo
+                current_screen = None
+                for monitor in screeninfo.get_monitors():
+                    if (monitor.x <= mouse_x <= monitor.x + monitor.width and
+                        monitor.y <= mouse_y <= monitor.y + monitor.height):
+                        current_screen = monitor
+                        break
+                
+                if current_screen:
+                    # Center on current screen
+                    x = current_screen.x + (current_screen.width - width) // 2
+                    y = current_screen.y + (current_screen.height - height) // 2
+                else:
+                    # Fallback to primary screen centering
+                    x = (self.window.winfo_screenwidth() // 2) - (width // 2)
+                    y = (self.window.winfo_screenheight() // 2) - (height // 2)
+            except Exception:
+                # Fallback to primary screen centering
+                x = (self.window.winfo_screenwidth() // 2) - (width // 2)
+                y = (self.window.winfo_screenheight() // 2) - (height // 2)
             
-            self.window.configure(bg=bg_color)
+            # Ensure coordinates are within screen bounds
+            x = max(0, min(x, self.window.winfo_screenwidth() - width))
+            y = max(0, min(y, self.window.winfo_screenheight() - height))
             
-            # Header
-            header_frame = tk.Frame(self.window, bg=header_color, height=50)
+            self.window.geometry(f"{width}x{height}+{x}+{y}")
+            self.window.update()
+            
+            # Modern design theme colors
+            colors = {
+                'bg': "#ffffff",
+                'header': "#1a73e8",  # Google Blue
+                'text': "#202124",    # Dark Gray
+                'border': "#dadce0",  # Light Gray
+                'button_primary': "#1a73e8",
+                'button_secondary': "#5f6368",
+                'button_warning': "#f29900",
+                'shadow': "#0000001a"  # 10% black shadow
+            }
+            
+            # Set base window style
+            self.window.configure(bg=colors['bg'])
+            
+            # Add shadow effect frame
+            shadow_size = 2
+            shadow_frame = tk.Frame(self.window, bg=colors['shadow'])
+            shadow_frame.place(x=shadow_size, y=shadow_size, 
+                             relwidth=1, relheight=1)
+            
+            # Main content frame with border
+            main_frame = tk.Frame(self.window, bg=colors['bg'], 
+                                bd=1, relief='solid')
+            main_frame.place(x=0, y=0, relwidth=1, relheight=1)
+            
+            # Header with gradient effect
+            header_height = 50
+            header_frame = tk.Frame(main_frame, bg=colors['header'], 
+                                  height=header_height)
             header_frame.pack(fill=tk.X)
             header_frame.pack_propagate(False)
             
-            title_label = tk.Label(header_frame, text="Push Notification", 
-                                 bg=header_color, fg="white", 
-                                 font=("Arial", 14, "bold"))
-            title_label.pack(expand=True)
+            # Header icon (if available) and text
+            header_content = tk.Frame(header_frame, bg=colors['header'])
+            header_content.pack(expand=True)
             
-            # Message content
-            content_frame = tk.Frame(self.window, bg=bg_color)
-            content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            try:
+                from PIL import Image, ImageTk
+                icon_path = Path(__file__).parent / "pnicon.png"
+                if icon_path.exists():
+                    icon = Image.open(icon_path)
+                    icon = icon.resize((24, 24), Image.Resampling.LANCZOS)
+                    icon = ImageTk.PhotoImage(icon)
+                    icon_label = tk.Label(header_content, image=icon, 
+                                        bg=colors['header'])
+                    icon_label.image = icon  # Keep reference
+                    icon_label.pack(side=tk.LEFT, padx=(10, 5))
+            except Exception:
+                pass  # Skip icon if not available
             
-            # Message text
+            title_label = tk.Label(header_content, text="Push Notification", 
+                                 bg=colors['header'], fg="white", 
+                                 font=("Segoe UI", 14, "bold"))
+            title_label.pack(side=tk.LEFT, padx=10)
+            
+            # Content area with padding and shadow
+            content_frame = tk.Frame(main_frame, bg=colors['bg'])
+            content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=15)
+            
+            # Message text with improved typography
             message_text = self.data.get('message', '')
-            message_label = tk.Label(content_frame, text=message_text, 
-                                   bg=bg_color, wraplength=360, justify=tk.LEFT,
-                                   font=("Arial", 10))
-            message_label.pack(pady=(0, 10))
+            message_text = self._strip_html_and_decode(message_text)
+            
+            # Create text widget for better text rendering
+            message_widget = tk.Text(content_frame, wrap=tk.WORD, 
+                                   font=("Segoe UI", 11),
+                                   bg=colors['bg'], fg=colors['text'],
+                                   relief='flat', height=4)
+            message_widget.insert('1.0', message_text)
+            message_widget.configure(state='disabled')  # Make read-only
+            message_widget.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
             
             # Allowed websites (if any)
             allowed_websites = self.data.get('allowedWebsites', [])
@@ -1961,48 +2162,90 @@ class NotificationWindow:
                                         font=("Arial", 9), fg="#666")
                 websites_label.pack(pady=(0, 10))
             
-            # Website request section (if allowed)
+            # Website request section with modern styling
             if self.data.get('allowWebsiteRequests', False):
-                request_frame = tk.LabelFrame(content_frame, text="Request Website Access", 
-                                            bg=bg_color, font=("Arial", 9))
-                request_frame.pack(fill=tk.X, pady=(0, 10))
+                request_frame = tk.Frame(content_frame, bg=colors['bg'])
+                request_frame.pack(fill=tk.X, pady=(10, 15))
+                
+                request_label = tk.Label(request_frame, 
+                                        text="Request Website Access",
+                                        font=("Segoe UI", 10, "bold"),
+                                        bg=colors['bg'],
+                                        fg=colors['text'])
+                request_label.pack(anchor=tk.W)
+                
+                entry_frame = tk.Frame(request_frame, bg=colors['bg'],
+                                     highlightthickness=1,
+                                     highlightbackground=colors['border'])
+                entry_frame.pack(fill=tk.X, pady=(5, 10))
                 
                 self.website_request_var = tk.StringVar()
-                request_entry = tk.Entry(request_frame, textvariable=self.website_request_var,
-                                       width=40)
-                request_entry.pack(padx=5, pady=5)
+                request_entry = tk.Entry(entry_frame,
+                                       textvariable=self.website_request_var,
+                                       font=("Segoe UI", 10),
+                                       bd=0, relief='flat')
+                request_entry.pack(fill=tk.X, padx=10, pady=8)
                 
-                request_button = tk.Button(request_frame, text="Request Access", 
-                                         command=self.request_website_access,
-                                         bg=button_color, fg="white", font=("Arial", 9))
-                request_button.pack(pady=(0, 5))
+                request_button = create_button(request_frame,
+                                             "Request Access",
+                                             self.request_website_access,
+                                             colors['button_primary'],
+                                             True)
+                request_button.pack(anchor=tk.E)
             
-            # Action buttons
-            button_frame = tk.Frame(self.window, bg=bg_color)
-            button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+            # Button container with modern styling
+            button_frame = tk.Frame(main_frame, bg=colors['bg'])
+            button_frame.pack(fill=tk.X, padx=20, pady=(0, 15))
             
-            # Snooze buttons
-            snooze_frame = tk.Frame(button_frame, bg=bg_color)
-            snooze_frame.pack(fill=tk.X, pady=(0, 5))
+            def create_button(parent, text, command, color, is_primary=False):
+                """Create a modern styled button"""
+                btn = tk.Button(parent, text=text, command=command,
+                              font=("Segoe UI", 10),
+                              fg="white" if is_primary else colors['text'],
+                              bg=color if is_primary else colors['bg'],
+                              activebackground=color if is_primary else colors['border'],
+                              activeforeground="white" if is_primary else colors['text'],
+                              relief='flat', bd=1,
+                              padx=15, pady=5)
+                if not is_primary:
+                    btn.configure(bd=1, highlightthickness=1,
+                                highlightbackground=colors['border'])
+                return btn
             
-            for minutes in [5, 15, 30]:
-                snooze_btn = tk.Button(snooze_frame, text=f"Snooze {{minutes}}min", 
-                                     command=lambda m=minutes: self.snooze_notification(m),
-                                     bg="#ffc107", font=("Arial", 9))
-                snooze_btn.pack(side=tk.LEFT, padx=2)
+            # Snooze options in dropdown
+            snooze_var = tk.StringVar(value="Snooze")
+            snooze_options = [("5 minutes", 5), ("15 minutes", 15), ("30 minutes", 30)]
             
-            # Complete button
-            complete_btn = tk.Button(button_frame, text="Mark Complete", 
-                                   command=self.complete_notification,
-                                   bg="#28a745", fg="white", font=("Arial", 10, "bold"))
-            complete_btn.pack(side=tk.RIGHT)
+            snooze_menu = tk.Menu(button_frame, tearoff=0)
+            for label, mins in snooze_options:
+                snooze_menu.add_command(
+                    label=label,
+                    command=lambda m=mins: self.snooze_notification(m)
+                )
             
-            # Minimize button (if website requests allowed)
+            snooze_btn = create_button(button_frame, "Snooze ▾", 
+                                     lambda e: snooze_menu.post(
+                                         snooze_btn.winfo_rootx(),
+                                         snooze_btn.winfo_rooty() + snooze_btn.winfo_height()
+                                     ),
+                                     colors['button_warning'])
+            snooze_btn.pack(side=tk.LEFT)
+            
+            # Complete and minimize buttons
+            button_container = tk.Frame(button_frame, bg=colors['bg'])
+            button_container.pack(side=tk.RIGHT)
+            
+            complete_btn = create_button(button_container, "Mark Complete",
+                                       self.complete_notification,
+                                       colors['button_primary'], True)
+            complete_btn.pack(side=tk.RIGHT, padx=(5, 0))
+            
+            # Minimize button with improved visibility
             if self.data.get('allowWebsiteRequests', False):
-                minimize_btn = tk.Button(button_frame, text="Minimize", 
-                                       command=self.minimize_notification,
-                                       bg="#6c757d", fg="white", font=("Arial", 9))
-                minimize_btn.pack(side=tk.LEFT)
+                minimize_btn = create_button(button_container, "Minimize",
+                                           self.minimize_notification,
+                                           colors['button_secondary'])
+                minimize_btn.pack(side=tk.RIGHT, padx=5)
             
         except Exception as e:
             print(f"Error creating notification window: {{e}}")
@@ -2058,11 +2301,39 @@ class NotificationWindow:
         """Handle window close event"""
         # Prevent closing - must use buttons
         pass
+    
+    def _strip_html_and_decode(self, text):
+        """Strip HTML tags and decode HTML entities from notification text"""
+        import re
+        import html
+        
+        if not text:
+            return text
+        
+        try:
+            # First decode HTML entities
+            text = html.unescape(text)
+            
+            # Remove HTML tags using regex
+            # This regex matches opening and closing tags, including self-closing tags
+            clean_text = re.sub(r'<[^>]+>', '', text)
+            
+            # Clean up extra whitespace that might be left
+            clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+            
+            return clean_text
+        except Exception as e:
+            print(f"Error stripping HTML: {{e}}")
+            # Return original text if processing fails
+            return text
 
 class PushNotificationsClient:
     """Main client application with complete functionality"""
     
     def __init__(self):
+        # Enable DPI awareness
+        enable_dpi_awareness()
+        
         self.running = True
         self.tray_icon = None
         self.notifications = []
@@ -2201,11 +2472,15 @@ class PushNotificationsClient:
         except Exception as e:
             print(f"Error showing status: {{e}}")
     
-    def show_all_notifications(self, icon=None, item=None):
+def show_all_notifications(self, icon=None, item=None):
         """Show all notification windows"""
+        # First, restore any minimized windows
         for window in self.notification_windows:
             if window.minimized:
                 window.restore_notification()
+        
+        # Then re-layer all windows
+        self.layer_notification_windows()
     
     def tray_mark_complete(self, icon=None, item=None):
         """Mark the first active notification as complete from tray"""
@@ -2506,18 +2781,55 @@ Features:
         except Exception as e:
             print(f"Error creating notification window: {{e}}")
     
-    def layer_notification_windows(self):
-        """Layer notification windows with oldest on top"""
+def layer_notification_windows(self):
+        """Layer notification windows with newest on top"""
         try:
-            # Sort by creation time (oldest first)
-            self.notification_windows.sort(key=lambda w: w.data.get('created', 0))
+            if not self.notification_windows:
+                return
+
+            # Sort by creation time (newest first)
+            self.notification_windows.sort(key=lambda w: w.data.get('created', 0), reverse=True)
             
-            # Position windows in cascade
+            # Get screen dimensions
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            
+            # Calculate base position (centered on screen)
+            window_width = 400
+            window_height = 300
+            base_x = (screen_width - window_width) // 2
+            base_y = (screen_height - window_height) // 2
+            
+            # Position windows in cascade, ensuring they stay on screen
+            offset = 30  # Pixels to offset each window
+            max_cascade = 5  # Maximum number of cascaded windows
+            
             for i, window in enumerate(self.notification_windows):
                 if window.window and not window.minimized:
-                    x = 100 + (i * 30)
-                    y = 100 + (i * 30)
-                    window.window.geometry(f"+{{x}}+{{y}}")
+                    cascade_index = min(i, max_cascade - 1)
+                    x = base_x + (cascade_index * offset)
+                    y = base_y + (cascade_index * offset)
+                    
+                    # Ensure window stays on screen
+                    x = max(0, min(x, screen_width - window_width))
+                    y = max(0, min(y, screen_height - window_height))
+                    
+                    # Update window position
+                    window.window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+                    
+                    # Ensure proper z-order
+                    if platform.system() == "Windows":
+                        try:
+                            import win32gui
+                            hwnd = window.window.winfo_id()
+                            win32gui.SetWindowPos(
+                                hwnd,
+                                win32gui.HWND_TOPMOST if i == 0 else win32gui.HWND_NOTOPMOST,
+                                x, y, window_width, window_height,
+                                win32gui.SWP_SHOWWINDOW
+                            )
+                        except Exception as e:
+                            print(f"Warning: Could not set window z-order: {e}")
                     
         except Exception as e:
             print(f"Error layering windows: {{e}}")
