@@ -11,13 +11,13 @@ Version: 1.8.4
 
 Cross-platform installer with native Python operation:
 
-🌐 UNIVERSAL PYTHON INSTALLER
+[GLOBAL] UNIVERSAL PYTHON INSTALLER
 - Single .py file runs on Windows, macOS, Linux
 - Windows: Runs as Python script with admin privileges
 - No external dependencies required for basic installation
 - Automatically detects OS and adapts functionality
 
-🪟 WINDOWS ENTERPRISE FEATURES
+[WINDOWS] WINDOWS ENTERPRISE FEATURES
 - Python-based operation with admin privileges
 - Hidden encrypted installation with AES-256-GCM vault encryption
 - Zero local key storage (all keys fetched from website/MongoDB)
@@ -28,12 +28,12 @@ Cross-platform installer with native Python operation:
 - Website allowlist enforcement and request system
 - Server-managed uninstallation via taskbar
 
-🍎🐧 MACOS/LINUX COMPATIBILITY
+[APPLE][LINUX] MACOS/LINUX COMPATIBILITY
 - Platform-specific overlay and minimization where possible
 - Adapted security model within OS constraints
 - Cross-platform Python dependency management
 
-🔐 SECURITY & ENCRYPTION
+[SECURITY] SECURITY & ENCRYPTION
 - AES-256-GCM encrypted installation directories
 - Server-managed encryption keys
 - Hidden file system integration
@@ -324,10 +324,10 @@ class InstallationProgressDialog:
         if self.window:
             try:
                 if success:
-                    self.status_label.config(text="✅ Installation completed successfully!")
+                    self.status_label.config(text="[COMPLETED] Installation completed successfully!")
                     self.progress_bar['value'] = 100
                 else:
-                    self.status_label.config(text="❌ Installation failed")
+                    self.status_label.config(text="[FAILED] Installation failed")
                 
                 # Add a close button
                 close_btn = tk.Button(
@@ -1214,7 +1214,7 @@ class PushNotificationsInstaller:
                     version_comparison = compare_versions(INSTALLER_VERSION, latest_version)
                     
                     if version_comparison > 0:  # Update available
-                        print(f"📦 Update available: v{INSTALLER_VERSION} → v{latest_version}")
+                        print(f"[PACKAGE] Update available: v{INSTALLER_VERSION} → v{latest_version}")
                         print(f"Download URL: {download_url}")
                         if update_notes:
                             print(f"Release notes: {update_notes}")
@@ -1259,7 +1259,7 @@ class PushNotificationsInstaller:
             print("No update data available")
             return False
             
-        print(f"📥 Downloading update v{self.update_data['latestVersion']}...")
+        print(f"[DOWNLOAD] Downloading update v{self.update_data['latestVersion']}...")
         
         try:
             download_url = self.update_data['downloadUrl']
@@ -1325,7 +1325,7 @@ class PushNotificationsInstaller:
             # Update registry version info
             self._update_version_registry()
             
-            print(f"🎉 Update completed! Now running v{self.update_data['latestVersion']}")
+            print(f"[SUCCESS] Update completed! Now running v{self.update_data['latestVersion']}")
             return True
             
         except requests.RequestException as e:
@@ -1603,11 +1603,11 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     key = input(f"Installation key (attempt {attempt}/{max_attempts}): ").strip()
             else:
                 # Use console input for macOS, Linux, and fallback cases
-                print(f"\n📝 Please enter your installation key:")
+                print(f"\n[NOTE] Please enter your installation key:")
                 print(f"   (Attempt {attempt} of {max_attempts})")
-                print(f"   💡 Tip: Right-click and paste, or use Cmd+V (macOS) / Ctrl+V (Linux)")
-                print(f"   🔓 Note: Key will be visible for easy pasting and verification")
-                print(f"   ⏎ Press Enter when done")
+                print(f"   [TIP] Tip: Right-click and paste, or use Cmd+V (macOS) / Ctrl+V (Linux)")
+                print(f"   [UNLOCKED] Note: Key will be visible for easy pasting and verification")
+                print(f"   [ENTER] Press Enter when done")
                 print()
                 try:
                     sys.stdout.write("Installation Key: ")
@@ -3720,7 +3720,7 @@ if __name__ == "__main__":
             try:
                 proc.wait(timeout=5)
             except psutil.TimeoutExpired:
-                print(f"🔥 Force killing process: {process_id}")
+                print(f"[FIRE] Force killing process: {process_id}")
                 proc.kill()
                 
             print(f"[OK] Process terminated: {process_id}")
@@ -3774,7 +3774,7 @@ if __name__ == "__main__":
                 ]
                 
                 for req_id in old_requests:
-                    print(f"🧹 Cleaning up old request: {req_id}")
+                    print(f"[CLEANUP] Cleaning up old request: {req_id}")
                     del self.pending_approvals[req_id]
                 
                 time.sleep(3600)  # Clean up every hour
@@ -3785,7 +3785,7 @@ if __name__ == "__main__":
     
     def run(self):
         """Main service loop"""
-        print(f"🛡️  File System Protection Service Started")
+        print(f"[SHIELD]  File System Protection Service Started")
         print(f"    Install Path: {self.install_path}")
         print(f"    Protected Paths: {len(self.protected_paths)}")
         print(f"    Client ID: {CLIENT_ID}")
@@ -3810,15 +3810,15 @@ if __name__ == "__main__":
                                      if r.get('status') == 'pending'])
                 
                 if active_requests > 0:
-                    print(f"📊 Status: {active_requests} pending approval requests")
+                    print(f"[STATUS] Status: {active_requests} pending approval requests")
                 
                 time.sleep(300)  # Status update every 5 minutes
                 
         except KeyboardInterrupt:
-            print("\n🛑 File Protection Service stopping...")
+            print("\n[STOP] File Protection Service stopping...")
             self.stop()
         except Exception as e:
-            print(f"💥 Service error: {{e}}")
+            print(f"[BOOM] Service error: {{e}}")
             self.stop()
     
     def stop(self):
@@ -4002,7 +4002,7 @@ if __name__ == "__main__":
             print("[ERR] Installation failed: Could not create client components")
             return False
         
-        print("✅ Installation completed successfully!")
+        print("[COMPLETED] Installation completed successfully!")
         return True
 
 # Standalone functions outside the class
@@ -4103,7 +4103,7 @@ class UnixNotificationClient:
         """Process notifications (basic console display)"""
         for notification in notifications:
             if not notification.get('completed', False):
-                print(f"\n📢 NEW NOTIFICATION:")
+                print(f"\n[ANNOUNCE] NEW NOTIFICATION:")
                 print(f"Message: {{notification.get('message', 'No message')}}")
                 print(f"ID: {{notification.get('id')}}")
                 print(f"Type 'complete {{notification.get('id')}}' to mark as complete")
@@ -4240,13 +4240,13 @@ def show_help():
     print(f"""PushNotifications Universal Installer v{INSTALLER_VERSION}
 {"=" * 60}
 
-🌐 UNIVERSAL PYTHON INSTALLER
+[GLOBAL] UNIVERSAL PYTHON INSTALLER
 - Single .py file runs on Windows, macOS, Linux
 - Windows: Runs as Python script with admin privileges
 - No external dependencies required for basic installation
 - Automatically detects OS and adapts functionality
 
-🪟 WINDOWS ENTERPRISE FEATURES
+[WINDOWS] WINDOWS ENTERPRISE FEATURES
 - Python-based operation with admin privileges
 - Hidden encrypted installation with AES-256-GCM vault encryption
 - Real MAC address detection and transmission
@@ -4419,7 +4419,7 @@ def main():
         
         # Handle special modes
         if check_only:
-            print("🔍 PushNotifications Update Check")
+            print("[CHECK] PushNotifications Update Check")
             print("=" * 50)
             # Just check for updates and exit
             installer = PushNotificationsInstaller(api_url)
@@ -4431,13 +4431,13 @@ def main():
                 sys.exit(0)
         
         if update_mode:
-            print("📦 PushNotifications Update Mode")
+            print("[UPDATE] PushNotifications Update Mode")
             print("=" * 50)
             print("This will check for and install the latest version.")
             print()
         
         if repair_mode:
-            print("🔧 PushNotifications Repair Mode")
+            print("[REPAIR] PushNotifications Repair Mode")
             print("=" * 50)
             print("This will attempt to repair or reinstall PushNotifications.")
             print("Existing settings and configurations will be preserved where possible.")
@@ -4462,7 +4462,7 @@ def main():
                 
                 # Ask for confirmation unless it's a required update
                 if installer.update_data.get('updateRequired', False):
-                    print("\n⚠️  This is a required security update.")
+                    print("\n[WARNING] This is a required security update.")
                     proceed = True
                 else:
                     if USE_GUI_DIALOGS:
@@ -4481,17 +4481,17 @@ def main():
                 
                 if proceed:
                     if installer.download_and_apply_update():
-                        print("\n✅ Update completed successfully!")
+                        print("\n[COMPLETED] Update completed successfully!")
                         print("The updated installer is ready to use.")
                         sys.exit(0)
                     else:
-                        print("\n❌ Update failed. Please try again later.")
+                        print("\n[FAILED] Update failed. Please try again later.")
                         sys.exit(1)
                 else:
                     print("\nUpdate cancelled by user.")
                     sys.exit(0)
             else:
-                print("\n✅ Already running the latest version.")
+                print("\n[COMPLETED] Already running the latest version.")
                 sys.exit(0)
         
         success = installer.run_installation()
