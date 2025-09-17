@@ -2317,7 +2317,7 @@ if os.name == "nt":
                     else:
                         __import__(pkg)
                 except Exception as e:
-                    print(f"Warning: Could not install {{pkg}}: {{e}}")
+                    print(f"Warning: Could not install {{{{pkg}}}}: {{{{e}}}}")
     
     try:
         import pystray
@@ -2329,7 +2329,7 @@ if os.name == "nt":
         import screeninfo
         WINDOWS_FEATURES_AVAILABLE = True
     except ImportError as e:
-        print(f"Warning: Windows features limited due to missing modules: {{e}}")
+        print(f"Warning: Windows features limited due to missing modules: {{{{e}}}}")
         WINDOWS_FEATURES_AVAILABLE = False
 
 # Client configuration
@@ -2393,16 +2393,16 @@ class OverlayManager:
                         win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE
                     )
                 except Exception as e:
-                    print(f"Warning: Could not set overlay window styles: {{e}}")
+                    print(f"Warning: Could not set overlay window styles: {{{{e}}}}")
             
             # Position on monitor
             x, y = monitor.x, monitor.y
             width, height = monitor.width, monitor.height
-            overlay.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
+            overlay.geometry(f"{{{{width}}}}x{{{{height}}}}+{{{{x}}}}+{{{{y}}}}")
             
             return overlay
         except Exception as e:
-            print(f"Error creating overlay: {{e}}")
+            print(f"Error creating overlay: {{{{e}}}}")
             return None
     
     def show_overlays(self):
