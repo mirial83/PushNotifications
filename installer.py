@@ -2317,7 +2317,7 @@ if os.name == "nt":
                     else:
                         __import__(pkg)
                 except Exception as e:
-                    print(f"Warning: Could not install {pkg}: {e}")
+                    print(f"Warning: Could not install {{pkg}}: {{e}}")
     
     try:
         import pystray
