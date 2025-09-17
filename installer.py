@@ -1261,7 +1261,9 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
             # Force console input for macOS and Unix systems due to GUI compatibility issues
-            if self.system == "Windows" and GUI_AVAILABLE:
+            # Only use GUI on Windows where it works reliably
+            print(f"Debug: System detected as '{self.system}'")
+            if False:  # Completely disable GUI dialogs for installation key entry
                 try:
                     # Set environment variable to suppress tkinter deprecation warning
                     os.environ['TK_SILENCE_DEPRECATION'] = '1'
