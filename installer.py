@@ -6996,6 +6996,27 @@ def run_installation(self):
         print()
         
         return True
+        
+    # Method wrappers for standalone functions
+    def _get_embedded_unix_uninstaller_code(self):
+        """Wrapper method for standalone function - gets embedded Unix uninstaller code"""
+        return _get_embedded_unix_uninstaller_code()
+        
+    def notify_installation_failure(self, stage, error_message):
+        """Wrapper method for standalone function - notifies server of installation failure"""
+        return notify_installation_failure(self, stage, error_message)
+        
+    def cleanup_failed_registration(self):
+        """Wrapper method for standalone function - cleans up failed device registration"""
+        return cleanup_failed_registration(self)
+        
+    def cleanup_failed_installation_files(self):
+        """Wrapper method for standalone function - cleans up failed installation files"""
+        return cleanup_failed_installation_files(self)
+        
+    def finalize_installation(self):
+        """Wrapper method for standalone function - finalizes installation"""
+        return finalize_installation(self)
 
 
 def show_help():
