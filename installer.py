@@ -4560,46 +4560,46 @@ def finalize_installation(self):
             print(f"Warning: Finalization error: {e}")
             return True  # Don't fail installation for this
 
-    def run_installation(self):
-        """Run the complete installation process with progress tracking"""
-        print("Starting PushNotifications Installation")
-        print("=" * 60)
-        
-        # Check admin privileges (skip on macOS since we install in user directory)
-        if self.system != "Darwin" and not self.check_admin_privileges():
-            print("Administrator privileges required for installation.")
-            if not self.restart_with_admin():
-                print("✗ Installation failed: Could not obtain administrator privileges")
-                return False
-            return True  # Process will restart with admin
-        
-        if self.system == "Darwin":
-            print("✓ Running with user privileges (macOS install in user directory)")
-        else:
-            print("✓ Running with administrator privileges")
-        
-        # Validate installation key
-        if not self.validate_installation_key():
-            print("✗ Installation failed: Invalid installation key")
+def run_installation(self):
+    """Run the complete installation process with progress tracking"""
+    print("Starting PushNotifications Installation")
+    print("=" * 60)
+    
+    # Check admin privileges (skip on macOS since we install in user directory)
+    if self.system != "Darwin" and not self.check_admin_privileges():
+        print("Administrator privileges required for installation.")
+        if not self.restart_with_admin():
+            print("✗ Installation failed: Could not obtain administrator privileges")
             return False
-        
-        # Register device
-        if not self.register_device():
-            print("✗ Installation failed: Device registration failed")
-            return False
-        
-        # Create hidden installation directory
-        if not self.create_hidden_install_directory():
-            print("✗ Installation failed: Could not create installation directory")
-            return False
-        
-        # Create embedded client components
-        if not self.create_embedded_client_components():
-            print("✗ Installation failed: Could not create client components")
-            return False
-        
-        print("✅ Installation completed successfully!")
-        return True
+        return True  # Process will restart with admin
+    
+    if self.system == "Darwin":
+        print("✓ Running with user privileges (macOS install in user directory)")
+    else:
+        print("✓ Running with administrator privileges")
+    
+    # Validate installation key
+    if not self.validate_installation_key():
+        print("✗ Installation failed: Invalid installation key")
+        return False
+    
+    # Register device
+    if not self.register_device():
+        print("✗ Installation failed: Device registration failed")
+        return False
+    
+    # Create hidden installation directory
+    if not self.create_hidden_install_directory():
+        print("✗ Installation failed: Could not create installation directory")
+        return False
+    
+    # Create embedded client components
+    if not self.create_embedded_client_components():
+        print("✗ Installation failed: Could not create client components")
+        return False
+    
+    print("✅ Installation completed successfully!")
+    return True
 
 # Standalone functions outside the class
 def show_help():
