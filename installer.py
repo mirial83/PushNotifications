@@ -1941,6 +1941,25 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             print(f"Warning: Could not copy icon file: {e}")
             return False  # Not a critical failure
     
+    def _get_embedded_unix_client_code(self):
+        """Get the embedded Unix client code with comprehensive cross-platform functionality"""
+        # Get the existing standalone function's code
+        return _get_embedded_unix_client_code(self)
+    
+    def notify_installation_failure(self, stage, error_message):
+        """Notify the server that the installation has failed"""
+        # Get the existing standalone function's code
+        return notify_installation_failure(self, stage, error_message)
+    
+    def cleanup_failed_installation_files(self):
+        """Clean up installer files on failed installation"""
+        # Get the existing standalone function's code
+        return cleanup_failed_installation_files(self)
+    
+    def create_desktop_shortcuts(self):
+        """Create desktop shortcuts for client and installer"""
+        # Get the existing standalone function's code
+        return create_desktop_shortcuts(self)
     
     def _get_embedded_windows_client_code(self):
         """Get the embedded Windows client code with complete notification system"""
