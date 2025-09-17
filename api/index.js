@@ -1198,8 +1198,7 @@ class DatabaseOperations {
         notifications = await this.db.collection('notifications')
           .find({ 
             status: { $ne: 'Completed' },
-            type: { $ne: 'uninstall_request' },
-            type: { $ne: 'uninstall_command' }
+            type: { $nin: ['uninstall_request', 'uninstall_command'] }
           })
           .toArray();
       }
@@ -1234,8 +1233,14 @@ class DatabaseOperations {
         id: n.id || n._id?.toString(),
         message: n.message,
         status: n.status,
+        type: n.type,
+        clientId: n.clientId,
+        reason: n.reason,
         allowBrowserUsage: n.allowBrowserUsage || false,
-        allowedWebsites: n.allowedWebsites ? n.allowedWebsites.split(',') : []
+        allowedWebsites: Array.isArray(n.allowedWebsites) 
+          ? n.allowedWebsites 
+          : (n.allowedWebsites ? n.allowedWebsites.split(',') : []),
+        created: n.created
       }));
 
       return { success: true, data: processedNotifications };
@@ -4597,10 +4602,20 @@ module.exports = async function handler(req, res) {
 
       case 'getActiveNotifications':
       case 'getNotifications':
-        result = await db.getActiveNotifications();
-        if (result.success) {
-          result.notifications = result.data;
-          result.clientCount = 0;
+        // If clientId is provided, get client-specific notifications (includes uninstall commands)
+        if (params.clientId) {
+          result = await db.getClientNotifications(params.clientId);
+          if (result.success) {
+            result.notifications = result.data;
+            result.clientCount = 0;
+          }
+        } else {
+          // Admin view - get all active notifications (excludes uninstall commands)
+          result = await db.getActiveNotifications();
+          if (result.success) {
+            result.notifications = result.data;
+            result.clientCount = 0;
+          }
         }
         break;
 

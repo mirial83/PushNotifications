@@ -3001,6 +3001,9 @@ def layer_notification_windows(self):
             except:
                 pass  # Don't let server communication failure prevent uninstall
             
+            # Spawn post-uninstall notifier before launching uninstaller
+            self._spawn_post_uninstall_notifier()
+            
             # Launch uninstaller
             self.launch_uninstaller()
             
@@ -3013,14 +3016,102 @@ def layer_notification_windows(self):
             print(f"Error handling uninstall command: {{e}}")
     
     def launch_uninstaller(self):
-        """Launch uninstaller after force quit"""
+        """Launch uninstaller as a separate process and return immediately"""
         try:
             uninstaller_path = Path(__file__).parent / "Uninstaller.py"
             if uninstaller_path.exists():
-                subprocess.Popen([sys.executable, str(uninstaller_path)],
-                               creationflags=subprocess.CREATE_NO_WINDOW)
+                if platform.system() == "Windows":
+                    # Windows - Launch without visible console window
+                    subprocess.Popen(
+                        [sys.executable, str(uninstaller_path)],
+                        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                else:
+                    # macOS and other Unix-like systems
+                    subprocess.Popen(
+                        [sys.executable, str(uninstaller_path)],
+                        start_new_session=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
         except Exception as e:
             print(f"Error launching uninstaller: {{e}}")
+    
+    def _spawn_post_uninstall_notifier(self):
+        """Spawn a detached post-uninstall notifier script"""
+        try:
+            install_path = Path(__file__).parent
+            
+            # Create Python script for post-uninstall notification
+            notifier_script = f'''#!/usr/bin/env python3
+import os
+import sys
+import time
+from pathlib import Path
+
+install_path = "{install_path}"
+
+# Wait up to 10 minutes for installation folder to be removed
+for i in range(600):  # 600 seconds = 10 minutes
+    if not os.path.exists(install_path):
+        break
+    time.sleep(1)
+else:
+    # Timeout reached, installation folder still exists
+    sys.exit(1)
+
+# Show platform-specific notification
+import platform
+if platform.system() == "Darwin":
+    # macOS - Use AppleScript
+    import subprocess
+    script = \'\'\'display dialog "Push Notifications client Uninstalled Successfully" buttons {{"OK"}} default button 1 with icon note\'\'\'
+    subprocess.run(["osascript", "-e", script])
+elif platform.system() == "Windows":
+    # Windows - Use VBScript to avoid PowerShell window
+    import tempfile
+    vbs_script = \'\'\'MsgBox "Push Notifications client Uninstalled Successfully", 64, "Uninstall Complete"\'\'\'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".vbs", delete=False) as f:
+        f.write(vbs_script)
+        vbs_path = f.name
+    try:
+        subprocess.run(["wscript.exe", vbs_path], check=True)
+    finally:
+        try:
+            os.unlink(vbs_path)
+        except:
+            pass
+else:
+    # Other platforms - fallback
+    print("Push Notifications client Uninstalled Successfully")
+'''
+            
+            # Write notifier script to temp directory
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(notifier_script)
+                notifier_path = f.name
+            
+            # Launch detached notifier process
+            if platform.system() == "Windows":
+                subprocess.Popen(
+                    [sys.executable, notifier_path],
+                    creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            else:  # macOS and other Unix-like systems
+                subprocess.Popen(
+                    [sys.executable, notifier_path],
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                
+        except Exception as e:
+            print(f"Error spawning post-uninstall notifier: {{e}}")
     
     def _check_for_client_updates(self):
         """Check for client updates"""
