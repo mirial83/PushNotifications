@@ -2725,7 +2725,7 @@ class NotificationWindow:
             allowed_websites = self.data.get('allowedWebsites', [])
             if allowed_websites:
                 websites_label = tk.Label(content_frame, 
-                                        text=f"Allowed websites: {', '.join(allowed_websites)}", 
+                                        text=f"Allowed websites: {{', '.join(allowed_websites)}}", 
                                         bg=colors['bg'], wraplength=360, justify=tk.LEFT,
                                         font=("Arial", 9), fg="#666")
                 websites_label.pack(pady=(0, 10))
