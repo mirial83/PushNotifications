@@ -643,6 +643,8 @@ The API will automatically use MongoDB when configured, or fall back to simple s
 
 
 # Enhanced embedded components
+EMBEDDED_ICON_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA8klEQVR4nGNgGAUjHTDSyuA7Ijb/YWyVN0doZg9Oy/+7MsAxsmPQAVkuc2tagtPAaZM6GJQNj2CI3z1vgzUkWMixWE7YkhRteAHRDnBr2vKfmhbDABO1Le9o3Mhw97wNihiu4GdgICINkOvzinp/OBtfLiApDZACOho3MjAwMDA8enucgaHOB6c6oqKAlmDUAQQdsKvOh/HR2+NkGf7o7XEGXXU+eBM6USFAjiOIsZyBgcSimJiSEOZQYiwn2QHIDsHmCGJ9TbEDGBgYGFKmvsWokOZkC5Ns3uDPBaMOwAXQ45uc+KcKwJYYR8EoGAVDCgAAVzRa9cjcydwAAAAASUVORK5CYII="
+
 EMBEDDED_FAVICON_UTILS = '''
 import base64
 from pathlib import Path
@@ -4407,201 +4409,279 @@ def notify_installation_failure(self, stage, error_message):
         
         return False
     
-def cleanup_failed_installation_files(self):
-        """Clean up installer files on failed installation"""
-        print("Cleaning up installation files...")
-        
-        try:
-            # Remove any created installation directory if it exists
-            if hasattr(self, 'install_path') and self.install_path and self.install_path.exists():
-                print(f"Removing installation directory: {self.install_path}")
-                
-                # Remove Windows file attributes before deletion
-                if self.system == "Windows":
-                    try:
-                        subprocess.run([
-                            "attrib", "-R", "-S", "-H", str(self.install_path), "/S"
-                        ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-                    except:
-                        pass
-                
-                # Remove directory
-                shutil.rmtree(self.install_path, ignore_errors=True)
-                
-                # Also try to remove parent directories if they're empty
-                try:
-                    parent = self.install_path.parent
-                    if parent.exists() and not any(parent.iterdir()):
-                        parent.rmdir()
-                        grandparent = parent.parent
-                        if grandparent.exists() and not any(grandparent.iterdir()):
-                            grandparent.rmdir()
-                except:
-                    pass
-            
-            # Remove any registry entries
-            if self.system == "Windows":
-                try:
-                    winreg.DeleteKey(winreg.HKEY_CURRENT_USER, "Software\\PushNotifications")
-                    print("✓ Registry entries removed")
-                except (OSError, FileNotFoundError):
-                    pass
-            
-            # Remove any scheduled tasks
-            if self.system == "Windows":
-                try:
-                    subprocess.run(['schtasks', '/delete', '/tn', 'PushClient', '/f'], 
-                                  check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-                    subprocess.run(['schtasks', '/delete', '/tn', 'PushUpdater', '/f'], 
-                                  check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-                    subprocess.run(['schtasks', '/delete', '/tn', 'PushWatchdog', '/f'], 
-                                  check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-                except:
-                    pass
-            
-            print("✓ Installation files cleaned up")
-            return True
-            
-        except Exception as e:
-            print(f"Warning: Could not fully clean up installation files: {e}")
-            return False
-    
-def cleanup_failed_registration(self):
-        """Clean up device registration if installation fails after device was registered"""
-        if not self.device_registered:
-            print("No device registration to clean up")
-            return True
-            
-        print("Cleaning up device registration due to installation failure...")
-        
-        try:
-            cleanup_data = {
-                'action': 'cleanupFailedInstallation',
-                'macAddress': self.mac_address,
-                'keyId': getattr(self, 'key_id', None),
-                'deviceId': self.device_data.get('deviceId') if hasattr(self, 'device_data') else None,
-                'clientId': self.device_data.get('clientId') if hasattr(self, 'device_data') else None,
-                'username': self.username,
-                'clientName': self.client_name,
-                'reason': 'installation_failed_after_registration',
-                'timestamp': datetime.now().isoformat(),
-                'installPath': str(getattr(self, 'install_path', 'unknown'))
-            }
-            
-            response = requests.post(
-                f"{self.api_url}/api/index",
-                json=cleanup_data,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('success'):
-                    print("✓ Device registration cleaned up successfully")
-                    print("  Device marked as offline/unregistered")
-                    return True
-                else:
-                    print(f"Warning: Server failed to cleanup registration: {result.get('message')}")
-            else:
-                print(f"Warning: Failed to cleanup registration: HTTP {response.status_code}")
-                
-        except Exception as e:
-            print(f"Warning: Could not cleanup device registration: {e}")
-        
-        return False
-    
-def finalize_installation(self):
-        """Finalize installation and report success to server"""
-        print("Finalizing installation...")
-        
-        try:
-            # Report successful installation to server
-            response = requests.post(
-                f"{self.api_url}/api/index",
-                json={
-                    'action': 'reportInstallation',
-                    'keyId': self.key_id,
-                    'macAddress': self.mac_address,
-                    'installPath': str(self.install_path),
-                    'version': INSTALLER_VERSION,
-                    'status': 'completed',
-                    'timestamp': datetime.now().isoformat()
-                },
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('success'):
-                    print("✓ Installation reported to server")
-                else:
-                    print(f"Warning: Server reported: {result.get('message')}")
-            
-            # Start the client immediately with pythonw.exe to hide console
-            if self.system == "Windows":
-                # Use pythonw.exe instead of python.exe to hide console window
-                pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
-                if not Path(pythonw_exe).exists():
-                    pythonw_exe = 'pythonw.exe'  # Fallback to system PATH
-                
-                subprocess.Popen([
-                    pythonw_exe, str(self.install_path / "Client.py")
-                ], cwd=str(self.install_path),
-                   creationflags=subprocess.CREATE_NO_WINDOW)
-            else:
-                subprocess.Popen([
-                    sys.executable, str(self.install_path / "Client.py")
-                ], cwd=str(self.install_path))
-            
-            print("✓ Client started")
-            return True
-            
-        except Exception as e:
-            print(f"Warning: Finalization error: {e}")
-            return True  # Don't fail installation for this
 
-def run_installation(self):
-    """Run the complete installation process with progress tracking"""
-    print("Starting PushNotifications Installation")
-    print("=" * 60)
-    
-    # Check admin privileges (skip on macOS since we install in user directory)
-    if self.system != "Darwin" and not self.check_admin_privileges():
-        print("Administrator privileges required for installation.")
-        if not self.restart_with_admin():
-            print("✗ Installation failed: Could not obtain administrator privileges")
+
+    def run_installation(self):
+        """Run the complete installation process with progress tracking"""
+        print("Starting PushNotifications Installation")
+        print("=" * 60)
+        
+        # Check admin privileges (skip on macOS since we install in user directory)
+        if self.system != "Darwin" and not self.check_admin_privileges():
+            print("Administrator privileges required for installation.")
+            if not self.restart_with_admin():
+                print("✗ Installation failed: Could not obtain administrator privileges")
+                return False
+            return True  # Process will restart with admin
+        
+        if self.system == "Darwin":
+            print("✓ Running with user privileges (macOS install in user directory)")
+        else:
+            print("✓ Running with administrator privileges")
+        
+        # Validate installation key
+        if not self.validate_installation_key():
+            print("✗ Installation failed: Invalid installation key")
             return False
-        return True  # Process will restart with admin
-    
-    if self.system == "Darwin":
-        print("✓ Running with user privileges (macOS install in user directory)")
-    else:
-        print("✓ Running with administrator privileges")
-    
-    # Validate installation key
-    if not self.validate_installation_key():
-        print("✗ Installation failed: Invalid installation key")
-        return False
-    
-    # Register device
-    if not self.register_device():
-        print("✗ Installation failed: Device registration failed")
-        return False
-    
-    # Create hidden installation directory
-    if not self.create_hidden_install_directory():
-        print("✗ Installation failed: Could not create installation directory")
-        return False
-    
-    # Create embedded client components
-    if not self.create_embedded_client_components():
-        print("✗ Installation failed: Could not create client components")
-        return False
-    
-    print("✅ Installation completed successfully!")
-    return True
+        
+        # Register device
+        if not self.register_device():
+            print("✗ Installation failed: Device registration failed")
+            return False
+        
+        # Create hidden installation directory
+        if not self.create_hidden_install_directory():
+            print("✗ Installation failed: Could not create installation directory")
+            return False
+        
+        # Create embedded client components
+        if not self.create_embedded_client_components():
+            print("✗ Installation failed: Could not create client components")
+            return False
+        
+        print("✅ Installation completed successfully!")
+        return True
 
 # Standalone functions outside the class
+def _get_embedded_unix_client_code(installer_instance):
+    """Get the embedded Unix client code with comprehensive cross-platform functionality"""
+    return f'''#!/usr/bin/env python3
+"""
+PushNotifications Unix/Linux/macOS Client
+Cross-platform notification management system
+Version: {INSTALLER_VERSION}
+"""
+
+import os
+import sys
+import json
+import time
+import threading
+import subprocess
+from pathlib import Path
+from datetime import datetime, timedelta
+
+# Core functionality imports with auto-installation
+try:
+    import requests
+except ImportError:
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'requests'])
+    import requests
+
+try:
+    import psutil
+except ImportError:
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'psutil==5.9.0'])
+    import psutil
+
+# Cross-platform GUI imports
+try:
+    import tkinter as tk
+    from tkinter import messagebox, simpledialog, ttk
+    GUI_AVAILABLE = True
+except ImportError:
+    GUI_AVAILABLE = False
+    print("Warning: tkinter not available - using console mode")
+
+# Client configuration
+CLIENT_VERSION = "{INSTALLER_VERSION}"
+API_URL = "{installer_instance.api_url}/api/index"
+MAC_ADDRESS = "{installer_instance.mac_address}"
+CLIENT_ID = "{installer_instance.device_data.get('clientId')}"
+KEY_ID = "{installer_instance.key_id}"
+
+class UnixNotificationClient:
+    """Cross-platform notification client for Unix/Linux/macOS"""
+    
+    def __init__(self):
+        self.running = True
+        self.notifications = []
+        
+    def run(self):
+        """Main client loop"""
+        print(f"PushNotifications Client v{{CLIENT_VERSION}} running...")
+        print("Note: This is a basic cross-platform client")
+        
+        # Start notification checker in background
+        notif_thread = threading.Thread(target=self.check_notifications, daemon=True)
+        notif_thread.start()
+        
+        # Simple console loop
+        try:
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nShutting down client...")
+            self.running = False
+    
+    def check_notifications(self):
+        """Check for notifications from server"""
+        while self.running:
+            try:
+                response = requests.post(API_URL, json={{
+                    'action': 'getNotifications',
+                    'clientId': CLIENT_ID,
+                    'macAddress': MAC_ADDRESS
+                }}, timeout=10)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('success'):
+                        notifications = result.get('notifications', [])
+                        self.process_notifications(notifications)
+                
+                time.sleep(30)  # Check every 30 seconds
+                
+            except Exception as e:
+                print(f"Error checking notifications: {{e}}")
+                time.sleep(60)
+    
+    def process_notifications(self, notifications):
+        """Process notifications (basic console display)"""
+        for notification in notifications:
+            if not notification.get('completed', False):
+                print(f"\n📢 NEW NOTIFICATION:")
+                print(f"Message: {{notification.get('message', 'No message')}}")
+                print(f"ID: {{notification.get('id')}}")
+                print(f"Type 'complete {{notification.get('id')}}' to mark as complete")
+
+if __name__ == "__main__":
+    client = UnixNotificationClient()
+    client.run()
+'''
+
+def notify_installation_failure(installer_instance, stage, error_message):
+    """Notify the server that the installation has failed"""
+    print(f"Reporting installation failure at stage: {stage}")
+    
+    try:
+        failure_data = {
+            'action': 'reportInstallationFailure',
+            'macAddress': installer_instance.mac_address,
+            'username': installer_instance.username,
+            'clientName': installer_instance.client_name,
+            'keyId': getattr(installer_instance, 'key_id', None),
+            'deviceId': installer_instance.device_data.get('deviceId') if hasattr(installer_instance, 'device_data') else None,
+            'clientId': installer_instance.device_data.get('clientId') if hasattr(installer_instance, 'device_data') else None,
+            'stage': stage,
+            'error': error_message,
+            'version': INSTALLER_VERSION,
+            'platform': f"{platform.system()} {platform.release()}",
+            'timestamp': datetime.now().isoformat(),
+            'installPath': str(getattr(installer_instance, 'install_path', 'unknown')),
+            'systemInfo': {
+                'osVersion': f"{platform.system()} {platform.release()} {platform.version()}",
+                'architecture': platform.machine(),
+                'processor': platform.processor(),
+                'pythonVersion': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+                'isAdmin': installer_instance.check_admin_privileges(),
+                'timezone': str(datetime.now().astimezone().tzinfo)
+            }
+        }
+        
+        response = requests.post(
+            f"{installer_instance.api_url}/api/index",
+            json=failure_data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('success'):
+                print("✓ Installation failure reported to server")
+                return True
+            else:
+                print(f"Warning: Server failed to log failure: {result.get('message')}")
+        else:
+            print(f"Warning: Failed to report installation failure: HTTP {response.status_code}")
+            
+    except Exception as e:
+        print(f"Warning: Could not report installation failure: {e}")
+    
+    return False
+
+def create_desktop_shortcuts(installer_instance):
+    """Create desktop shortcuts for client and installer"""
+    print("Creating desktop shortcuts...")
+    
+    try:
+        if installer_instance.system == "Windows":
+            import win32com.client
+            
+            desktop = Path.home() / "Desktop"
+            
+            # Create Push Client shortcut - Python only
+            shell = win32com.client.Dispatch("WScript.Shell")
+            client_shortcut = shell.CreateShortCut(str(desktop / "Push Client.lnk"))
+            # Use pythonw.exe to ensure no console window appears
+            pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
+            if not Path(pythonw_exe).exists():
+                pythonw_exe = 'pythonw.exe'  # Fallback to system PATH
+            client_shortcut.Targetpath = pythonw_exe
+            client_shortcut.Arguments = f'"{installer_instance.install_path / "Client.py"}"'
+            client_shortcut.WorkingDirectory = str(installer_instance.install_path)
+            client_shortcut.Description = "PushNotifications Client"
+            client_shortcut.save()
+            
+            # Create Installer/Repair shortcut - Python only
+            repair_shortcut = shell.CreateShortCut(str(desktop / "Push Client Repair.lnk"))
+            repair_shortcut.Targetpath = "python.exe"
+            repair_shortcut.Arguments = f'"{installer_instance.install_path / "Installer.py"}" --repair'
+            repair_shortcut.WorkingDirectory = str(installer_instance.install_path)
+            repair_shortcut.Description = "PushNotifications Installer/Repair"
+            repair_shortcut.save()
+            
+            print("✓ Desktop shortcuts created")
+            
+        else:
+            # Unix-like systems - create .desktop files
+            desktop = Path.home() / "Desktop"
+            
+            client_desktop = desktop / "push-client.desktop"
+            with open(client_desktop, 'w') as f:
+                f.write(f"""[Desktop Entry]
+Type=Application
+Name=Push Client
+Comment=PushNotifications Client
+Exec={installer_instance.install_path / "Client.py"}
+Icon=application-default-icon
+Terminal=false
+Categories=System;
+""")
+            
+            repair_desktop = desktop / "push-repair.desktop"
+            with open(repair_desktop, 'w') as f:
+                f.write(f"""[Desktop Entry]
+Type=Application
+Name=Push Client Repair
+Comment=PushNotifications Installer/Repair
+Exec={installer_instance.install_path / "Installer.py"} --repair
+Icon=application-default-icon
+Terminal=false
+Categories=System;
+""")
+            
+            os.chmod(client_desktop, 0o755)
+            os.chmod(repair_desktop, 0o755)
+            
+            print("✓ Desktop shortcuts created")
+        
+        return True
+        
+    except Exception as e:
+        print(f"✗ Failed to create shortcuts: {e}")
+        return False
+
 def show_help():
     """Display comprehensive help information"""
     print(f"""PushNotifications Universal Installer v{INSTALLER_VERSION}
