@@ -378,17 +378,17 @@ def fetch_current_version_from_api(api_url=None):
             result = response.json()
             if result.get('success') and result.get('currentVersion'):
                 version = result.get('currentVersion')
-                print(f"✓ Retrieved version from API: v{version}")
+                print(f"[OK] Retrieved version from API: v{version}")
                 return version
             else:
-                print(f"✗ API response unsuccessful: {result.get('message', 'Unknown error')}")
+                print(f"[ERR] API response unsuccessful: {result.get('message', 'Unknown error')}")
         else:
-            print(f"✗ API request failed: HTTP {response.status_code}")
+            print(f"[ERR] API request failed: HTTP {response.status_code}")
             
     except requests.RequestException as e:
-        print(f"✗ Network error fetching version: {e}")
+        print(f"[ERR] Network error fetching version: {e}")
     except Exception as e:
-        print(f"✗ Error fetching version: {e}")
+        print(f"[ERR] Error fetching version: {e}")
     
     # Fallback to a default version if API fails
     print("Warning: Using fallback version 1.0.0")
@@ -433,7 +433,7 @@ The PushNotifications installer has been significantly enhanced with intelligent
 - **Error Recovery**: Provides manual startup instructions if automatic startup fails
 
 ### 4. Enhanced User Experience
-- **Progress Feedback**: Clear visual indicators (✓, ✗, ⚠) for all operations
+- **Progress Feedback**: Clear visual indicators ([OK], [ERR], ⚠) for all operations
 - **Detailed Logging**: Comprehensive status messages for each installation step
 - **Graceful Fallbacks**: Alternative approaches when primary methods fail
 
@@ -1086,12 +1086,12 @@ class PushNotificationsInstaller:
                         # Files will be overwritten during installation if needed
                         try:
                             existing_version, _ = winreg.QueryValueEx(key, "Version")
-                            print(f"✓ Found existing installation registry entry (version: {existing_version})")
+                            print(f"[OK] Found existing installation registry entry (version: {existing_version})")
                             print("  Installation will overwrite existing files")
                             return True
                         except:
                             # Registry exists but no version - still treat as existing
-                            print("✓ Found existing installation registry entry")
+                            print("[OK] Found existing installation registry entry")
                             print("  Installation will overwrite existing files")
                             return True
                 except (OSError, FileNotFoundError):
@@ -1109,7 +1109,7 @@ class PushNotificationsInstaller:
                 
                 for path in common_install_paths:
                     if path.exists() and (path / "Client.py").exists():
-                        print(f"✓ Found existing installation: {path}")
+                        print(f"[OK] Found existing installation: {path}")
                         print("  Installation will overwrite existing files")
                         return True
                         
@@ -1149,13 +1149,13 @@ class PushNotificationsInstaller:
                         'serverManaged': True
                     }
                     
-                    print(f"✓ Loaded existing configuration for repair")
+                    print(f"[OK] Loaded existing configuration for repair")
                     print(f"  Key ID: {self.key_id}")
                     print(f"  MAC Address: {self.mac_address}")
                     print(f"  Username: {self.username}")
             else:
                 # On Unix-like systems, we'll use current detected values and assume upgrade
-                print("✓ Unix/macOS upgrade mode - using current system configuration")
+                print("[OK] Unix/macOS upgrade mode - using current system configuration")
                 print(f"  MAC Address: {self.mac_address}")
                 print(f"  Username: {self.username}")
                 print(f"  API URL: {self.api_url}")
@@ -1219,7 +1219,7 @@ class PushNotificationsInstaller:
                         if update_notes:
                             print(f"Release notes: {update_notes}")
                         if update_installation_key:
-                            print(f"✓ Update installation key provided")
+                            print(f"[OK] Update installation key provided")
                         
                         # Store update information
                         self.update_data = {
@@ -1233,24 +1233,24 @@ class PushNotificationsInstaller:
                         
                         return True  # Update available
                     elif version_comparison == 0:
-                        print(f"✓ Already running latest version: v{INSTALLER_VERSION}")
+                        print(f"[OK] Already running latest version: v{INSTALLER_VERSION}")
                         return False  # No update needed
                     else:
-                        print(f"✓ Running newer version than latest: v{INSTALLER_VERSION} > v{latest_version}")
+                        print(f"[OK] Running newer version than latest: v{INSTALLER_VERSION} > v{latest_version}")
                         return False  # Running pre-release or newer
                         
                 else:
-                    print(f"✗ Version check failed: {result.get('message', 'Unknown error')}")
+                    print(f"[ERR] Version check failed: {result.get('message', 'Unknown error')}")
                     return False
             else:
-                print(f"✗ Version check server error: HTTP {response.status_code}")
+                print(f"[ERR] Version check server error: HTTP {response.status_code}")
                 return False
                 
         except requests.RequestException as e:
-            print(f"✗ Version check network error: {e}")
+            print(f"[ERR] Version check network error: {e}")
             return False
         except Exception as e:
-            print(f"✗ Version check error: {e}")
+            print(f"[ERR] Version check error: {e}")
             return False
     
     def download_and_apply_update(self):
@@ -1264,7 +1264,7 @@ class PushNotificationsInstaller:
         try:
             download_url = self.update_data['downloadUrl']
             if not download_url:
-                print("✗ No download URL provided")
+                print("[ERR] No download URL provided")
                 return False
             
             # Download the new installer
@@ -1290,11 +1290,11 @@ class PushNotificationsInstaller:
                             progress = (downloaded / total_size) * 100
                             print(f"\rProgress: {progress:.1f}%", end='', flush=True)
                 
-                print("\n✓ Download completed")
+                print("\n[OK] Download completed")
             
             # Verify downloaded file
             if not Path(temp_installer).exists():
-                print("✗ Downloaded file not found")
+                print("[ERR] Downloaded file not found")
                 return False
             
             # Replace current installer if we're in the install directory
@@ -1307,11 +1307,11 @@ class PushNotificationsInstaller:
                 # Backup current version
                 if installer_current.exists():
                     shutil.copy2(installer_current, installer_backup)
-                    print(f"✓ Backed up current installer to {installer_backup.name}")
+                    print(f"[OK] Backed up current installer to {installer_backup.name}")
                 
                 # Replace with new version
                 shutil.copy2(temp_installer, installer_current)
-                print(f"✓ Updated installer to v{self.update_data['latestVersion']}")
+                print(f"[OK] Updated installer to v{self.update_data['latestVersion']}")
                 
                 # Update wrapper scripts
                 self._update_installer_wrappers()
@@ -1329,10 +1329,10 @@ class PushNotificationsInstaller:
             return True
             
         except requests.RequestException as e:
-            print(f"✗ Download failed: {e}")
+            print(f"[ERR] Download failed: {e}")
             return False
         except Exception as e:
-            print(f"✗ Update failed: {e}")
+            print(f"[ERR] Update failed: {e}")
             return False
     
     def _update_installer_wrappers(self):
@@ -1341,7 +1341,7 @@ class PushNotificationsInstaller:
             if self.system == "Windows":
                 # We only update the main Python script now
                 installer_path = self.install_path / "Installer.py"
-                print(f"✓ Updated installer Python script: {installer_path}")
+                print(f"[OK] Updated installer Python script: {installer_path}")
                 
         except Exception as e:
             print(f"Warning: Could not update installer script: {e}")
@@ -1359,7 +1359,7 @@ class PushNotificationsInstaller:
                     winreg.SetValueEx(key, "PreviousVersion", 0, winreg.REG_SZ, 
                                     INSTALLER_VERSION)
                 
-                print("✓ Updated registry version information")
+                print("[OK] Updated registry version information")
                 
         except Exception as e:
             print(f"Warning: Could not update registry version: {e}")
@@ -1450,7 +1450,7 @@ class PushNotificationsInstaller:
                        creationflags=subprocess.CREATE_NO_WINDOW)
                     
                     if result.returncode == 0:
-                        print("✓ Administrator privileges requested via PowerShell")
+                        print("[OK] Administrator privileges requested via PowerShell")
                         sys.exit(0)
                     else:
                         print(f"PowerShell elevation failed: {result.stderr}")
@@ -1469,7 +1469,7 @@ class PushNotificationsInstaller:
                     )
                     
                     if result > 32:  # Success
-                        print("✓ Administrator privileges requested via ShellExecute")
+                        print("[OK] Administrator privileges requested via ShellExecute")
                         sys.exit(0)
                     else:
                         print(f"ShellExecute failed with error code: {result}")
@@ -1503,7 +1503,7 @@ class PushNotificationsInstaller:
                     result_int = ctypes.cast(result, ctypes.c_void_p).value or 0
                     
                     if result_int > 32:
-                        print("✓ Administrator privileges requested via ShellExecuteW")
+                        print("[OK] Administrator privileges requested via ShellExecuteW")
                         sys.exit(0)
                     else:
                         print(f"ShellExecuteW failed with error code: {result_int}")
@@ -1533,13 +1533,13 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     except:
                         pass
                     
-                    print("✓ Administrator privileges requested via batch file")
+                    print("[OK] Administrator privileges requested via batch file")
                     sys.exit(0)
                     
                 except Exception as e:
                     print(f"Batch file method failed: {e}")
                 
-                print("✗ All elevation methods failed")
+                print("[ERR] All elevation methods failed")
                 return False
                 
             except Exception as e:
@@ -1653,20 +1653,20 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                         self.username = f"{website_username}_{number}"
                         self.client_name = f"{self.username}_{platform.node()}"
                         
-                        print(f"✓ Installation key validated successfully!")
+                        print(f"[OK] Installation key validated successfully!")
                         print(f"  User: {user_info.get('username', 'Unknown')}")
                         print(f"  Role: {user_info.get('role', 'Unknown')}")
                         print(f"  Generated Client Username: {self.username}")
                         return True
                     else:
-                        print(f"✗ {result.get('message', 'Invalid installation key')}")
+                        print(f"[ERR] {result.get('message', 'Invalid installation key')}")
                 else:
-                    print(f"✗ Server error: HTTP {response.status_code}")
+                    print(f"[ERR] Server error: HTTP {response.status_code}")
                     
             except requests.RequestException as e:
-                print(f"✗ Network error: {e}")
+                print(f"[ERR] Network error: {e}")
             except Exception as e:
-                print(f"✗ Validation error: {e}")
+                print(f"[ERR] Validation error: {e}")
         
         print("Installation key validation failed after maximum attempts.")
         return False
@@ -1722,15 +1722,15 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     timeout=30,
                     headers={'Content-Type': 'application/json'}
                 )
-                print(f"✓ Request completed successfully")
+                print(f"[OK] Request completed successfully")
             except requests.exceptions.ConnectTimeout as e:
-                print(f"✗ Connection timeout: {e}")
+                print(f"[ERR] Connection timeout: {e}")
                 return False
             except requests.exceptions.ReadTimeout as e:
-                print(f"✗ Read timeout: {e}")
+                print(f"[ERR] Read timeout: {e}")
                 return False
             except Exception as e:
-                print(f"✗ Request failed with exception: {type(e).__name__}: {e}")
+                print(f"[ERR] Request failed with exception: {type(e).__name__}: {e}")
                 return False
             
             print(f"Response status: {response.status_code}")
@@ -1787,7 +1787,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                         'heartbeatInterval': 300       # 5 minutes
                     })
                     
-                    print(f"✓ Device registered successfully!")
+                    print(f"[OK] Device registered successfully!")
                     print(f"  Client ID: {self.device_data.get('clientId')}")
                     print(f"  Key ID: {self.key_id}")
                     print(f"  New Installation: {self.device_data.get('isNewInstallation')}")
@@ -1799,7 +1799,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     return True
                 else:
                     error_msg = result.get('message', 'Unknown registration error')
-                    print(f"✗ Registration failed: {error_msg}")
+                    print(f"[ERR] Registration failed: {error_msg}")
                     
                     # Handle specific error cases
                     if 'duplicate' in error_msg.lower() or 'already registered' in error_msg.lower():
@@ -1810,7 +1810,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     
                     return False
             else:
-                print(f"✗ Server error: HTTP {response.status_code}")
+                print(f"[ERR] Server error: HTTP {response.status_code}")
                 try:
                     error_detail = response.text[:200]
                     print(f"  Server response: {error_detail}")
@@ -1819,14 +1819,14 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 return False
                 
         except requests.exceptions.ConnectionError:
-            print(f"✗ Connection error: Unable to reach server at {self.api_url}")
+            print(f"[ERR] Connection error: Unable to reach server at {self.api_url}")
             print("  Please check your internet connection and server URL.")
             return False
         except requests.exceptions.Timeout:
-            print(f"✗ Timeout error: Server did not respond within 30 seconds")
+            print(f"[ERR] Timeout error: Server did not respond within 30 seconds")
             return False
         except Exception as e:
-            print(f"✗ Registration error: {e}")
+            print(f"[ERR] Registration error: {e}")
             return False
 
     def create_hidden_install_directory(self):
@@ -1872,11 +1872,11 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             # Update install path in database after directory creation
             self._update_install_path_in_database()
             
-            print("✓ Hidden installation directory created and secured")
+            print("[OK] Hidden installation directory created and secured")
             return True
             
         except Exception as e:
-            print(f"✗ Failed to create hidden directory: {e}")
+            print(f"[ERR] Failed to create hidden directory: {e}")
             return False
 
     def _set_windows_hidden_attributes(self):
@@ -1981,7 +1981,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     except:
                         pass  # Continue with other files if one fails
             
-            print("✓ File system deletion protection enabled")
+            print("[OK] File system deletion protection enabled")
             
         except Exception as e:
             print(f"Warning: Could not set deletion protection ACLs: {e}")
@@ -2060,7 +2060,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
-                    print("✓ Install path updated in database")
+                    print("[OK] Install path updated in database")
                 else:
                     print(f"Warning: Failed to update install path: {result.get('message')}")
             else:
@@ -2091,7 +2091,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             return True
             
         except Exception as e:
-            print(f"✗ Failed to create embedded components: {e}")
+            print(f"[ERR] Failed to create embedded components: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -2104,7 +2104,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         if self.system == "Windows":
             subprocess.run(["attrib", "+S", "+H", str(favicon_utils_path)], 
                         check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        print("✓ Favicon utilities created")
+        print("[OK] Favicon utilities created")
 
     def _create_overlay_manager(self):
         """Create overlay manager file"""
@@ -2115,7 +2115,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         if self.system == "Windows":
             subprocess.run(["attrib", "+S", "+H", str(overlay_path)], 
                         check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        print("✓ Overlay manager created")
+        print("[OK] Overlay manager created")
     def _create_window_manager(self):
         """Create window manager file"""
         window_path = self.install_path / "window_manager.py"
@@ -2125,7 +2125,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         if self.system == "Windows":
             subprocess.run(["attrib", "+S", "+H", str(window_path)], 
                         check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        print("✓ Window manager created")
+        print("[OK] Window manager created")
 
     def _create_system_tray(self):
         """Create system tray file"""
@@ -2136,7 +2136,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         if self.system == "Windows":
             subprocess.run(["attrib", "+S", "+H", str(tray_path)], 
                         check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        print("✓ System tray created")
+        print("[OK] System tray created")
 
     def _create_uninstaller(self):
         """Create uninstaller file"""
@@ -2147,7 +2147,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         if self.system == "Windows":
             subprocess.run(["attrib", "+S", "+H", str(uninstaller_path)], 
                         check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        print("✓ Uninstaller created")
+        print("[OK] Uninstaller created")
     def _create_client_script(self):
         """Create unified cross-platform Client Python script"""
         client_script = self._get_unified_client_code()
@@ -2165,7 +2165,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             # Set executable permissions on Unix-like systems
             os.chmod(client_path, 0o755)
         
-        print("✓ Unified cross-platform client script created")
+        print("[OK] Unified cross-platform client script created")
     
     
     def _create_installer_copy(self):
@@ -2191,7 +2191,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 # Set executable permissions on Unix-like systems
                 os.chmod(installer_copy_path, 0o755)
             
-            print("✓ Installer Python script copy created")
+            print("[OK] Installer Python script copy created")
         
         except Exception as e:
             print(f"Warning: Could not create installer copy: {e}")
@@ -2217,7 +2217,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 # Set appropriate permissions on Unix-like systems
                 os.chmod(dest_icon, 0o644)
             
-            print(f"✓ Icon file created from embedded data: {dest_icon.name}")
+            print(f"[OK] Icon file created from embedded data: {dest_icon.name}")
             return True
                 
         except Exception as e:
@@ -2978,7 +2978,7 @@ class PushNotificationsClient:
                             # Convert to RGBA if not already
                             if image.mode != 'RGBA':
                                 image = image.convert('RGBA')
-                            print(f"✓ Loaded tray icon from: {icon_path}")
+                            print(f"[OK] Loaded tray icon from: {icon_path}")
                             return image
                     except Exception as e:
                         print(f"Warning: Could not load icon from {{icon_path}}: {{e}}")
@@ -3723,7 +3723,7 @@ if __name__ == "__main__":
                 print(f"🔥 Force killing process: {process_id}")
                 proc.kill()
                 
-            print(f"✓ Process terminated: {process_id}")
+            print(f"[OK] Process terminated: {process_id}")
             
         except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
             print(f"Could not terminate process {process_id}: {e}")
@@ -3737,7 +3737,7 @@ if __name__ == "__main__":
                         win32con.FILE_ATTRIBUTE_SYSTEM)
                 
                 win32file.SetFileAttributes(str(file_path), attrs)
-                print(f"✓ Restored attributes for: {Path(file_path).name}")
+                print(f"[OK] Restored attributes for: {Path(file_path).name}")
             
         except Exception as e:
             print(f"Error restoring attributes: {{e}}")
@@ -3801,7 +3801,7 @@ if __name__ == "__main__":
             
             for thread in threads:
                 thread.start()
-                print(f"✓ Started monitoring thread: {thread.name}")
+                print(f"[OK] Started monitoring thread: {thread.name}")
             
             # Main service loop
             while self.running:
@@ -3824,7 +3824,7 @@ if __name__ == "__main__":
     def stop(self):
         """Stop the protection service"""
         self.running = False
-        print("✓ File Protection Service stopped")
+        print("[OK] File Protection Service stopped")
 
 if __name__ == "__main__":
     try:
@@ -3952,14 +3952,14 @@ if __name__ == "__main__":
             derived_key = b'\x00' * len(derived_key)
             demo_key_material = b'\x00' * len(demo_key_material)
             
-            print("✓ AES-256-GCM encrypted vault created")
+            print("[OK] AES-256-GCM encrypted vault created")
             print(f"  Encryption Algorithm: {vault_header['algorithm']}")
             print(f"  Key ID: {self.key_id}")
             
             return True
             
         except Exception as e:
-            print(f"✗ Failed to create encrypted vault: {e}")
+            print(f"[ERR] Failed to create encrypted vault: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -3973,33 +3973,33 @@ if __name__ == "__main__":
         if self.system != "Darwin" and not self.check_admin_privileges():
             print("Administrator privileges required for installation.")
             if not self.restart_with_admin():
-                print("✗ Installation failed: Could not obtain administrator privileges")
+                print("[ERR] Installation failed: Could not obtain administrator privileges")
                 return False
             return True  # Process will restart with admin
         
         if self.system == "Darwin":
-            print("✓ Running with user privileges (macOS install in user directory)")
+            print("[OK] Running with user privileges (macOS install in user directory)")
         else:
-            print("✓ Running with administrator privileges")
+            print("[OK] Running with administrator privileges")
         
         # Validate installation key
         if not self.validate_installation_key():
-            print("✗ Installation failed: Invalid installation key")
+            print("[ERR] Installation failed: Invalid installation key")
             return False
         
         # Register device
         if not self.register_device():
-            print("✗ Installation failed: Device registration failed")
+            print("[ERR] Installation failed: Device registration failed")
             return False
         
         # Create hidden installation directory
         if not self.create_hidden_install_directory():
-            print("✗ Installation failed: Could not create installation directory")
+            print("[ERR] Installation failed: Could not create installation directory")
             return False
         
         # Create embedded client components
         if not self.create_embedded_client_components():
-            print("✗ Installation failed: Could not create client components")
+            print("[ERR] Installation failed: Could not create client components")
             return False
         
         print("✅ Installation completed successfully!")
@@ -4151,7 +4151,7 @@ def notify_installation_failure(installer_instance, stage, error_message):
         if response.status_code == 200:
             result = response.json()
             if result.get('success'):
-                print("✓ Installation failure reported to server")
+                print("[OK] Installation failure reported to server")
                 return True
             else:
                 print(f"Warning: Server failed to log failure: {result.get('message')}")
@@ -4194,7 +4194,7 @@ def create_desktop_shortcuts(installer_instance):
             repair_shortcut.Description = "PushNotifications Installer/Repair"
             repair_shortcut.save()
             
-            print("✓ Desktop shortcuts created")
+            print("[OK] Desktop shortcuts created")
             
         else:
             # Unix-like systems - create .desktop files
@@ -4227,12 +4227,12 @@ Categories=System;
             os.chmod(client_desktop, 0o755)
             os.chmod(repair_desktop, 0o755)
             
-            print("✓ Desktop shortcuts created")
+            print("[OK] Desktop shortcuts created")
         
         return True
         
     except Exception as e:
-        print(f"✗ Failed to create shortcuts: {e}")
+        print(f"[ERR] Failed to create shortcuts: {e}")
         return False
 
 def show_help():
@@ -4359,20 +4359,20 @@ def main():
                         
                         result_int = ctypes.cast(result, ctypes.c_void_p).value or 0
                         if result_int > 32:
-                            print("✓ Administrator privileges requested - elevated window will open")
+                            print("[OK] Administrator privileges requested - elevated window will open")
                             sys.exit(0)
                         else:
-                            print(f"✗ Elevation failed with error code: {result_int}")
+                            print(f"[ERR] Elevation failed with error code: {result_int}")
                             print("Installation cannot proceed without administrator privileges.")
                             input("Press Enter to exit...")
                             sys.exit(1)
                     except Exception as e:
-                        print(f"✗ Elevation failed: {e}")
+                        print(f"[ERR] Elevation failed: {e}")
                         print("Installation cannot proceed without administrator privileges.")
                         input("Press Enter to exit...")
                         sys.exit(1)
                 else:
-                    print("✓ Running with administrator privileges")
+                    print("[OK] Running with administrator privileges")
             except Exception as e:
                 print(f"Error checking administrator privileges: {e}")
                 print("Installation cannot proceed without administrator privileges.")
