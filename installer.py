@@ -1342,16 +1342,16 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 # Use console input for macOS, Linux, and fallback cases
                 print(f"\n📝 Please enter your installation key:")
                 print(f"   (Attempt {attempt} of {max_attempts})")
-                print(f"   Note: Characters will be hidden for security")
-                import getpass
+                print(f"   💡 Tip: You can paste your key using Cmd+V (macOS) or Ctrl+V (Linux)")
+                print(f"   🔒 Note: Key will be visible while typing for paste support")
                 try:
-                    key = getpass.getpass("Installation Key: ").strip()
+                    key = input("Installation Key: ").strip()
+                    # Clear the line after input for security
+                    print("\033[A\033[2K", end="", flush=True)  # Move cursor up and clear line
+                    print("Installation Key: [ENTERED]")  # Show confirmation without revealing key
                 except (EOFError, KeyboardInterrupt):
                     print("\nInstallation cancelled by user.")
                     return False
-                except:
-                    # Fallback to regular input if getpass fails
-                    key = input(f"Installation key (attempt {attempt}/{max_attempts}): ").strip()
             
             if not key:
                 print("Installation key cannot be empty.")
