@@ -2415,11 +2415,11 @@ class OverlayManager:
                 monitors = screeninfo.get_monitors()
             else:
                 # Fallback: create overlay for primary monitor
-                monitors = [type('Monitor', (), {
+                monitors = [type('Monitor', (), {{
                     'x': 0, 'y': 0, 
                     'width': user32.GetSystemMetrics(0),
                     'height': user32.GetSystemMetrics(1)
-                })()]
+                }})()]
             
             root = tk.Tk()
             root.withdraw()  # Hide root window
