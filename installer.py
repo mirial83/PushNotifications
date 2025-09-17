@@ -1260,15 +1260,16 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
-            if GUI_AVAILABLE:
+            # Force console input for macOS and Unix systems due to GUI compatibility issues
+            if self.system == "Windows" and GUI_AVAILABLE:
                 try:
-                    # Set environment variable to suppress tkinter deprecation warning on macOS
+                    # Set environment variable to suppress tkinter deprecation warning
                     os.environ['TK_SILENCE_DEPRECATION'] = '1'
                     
                     root = tk.Tk()
                     root.title("PushNotifications Installation")
                     
-                    # Configure root window for better visibility on macOS
+                    # Configure root window for better visibility
                     root.geometry("400x150")
                     root.attributes('-topmost', True)
                     root.lift()
@@ -1299,7 +1300,19 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     print(f"GUI dialog failed ({e}), falling back to console input")
                     key = input(f"Installation key (attempt {attempt}/{max_attempts}): ").strip()
             else:
-                key = input(f"Installation key (attempt {attempt}/{max_attempts}): ").strip()
+                # Use console input for macOS, Linux, and fallback cases
+                print(f"\n📝 Please enter your installation key:")
+                print(f"   (Attempt {attempt} of {max_attempts})")
+                print(f"   Note: Characters will be hidden for security")
+                import getpass
+                try:
+                    key = getpass.getpass("Installation Key: ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\nInstallation cancelled by user.")
+                    return False
+                except:
+                    # Fallback to regular input if getpass fails
+                    key = input(f"Installation key (attempt {attempt}/{max_attempts}): ").strip()
             
             if not key:
                 print("Installation key cannot be empty.")
