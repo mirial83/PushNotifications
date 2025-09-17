@@ -3548,11 +3548,12 @@ if __name__ == "__main__":
     
     
 def _get_embedded_unix_client_code(self):
-        """Get the embedded Unix client code with full system tray support"""
+        """Get the embedded Unix client code with comprehensive cross-platform functionality"""
         return f'''#!/usr/bin/env python3
 """
-PushNotifications Unix Client
-Full-featured cross-platform client with system tray, notifications, and overlay support
+PushNotifications Cross-Platform Client
+Complete system with notifications, overlay management, security controls, and GUI features
+Version: {INSTALLER_VERSION}
 """
 
 import os
@@ -3561,22 +3562,25 @@ import json
 import time
 import threading
 import subprocess
-from pathlib import Path
-from datetime import datetime
+import platform
 import signal
 import queue
+from pathlib import Path
+from datetime import datetime, timedelta
+import hashlib
 
-# Install and import requirements
+# Install and import requirements with comprehensive error handling
 required_packages = [
     ('requests', 'requests>=2.31.0'),
     ('pystray', 'pystray>=0.19.4'),
-    ('PIL', 'Pillow>=10.0.0')
+    ('PIL', 'Pillow>=10.0.0'),
+    ('psutil', 'psutil>=5.9.0')
 ]
 
 for import_name, pip_name in required_packages:
     try:
         if import_name == 'PIL':
-            from PIL import Image, ImageDraw, ImageFont
+            from PIL import Image, ImageDraw, ImageFont, ImageTk
         else:
             __import__(import_name)
     except ImportError:
@@ -3584,7 +3588,7 @@ for import_name, pip_name in required_packages:
             print(f"Installing {{pip_name}}...")
             subprocess.check_call([sys.executable, '-m', 'pip', 'install', pip_name])
             if import_name == 'PIL':
-                from PIL import Image, ImageDraw, ImageFont
+                from PIL import Image, ImageDraw, ImageFont, ImageTk
             else:
                 __import__(import_name)
         except Exception as e:
@@ -3592,9 +3596,13 @@ for import_name, pip_name in required_packages:
 
 # Core imports
 import requests
+import psutil
+
+# System tray imports
 try:
     import pystray
-    from PIL import Image, ImageDraw
+    from pystray import MenuItem as item
+    from PIL import Image, ImageDraw, ImageTk
     TRAY_AVAILABLE = True
 except ImportError:
     TRAY_AVAILABLE = False
@@ -3603,80 +3611,610 @@ except ImportError:
 # GUI imports for notifications and dialogs
 try:
     import tkinter as tk
-    from tkinter import messagebox, simpledialog
+    from tkinter import messagebox, simpledialog, ttk
     GUI_AVAILABLE = True
 except ImportError:
     GUI_AVAILABLE = False
+    print("Warning: GUI features not available")
 
+# Client configuration
 CLIENT_VERSION = "{INSTALLER_VERSION}"
 API_URL = "{self.api_url}/api/index"
 MAC_ADDRESS = "{self.mac_address}"
 CLIENT_ID = "{self.device_data.get('clientId')}"
 KEY_ID = "{self.key_id}"
 
-class PushNotificationsUnixClient:
+class OverlayManager:
+    """Cross-platform overlay manager for screen blocking"""
+    
+    def __init__(self):
+        self.overlays = []
+        self.active = False
+        self.system = platform.system()
+        
+    def get_screen_info(self):
+        """Get screen information across platforms"""
+        screens = []
+        
+        if GUI_AVAILABLE:
+            try:
+                root = tk.Tk()
+                root.withdraw()
+                
+                # Primary screen
+                width = root.winfo_screenwidth()
+                height = root.winfo_screenheight()
+                screens.append({{'x': 0, 'y': 0, 'width': width, 'height': height}})
+                
+                root.destroy()
+            except Exception as e:
+                print(f"Error getting screen info: {{e}}")
+                # Fallback default
+                screens = [{{'x': 0, 'y': 0, 'width': 1920, 'height': 1080}}]
+        
+        return screens
+    
+    def create_overlay_for_screen(self, screen):
+        """Create overlay window for specific screen"""
+        if not GUI_AVAILABLE:
+            return None
+            
+        try:
+            overlay = tk.Toplevel()
+            overlay.withdraw()  # Hide initially
+            
+            # Configure overlay properties
+            overlay.overrideredirect(True)  # No window decorations
+            overlay.attributes('-alpha', 0.25)  # 25% opacity
+            overlay.attributes('-topmost', True)  # Keep above other windows
+            overlay.configure(bg='gray')
+            
+            # Platform-specific window configuration
+            if self.system == "Darwin":  # macOS
+                try:
+                    # macOS specific window handling
+                    overlay.attributes('-transparent', True)
+                    overlay.attributes('-toolwindow', True)
+                except Exception as e:
+                    print(f"macOS overlay config warning: {{e}}")
+            elif self.system == "Linux":
+                try:
+                    # Linux specific window handling
+                    overlay.attributes('-type', 'dock')
+                except Exception as e:
+                    print(f"Linux overlay config warning: {{e}}")
+            
+            # Position on screen
+            x, y = screen['x'], screen['y']
+            width, height = screen['width'], screen['height']
+            overlay.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
+            
+            # Add click-through behavior
+            overlay.bind("<Button-1>", lambda e: None)
+            overlay.bind("<Key>", lambda e: None)
+            
+            return overlay
+        except Exception as e:
+            print(f"Error creating overlay: {{e}}")
+            return None
+    
+    def show_overlays(self):
+        """Show overlays on all screens"""
+        if self.active or not GUI_AVAILABLE:
+            return
+            
+        try:
+            screens = self.get_screen_info()
+            
+            for screen in screens:
+                overlay = self.create_overlay_for_screen(screen)
+                if overlay:
+                    self.overlays.append(overlay)
+                    overlay.deiconify()  # Show overlay
+            
+            self.active = True
+            print(f"✓ Screen overlay activated on {{len(self.overlays)}} screen(s)")
+            
+        except Exception as e:
+            print(f"Error showing overlays: {{e}}")
+    
+    def hide_overlays(self):
+        """Hide all overlays"""
+        for overlay in self.overlays:
+            try:
+                overlay.destroy()
+            except:
+                pass
+        self.overlays.clear()
+        self.active = False
+        print("✓ Screen overlay deactivated")
+
+class WindowManager:
+    """Cross-platform window and process management"""
+    
+    def __init__(self):
+        self.system = platform.system()
+        self.minimized_windows = []
+        
+        # Cross-platform restricted processes
+        self.restricted_processes = {{
+            'browsers': [
+                'chrome', 'firefox', 'safari', 'opera', 'brave', 'edge', 'chromium',
+                'Chrome', 'Firefox', 'Safari', 'Opera', 'Brave', 'Edge', 'Chromium'
+            ],
+            'vpn': [
+                'openvpn', 'nordvpn', 'expressvpn', 'cyberghost', 'tunnelbear', 'protonvpn',
+                'OpenVPN', 'NordVPN', 'ExpressVPN', 'CyberGhost', 'TunnelBear', 'ProtonVPN'
+            ],
+            'proxy': [
+                'proxifier', 'proxycap', 'sockscap', 'shadowsocks', 'v2ray',
+                'Proxifier', 'ProxyCap', 'SocksCap', 'Shadowsocks', 'V2Ray'
+            ]
+        }}
+        
+        # System processes that should never be terminated
+        self.allowed_processes = [
+            'systemd', 'kernel', 'init', 'launchd', 'WindowServer', 'loginwindow',
+            'Finder', 'Dock', 'SystemUIServer', 'Activity Monitor', 'htop', 'top'
+        ]
+    
+    def minimize_windows(self):
+        """Cross-platform window minimization"""
+        try:
+            if self.system == "Darwin":  # macOS
+                # Use AppleScript to minimize windows
+                applescript = '''
+                tell application "System Events"
+                    set visibleApps to name of every application process whose visible is true
+                    repeat with appName in visibleApps
+                        if appName is not "PushNotifications" and appName is not "Finder" then
+                            try
+                                tell application process appName
+                                    set visible to false
+                                end tell
+                            end try
+                        end if
+                    end repeat
+                end tell
+                '''
+                subprocess.run(['osascript', '-e', applescript], check=False)
+                
+            elif self.system == "Linux":
+                # Use wmctrl if available
+                if subprocess.run(['which', 'wmctrl'], capture_output=True).returncode == 0:
+                    subprocess.run(['wmctrl', '-k', 'on'], check=False)  # Show desktop
+                else:
+                    # Fallback: use xdotool if available
+                    if subprocess.run(['which', 'xdotool'], capture_output=True).returncode == 0:
+                        subprocess.run(['xdotool', 'key', 'Super+d'], check=False)
+                        
+            print("✓ Windows minimized")
+        except Exception as e:
+            print(f"Error minimizing windows: {{e}}")
+    
+    def block_restricted_processes(self, allowed_websites=None):
+        """Block VPN, proxy, and browser processes except allowed websites"""
+        try:
+            blocked_count = 0
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    proc_name = proc.info['name']
+                    
+                    # Check if it's a restricted process
+                    is_restricted = False
+                    for category, processes in self.restricted_processes.items():
+                        if proc_name in processes:
+                            is_restricted = True
+                            break
+                    
+                    if is_restricted and proc_name not in self.allowed_processes:
+                        # For browsers, check if websites are allowed
+                        if proc_name.lower() in [p.lower() for p in self.restricted_processes['browsers']]:
+                            if not allowed_websites:
+                                proc.terminate()
+                                blocked_count += 1
+                                print(f"  ✓ Blocked browser: {{proc_name}} (PID: {{proc.info['pid']}})")
+                        else:
+                            # Terminate VPN/proxy processes
+                            proc.terminate()
+                            blocked_count += 1
+                            print(f"  ✓ Blocked process: {{proc_name}} (PID: {{proc.info['pid']}})")
+                            
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+                    
+            if blocked_count > 0:
+                print(f"✓ Blocked {{blocked_count}} restricted processes")
+        except Exception as e:
+            print(f"Error blocking processes: {{e}}")
+
+class NotificationWindow:
+    """Cross-platform notification window with full GUI controls"""
+    
+    def __init__(self, notification_data, callback_handler):
+        self.data = notification_data
+        self.callback = callback_handler
+        self.window = None
+        self.minimized = False
+        self.website_request_var = None
+        self.system = platform.system()
+        
+    def create_window(self):
+        """Create comprehensive notification window"""
+        if not GUI_AVAILABLE:
+            return
+            
+        try:
+            self.window = tk.Toplevel()
+            self.window.title("Push Notification")
+            
+            # Configure window properties
+            self.window.attributes('-topmost', True)
+            self.window.resizable(False, False)
+            self.window.protocol("WM_DELETE_WINDOW", self.on_close)
+            
+            # Platform-specific window configuration
+            if self.system == "Darwin":  # macOS
+                try:
+                    self.window.attributes('-modified', False)
+                    self.window.attributes('-titlepath', '')
+                except Exception:
+                    pass
+            elif self.system == "Linux":
+                try:
+                    self.window.attributes('-type', 'dialog')
+                except Exception:
+                    pass
+            
+            # Set window size and center it
+            width, height = 450, 350
+            x = (self.window.winfo_screenwidth() // 2) - (width // 2)
+            y = (self.window.winfo_screenheight() // 2) - (height // 2)
+            self.window.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
+            
+            # Modern design theme colors
+            colors = {{
+                'bg': "#ffffff",
+                'header': "#1a73e8",  # Google Blue
+                'text': "#202124",    # Dark Gray
+                'border': "#dadce0",  # Light Gray
+                'button_primary': "#1a73e8",
+                'button_secondary': "#5f6368",
+                'button_warning': "#f29900",
+                'button_danger': "#d93025",
+                'shadow': "#0000001a"  # 10% black shadow
+            }}
+            
+            # Set base window style
+            self.window.configure(bg=colors['bg'])
+            
+            # Header with gradient effect
+            header_height = 60
+            header_frame = tk.Frame(self.window, bg=colors['header'], height=header_height)
+            header_frame.pack(fill=tk.X)
+            header_frame.pack_propagate(False)
+            
+            # Header content with icon and text
+            header_content = tk.Frame(header_frame, bg=colors['header'])
+            header_content.pack(expand=True)
+            
+            # Try to load icon
+            try:
+                icon_path = Path(__file__).parent / "pnicon.png"
+                if icon_path.exists():
+                    icon = Image.open(icon_path)
+                    icon = icon.resize((32, 32), Image.Resampling.LANCZOS)
+                    icon = ImageTk.PhotoImage(icon)
+                    icon_label = tk.Label(header_content, image=icon, bg=colors['header'])
+                    icon_label.image = icon  # Keep reference
+                    icon_label.pack(side=tk.LEFT, padx=(15, 10))
+            except Exception:
+                pass  # Skip icon if not available
+            
+            title_label = tk.Label(header_content, text="🔔 Push Notification", 
+                                 bg=colors['header'], fg="white", 
+                                 font=("Helvetica", 16, "bold"))
+            title_label.pack(side=tk.LEFT, padx=10)
+            
+            # Content area with padding
+            content_frame = tk.Frame(self.window, bg=colors['bg'])
+            content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=15)
+            
+            # Message text with improved typography
+            message_text = self.data.get('message', '')
+            message_text = self._strip_html_and_decode(message_text)
+            
+            # Create text widget for better text rendering
+            message_widget = tk.Text(content_frame, wrap=tk.WORD, 
+                                   font=("Helvetica", 11),
+                                   bg=colors['bg'], fg=colors['text'],
+                                   relief='flat', height=6, bd=1)
+            message_widget.insert('1.0', message_text)
+            message_widget.configure(state='disabled', highlightthickness=1,
+                                   highlightbackground=colors['border'])
+            message_widget.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+            
+            # Allowed websites (if any)
+            allowed_websites = self.data.get('allowedWebsites', [])
+            if allowed_websites:
+                websites_label = tk.Label(content_frame, 
+                                        text=f"✅ Allowed: {{', '.join(allowed_websites)}}", 
+                                        bg=colors['bg'], wraplength=400, justify=tk.LEFT,
+                                        font=("Helvetica", 9), fg="#137333")
+                websites_label.pack(pady=(0, 10))
+            
+            # Define the create_button function
+            def create_button(parent, text, command, color, is_primary=False, icon=None):
+                """Create a modern styled button"""
+                btn_text = f"{{icon}} {{text}}" if icon else text
+                btn = tk.Button(parent, text=btn_text, command=command,
+                              font=("Helvetica", 10, "bold" if is_primary else "normal"),
+                              fg="white" if is_primary else colors['text'],
+                              bg=color if is_primary else colors['bg'],
+                              activebackground=color if is_primary else colors['border'],
+                              activeforeground="white" if is_primary else colors['text'],
+                              relief='flat', bd=0 if is_primary else 1,
+                              padx=20, pady=8)
+                if not is_primary:
+                    btn.configure(highlightthickness=1,
+                                highlightbackground=colors['border'])
+                return btn
+            
+            # Website request section
+            if self.data.get('allowWebsiteRequests', False):
+                request_frame = tk.LabelFrame(content_frame, text="🌐 Request Website Access",
+                                            bg=colors['bg'], fg=colors['text'],
+                                            font=("Helvetica", 10, "bold"))
+                request_frame.pack(fill=tk.X, pady=(10, 15))
+                
+                entry_frame = tk.Frame(request_frame, bg=colors['bg'])
+                entry_frame.pack(fill=tk.X, padx=10, pady=10)
+                
+                self.website_request_var = tk.StringVar()
+                request_entry = tk.Entry(entry_frame,
+                                       textvariable=self.website_request_var,
+                                       font=("Helvetica", 10), bd=1, relief='solid',
+                                       highlightthickness=1,
+                                       highlightbackground=colors['border'])
+                request_entry.pack(fill=tk.X, pady=(0, 10))
+                request_entry.insert(0, "https://")
+                
+                request_button = create_button(entry_frame,
+                                             "Send Request",
+                                             self.request_website_access,
+                                             colors['button_primary'],
+                                             True, "📤")
+                request_button.pack(anchor=tk.E)
+            
+            # Button container with modern styling
+            button_frame = tk.Frame(self.window, bg=colors['bg'])
+            button_frame.pack(fill=tk.X, padx=20, pady=(0, 20))
+            
+            # Left side buttons (Snooze)
+            left_buttons = tk.Frame(button_frame, bg=colors['bg'])
+            left_buttons.pack(side=tk.LEFT)
+            
+            # Snooze dropdown menu
+            snooze_var = tk.StringVar(value="⏰ Snooze")
+            snooze_menu = tk.Menu(self.window, tearoff=0)
+            snooze_options = [("5 minutes", 5), ("15 minutes", 15), ("30 minutes", 30), ("1 hour", 60)]
+            
+            for label, mins in snooze_options:
+                snooze_menu.add_command(
+                    label=f"⏰ {{label}}",
+                    command=lambda m=mins: self.snooze_notification(m)
+                )
+            
+            def show_snooze_menu():
+                try:
+                    snooze_menu.post(snooze_btn.winfo_rootx(),
+                                   snooze_btn.winfo_rooty() + snooze_btn.winfo_height())
+                except Exception as e:
+                    print(f"Error showing snooze menu: {{e}}")
+            
+            snooze_btn = create_button(left_buttons, "Snooze ▾", show_snooze_menu,
+                                     colors['button_warning'], False, "⏰")
+            snooze_btn.pack(side=tk.LEFT, padx=(0, 10))
+            
+            # Right side buttons
+            right_buttons = tk.Frame(button_frame, bg=colors['bg'])
+            right_buttons.pack(side=tk.RIGHT)
+            
+            # Minimize button (if website requests allowed)
+            if self.data.get('allowWebsiteRequests', False):
+                minimize_btn = create_button(right_buttons, "Minimize",
+                                           self.minimize_notification,
+                                           colors['button_secondary'], False, "➖")
+                minimize_btn.pack(side=tk.RIGHT, padx=(10, 0))
+            
+            # Complete button
+            complete_btn = create_button(right_buttons, "Mark Complete",
+                                       self.complete_notification,
+                                       colors['button_primary'], True, "✅")
+            complete_btn.pack(side=tk.RIGHT, padx=(10, 0))
+            
+            # Focus and bring to front
+            self.window.focus_force()
+            self.window.lift()
+            
+        except Exception as e:
+            print(f"Error creating notification window: {{e}}")
+    
+    def _strip_html_and_decode(self, text):
+        """Remove HTML tags and decode HTML entities"""
+        import html
+        import re
+        # Remove HTML tags
+        text = re.sub('<[^<]+?>', '', text)
+        # Decode HTML entities
+        text = html.unescape(text)
+        return text.strip()
+    
+    def request_website_access(self):
+        """Request access to a specific website"""
+        website = self.website_request_var.get().strip()
+        if website and website != "https://":
+            self.callback('request_website', {{
+                'notificationId': self.data.get('id'),
+                'website': website
+            }})
+            if GUI_AVAILABLE:
+                messagebox.showinfo("Request Sent", f"Website access request sent for:\n{{website}}")
+            self.website_request_var.set("https://")
+    
+    def snooze_notification(self, minutes):
+        """Snooze notification for specified minutes"""
+        self.callback('snooze', {{
+            'notificationId': self.data.get('id'),
+            'minutes': minutes
+        }})
+        if GUI_AVAILABLE:
+            messagebox.showinfo("Snoozed", f"Notification snoozed for {{minutes}} minute(s)")
+        self.close()
+    
+    def complete_notification(self):
+        """Mark notification as complete"""
+        self.callback('complete', {{
+            'notificationId': self.data.get('id')
+        }})
+        if GUI_AVAILABLE:
+            messagebox.showinfo("Complete", "Notification marked as complete!")
+        self.close()
+    
+    def minimize_notification(self):
+        """Minimize notification window"""
+        if self.window:
+            self.window.withdraw()
+            self.minimized = True
+    
+    def restore_notification(self):
+        """Restore minimized notification"""
+        if self.window and self.minimized:
+            self.window.deiconify()
+            self.window.lift()
+            self.minimized = False
+    
+    def close(self):
+        """Close notification window"""
+        if self.window:
+            try:
+                self.window.destroy()
+            except:
+                pass
+            self.window = None
+    
+    def on_close(self):
+        """Handle window close event"""
+        self.close()
+
+class PushNotificationsCrossplatformClient:
     def __init__(self):
         self.running = True
         self.notifications = []
+        self.notification_windows = []
         self.tray_icon = None
         self.notification_thread = None
+        self.overlay_manager = OverlayManager()
+        self.window_manager = WindowManager()
+        self.system = platform.system()
         
         # Setup signal handlers
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
         
-        print(f"Push Client v{{CLIENT_VERSION}} initializing...")
+        print(f"\n🚀 PushNotifications Client v{{CLIENT_VERSION}}")
+        print(f"Platform: {{self.system}}")
         print(f"Client ID: {{CLIENT_ID}}")
         print(f"MAC Address: {{MAC_ADDRESS}}")
-        print(f"System Tray: {{'Available' if TRAY_AVAILABLE else 'Not Available'}}")
-        print(f"GUI Support: {{'Available' if GUI_AVAILABLE else 'Not Available'}}")
+        print(f"System Tray: {{'✅ Available' if TRAY_AVAILABLE else '❌ Not Available'}}")
+        print(f"GUI Support: {{'✅ Available' if GUI_AVAILABLE else '❌ Not Available'}}")
     
     def signal_handler(self, signum, frame):
-        print(f"\nReceived signal {{signum}}, shutting down gracefully...")
+        print(f"\n🔄 Received signal {{signum}}, shutting down gracefully...")
         self.running = False
         if self.tray_icon:
             self.tray_icon.stop()
         sys.exit(0)
     
     def create_tray_icon(self):
+        """Create comprehensive system tray icon"""
         if not TRAY_AVAILABLE:
             return None
             
         try:
             # Create icon image
             def create_image():
-                # Create a 64x64 icon
                 width = height = 64
                 image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
                 dc = ImageDraw.Draw(image)
                 
-                # Draw a simple circular icon with "PN" text
-                dc.ellipse([4, 4, width-4, height-4], fill=(70, 130, 180), outline=(50, 100, 150))
+                # Try to load custom icon first
+                try:
+                    icon_path = Path(__file__).parent / "pnicon.png"
+                    if icon_path.exists():
+                        custom_icon = Image.open(icon_path)
+                        custom_icon = custom_icon.resize((width, height), Image.Resampling.LANCZOS)
+                        return custom_icon
+                except Exception:
+                    pass
                 
-                # Add text
+                # Fallback: create custom icon
+                dc.ellipse([4, 4, width-4, height-4], fill=(26, 115, 232), outline=(23, 103, 209))
+                
+                # Add notification badge if there are active notifications
+                active_count = len([n for n in self.notifications if not n.get('completed', False)])
+                if active_count > 0:
+                    # Red notification badge
+                    badge_size = 20
+                    dc.ellipse([width-badge_size-2, 2, width-2, badge_size+2], fill=(234, 67, 53))
+                    
+                    # Badge text
+                    badge_text = str(min(active_count, 99))
+                    try:
+                        font = ImageFont.load_default()
+                        bbox = dc.textbbox((0, 0), badge_text, font=font)
+                        text_width = bbox[2] - bbox[0]
+                        text_height = bbox[3] - bbox[1]
+                        x = width - badge_size//2 - text_width//2
+                        y = badge_size//2 - text_height//2
+                        dc.text((x, y), badge_text, fill='white', font=font)
+                    except:
+                        dc.text((width-15, 8), badge_text, fill='white')
+                
+                # Add "PN" text
                 try:
                     font = ImageFont.load_default()
                     bbox = dc.textbbox((0, 0), "PN", font=font)
                     text_width = bbox[2] - bbox[0]
                     text_height = bbox[3] - bbox[1]
                     x = (width - text_width) // 2
-                    y = (height - text_height) // 2
+                    y = (height - text_height) // 2 + 5
                     dc.text((x, y), "PN", fill='white', font=font)
                 except:
-                    dc.text((width//2-12, height//2-8), "PN", fill='white')
+                    dc.text((width//2-12, height//2-3), "PN", fill='white')
                 
                 return image
             
-            # Create menu
+            # Create comprehensive menu
             menu = pystray.Menu(
-                pystray.MenuItem('Show Status', self.show_status),
-                pystray.MenuItem('Mark Complete', self.mark_complete),
-                pystray.MenuItem('Request Website', self.request_website),
+                item('📊 Show Status', self.show_status),
+                item('📋 Show Notifications', self.show_notification_list),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem('Settings', self.show_settings),
-                pystray.MenuItem('About', self.show_about),
+                item('✅ Mark Complete', self.mark_complete_tray),
+                item('🌐 Request Website', self.request_website_tray),
+                item('⏰ Snooze All', self.snooze_all_tray),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem('Quit', self.quit_application)
+                item('🔒 Screen Control', pystray.Menu(
+                    item('🟢 Show Overlay', self.show_overlay_tray),
+                    item('🔴 Hide Overlay', self.hide_overlay_tray),
+                    item('➖ Minimize Windows', self.minimize_windows_tray)
+                )),
+                pystray.Menu.SEPARATOR,
+                item('⚙️ Settings', self.show_settings),
+                item('ℹ️ About', self.show_about),
+                pystray.Menu.SEPARATOR,
+                item('🔄 Restart', self.restart_client),
+                item('❌ Quit', self.quit_application)
             )
             
             return pystray.Icon("PushNotifications", create_image(), "PushNotifications Client", menu)
@@ -3685,31 +4223,92 @@ class PushNotificationsUnixClient:
             return None
     
     def show_status(self, icon=None, item=None):
+        """Show comprehensive client status"""
         active_count = len([n for n in self.notifications if not n.get('completed', False)])
+        
+        status_info = f"""PushNotifications Client Status
+
+✅ Version: {{CLIENT_VERSION}}
+🆔 Client ID: {{CLIENT_ID}}
+📶 Status: Running
+📋 Active Notifications: {{active_count}}
+💻 Platform: {{self.system}}
+🔒 Overlay: {{'Active' if self.overlay_manager.active else 'Inactive'}}
+🎯 System Tray: {{'Available' if TRAY_AVAILABLE else 'Not Available'}}
+🖥️ GUI: {{'Available' if GUI_AVAILABLE else 'Not Available'}}"""
+        
         if GUI_AVAILABLE:
             try:
                 root = tk.Tk()
                 root.withdraw()
-                messagebox.showinfo(
-                    "Push Client Status", 
-                    f"Push Client v{{CLIENT_VERSION}}\n"
-                    f"Client ID: {{CLIENT_ID}}\n"
-                    f"Status: Running\n"
-                    f"Active Notifications: {{active_count}}"
-                )
+                messagebox.showinfo("Client Status", status_info)
                 root.destroy()
             except Exception as e:
                 print(f"Error showing status dialog: {{e}}")
         else:
-            print(f"Status: Running, {{active_count}} active notifications")
+            print(status_info)
     
-    def mark_complete(self, icon=None, item=None):
+    def show_notification_list(self, icon=None, item=None):
+        """Show list of active notifications"""
+        active_notifications = [n for n in self.notifications if not n.get('completed', False)]
+        
+        if not active_notifications:
+            if GUI_AVAILABLE:
+                try:
+                    root = tk.Tk()
+                    root.withdraw()
+                    messagebox.showinfo("Notifications", "No active notifications")
+                    root.destroy()
+                except:
+                    pass
+            else:
+                print("No active notifications")
+            return
+        
+        if GUI_AVAILABLE:
+            try:
+                # Create notification list window
+                list_window = tk.Toplevel()
+                list_window.title("Active Notifications")
+                list_window.geometry("500x400")
+                list_window.attributes('-topmost', True)
+                
+                # Header
+                tk.Label(list_window, text="📋 Active Notifications", 
+                        font=("Helvetica", 14, "bold")).pack(pady=10)
+                
+                # Scrollable list
+                frame = tk.Frame(list_window)
+                frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+                
+                scrollbar = tk.Scrollbar(frame)
+                scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+                
+                listbox = tk.Listbox(frame, yscrollcommand=scrollbar.set, 
+                                   font=("Helvetica", 10))
+                listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+                scrollbar.config(command=listbox.yview)
+                
+                for i, notif in enumerate(active_notifications):
+                    message = notif.get('message', 'No message')[:100]
+                    if len(notif.get('message', '')) > 100:
+                        message += "..."
+                    listbox.insert(tk.END, f"{{i+1}}. {{message}}")
+                
+                # Close button
+                tk.Button(list_window, text="Close", 
+                         command=list_window.destroy).pack(pady=10)
+                
+            except Exception as e:
+                print(f"Error showing notification list: {{e}}")
+    
+    def mark_complete_tray(self, icon=None, item=None):
+        """Mark first notification as complete from tray"""
         active_notifications = [n for n in self.notifications if not n.get('completed', False)]
         if active_notifications:
             try:
-                # Mark first active notification as complete
                 notif_id = active_notifications[0].get('id')
-                self.complete_notification(notif_id)
+                self.complete_notification_by_id(notif_id)
             except Exception as e:
                 print(f"Error marking notification complete: {{e}}")
         else:
@@ -3722,296 +4321,1001 @@ class PushNotificationsUnixClient:
                 except:
                     pass
     
-    def request_website(self, icon=None, item=None):
+    def request_website_tray(self, icon=None, item=None):
+        """Request website access from tray"""
         if GUI_AVAILABLE:
             try:
                 root = tk.Tk()
                 root.withdraw()
                 website = simpledialog.askstring(
                     "Website Access Request",
-                    "Enter the website URL you want to request access to:",
+                    "Enter the website URL:",
                     initialvalue="https://"
                 )
                 root.destroy()
                 
-                if website:
+                if website and website != "https://":
                     self.send_website_request(website)
-                    messagebox.showinfo("Request Sent", f"Website access request sent for: {{website}}")
+                    messagebox.showinfo("Request Sent", f"Website access request sent for:\n{{website}}")
             except Exception as e:
                 print(f"Error requesting website access: {{e}}")
     
+    def snooze_all_tray(self, icon=None, item=None):
+        """Snooze all notifications from tray"""
+        active_notifications = [n for n in self.notifications if not n.get('completed', False)]
+        if active_notifications:
+            if GUI_AVAILABLE:
+                try:
+                    root = tk.Tk()
+                    root.withdraw()
+                    minutes = simpledialog.askinteger(
+                        "Snooze All Notifications",
+                        "Snooze all notifications for how many minutes?",
+                        initialvalue=15, minvalue=1, maxvalue=1440
+                    )
+                    root.destroy()
+                    
+                    if minutes:
+                        for notif in active_notifications:
+                            self.snooze_notification_by_id(notif.get('id'), minutes)
+                        messagebox.showinfo("Snoozed", f"All notifications snoozed for {{minutes}} minute(s)")
+                except Exception as e:
+                    print(f"Error snoozing notifications: {{e}}")
+        else:
+            if GUI_AVAILABLE:
+                try:
+                    root = tk.Tk()
+                    root.withdraw()
+                    messagebox.showinfo("No Notifications", "No active notifications to snooze.")
+                    root.destroy()
+                except:
+                    pass
+    
+    def show_overlay_tray(self, icon=None, item=None):
+        """Show screen overlay from tray"""
+        self.overlay_manager.show_overlays()
+    
+    def hide_overlay_tray(self, icon=None, item=None):
+        """Hide screen overlay from tray"""
+        self.overlay_manager.hide_overlays()
+    
+    def minimize_windows_tray(self, icon=None, item=None):
+        """Minimize windows from tray"""
+        self.window_manager.minimize_windows()
+    
     def show_settings(self, icon=None, item=None):
+        """Show comprehensive settings window"""
         if GUI_AVAILABLE:
             try:
-                root = tk.Tk()
-                root.title("PushNotifications Settings")
-                root.geometry("400x300")
+                settings_window = tk.Toplevel()
+                settings_window.title("PushNotifications Settings")
+                settings_window.geometry("500x600")
+                settings_window.attributes('-topmost', True)
                 
-                tk.Label(root, text="PushNotifications Settings", font=("Arial", 14, "bold")).pack(pady=10)
+                # Header
+                tk.Label(settings_window, text="⚙️ PushNotifications Settings", 
+                        font=("Helvetica", 16, "bold")).pack(pady=10)
                 
-                info_frame = tk.LabelFrame(root, text="Client Information")
-                info_frame.pack(fill=tk.X, padx=10, pady=5)
+                # Create notebook for tabs
+                notebook = ttk.Notebook(settings_window)
+                notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
                 
-                tk.Label(info_frame, text=f"Version: {{CLIENT_VERSION}}").pack(anchor=tk.W, padx=5)
-                tk.Label(info_frame, text=f"Client ID: {{CLIENT_ID}}").pack(anchor=tk.W, padx=5)
-                tk.Label(info_frame, text=f"Status: Running").pack(anchor=tk.W, padx=5)
+                # Client Info tab
+                info_frame = tk.Frame(notebook, bg='white')
+                notebook.add(info_frame, text="Client Info")
                 
-                tk.Button(root, text="Close", command=root.destroy).pack(pady=10)
+                info_data = [
+                    ("Version", CLIENT_VERSION),
+                    ("Client ID", CLIENT_ID),
+                    ("Platform", self.system),
+                    ("Status", "Running"),
+                    ("Active Notifications", len([n for n in self.notifications if not n.get('completed', False)])),
+                    ("System Tray", "Available" if TRAY_AVAILABLE else "Not Available"),
+                    ("GUI Support", "Available" if GUI_AVAILABLE else "Not Available")
+                ]
                 
-                root.mainloop()
+                for i, (key, value) in enumerate(info_data):
+                    row_frame = tk.Frame(info_frame, bg='white')
+                    row_frame.pack(fill=tk.X, padx=20, pady=5)
+                    tk.Label(row_frame, text=f"{{key}}:", font=("Helvetica", 10, "bold"), 
+                           bg='white', anchor='w').pack(side=tk.LEFT)
+                    tk.Label(row_frame, text=str(value), font=("Helvetica", 10), 
+                           bg='white', anchor='e').pack(side=tk.RIGHT)
+                
+                # Controls tab
+                controls_frame = tk.Frame(notebook, bg='white')
+                notebook.add(controls_frame, text="Controls")
+                
+                tk.Label(controls_frame, text="Screen Control", 
+                        font=("Helvetica", 12, "bold"), bg='white').pack(pady=10)
+                
+                tk.Button(controls_frame, text="🟢 Show Screen Overlay", 
+                         command=self.show_overlay_tray).pack(pady=5)
+                tk.Button(controls_frame, text="🔴 Hide Screen Overlay", 
+                         command=self.hide_overlay_tray).pack(pady=5)
+                tk.Button(controls_frame, text="➖ Minimize All Windows", 
+                         command=self.minimize_windows_tray).pack(pady=5)
+                
+                tk.Label(controls_frame, text="Notifications", 
+                        font=("Helvetica", 12, "bold"), bg='white').pack(pady=(20, 10))
+                
+                tk.Button(controls_frame, text="📋 Show Notification List", 
+                         command=self.show_notification_list).pack(pady=5)
+                tk.Button(controls_frame, text="✅ Mark All Complete", 
+                         command=self.mark_all_complete).pack(pady=5)
+                
+                # Close button
+                tk.Button(settings_window, text="Close", 
+                         command=settings_window.destroy).pack(pady=10)
+                
             except Exception as e:
                 print(f"Error showing settings: {{e}}")
     
     def show_about(self, icon=None, item=None):
+        """Show comprehensive about dialog"""
         if GUI_AVAILABLE:
             try:
                 root = tk.Tk()
                 root.withdraw()
-                messagebox.showinfo(
-                    "About PushNotifications", 
-                    f"PushNotifications Client v{{CLIENT_VERSION}}\n\n"
-                    f"Cross-platform notification client\n"
-                    f"with system tray integration.\n\n"
-                    f"Platform: {{os.uname().sysname if hasattr(os, 'uname') else 'Unknown'}}\n"
-                    f"Client ID: {{CLIENT_ID}}"
-                )
+                about_text = f"""PushNotifications Client
+
+🚀 Version: {{CLIENT_VERSION}}
+💻 Platform: {{self.system}}
+🆔 Client ID: {{CLIENT_ID[:8]}}...
+
+📱 Cross-platform notification client with advanced features:
+• System tray integration
+• Screen overlay management
+• Window and process control
+• Website access requests
+• Multi-platform notifications
+
+🔧 System Capabilities:
+• GUI Support: {{'Yes' if GUI_AVAILABLE else 'No'}}
+• System Tray: {{'Yes' if TRAY_AVAILABLE else 'No'}}
+• Process Management: Yes
+• Screen Overlay: {{'Yes' if GUI_AVAILABLE else 'No'}}
+
+© 2024 PushNotifications"""
+                
+                messagebox.showinfo("About PushNotifications", about_text)
                 root.destroy()
             except Exception as e:
                 print(f"Error showing about dialog: {{e}}")
     
+    def restart_client(self, icon=None, item=None):
+        """Restart the client"""
+        if GUI_AVAILABLE:
+            try:
+                root = tk.Tk()
+                root.withdraw()
+                if messagebox.askyesno("Restart Client", "Are you sure you want to restart the client?"):
+                    print("🔄 Restarting client...")
+                    self.running = False
+                    if self.tray_icon:
+                        self.tray_icon.stop()
+                    
+                    # Restart script
+                    python = sys.executable
+                    os.execl(python, python, *sys.argv)
+                root.destroy()
+            except Exception as e:
+                print(f"Error restarting client: {{e}}")
+    
     def quit_application(self, icon=None, item=None):
-        print("Shutting down client...")
+        """Quit the application"""
+        print("🔄 Shutting down client...")
         self.running = False
         if self.tray_icon:
             self.tray_icon.stop()
     
     def check_notifications(self):
-        """Background thread for checking notifications"""
+        """Background thread for checking notifications with comprehensive handling"""
         while self.running:
             try:
                 response = requests.post(API_URL, json={{
                     'action': 'getClientNotifications',
                     'clientId': CLIENT_ID,
                     'macAddress': MAC_ADDRESS
-                }}, timeout=10)
+                }}, timeout=15)
                 
                 if response.status_code == 200:
                     result = response.json()
                     if result.get('success'):
                         notifications = result.get('data', [])
+                        
+                        # Process each notification
                         for notif in notifications:
                             if not self.is_notification_seen(notif):
-                                self.show_notification(notif)
+                                print(f"📨 New notification: {{notif.get('message', '')[:50]}}...")
+                                
+                                # Show notification based on available methods
+                                self.show_comprehensive_notification(notif)
                                 self.notifications.append(notif)
+                                
+                                # Handle special notification actions
+                                self.handle_notification_actions(notif)
+                        
+                        # Update tray icon to reflect active notifications
+                        if self.tray_icon and TRAY_AVAILABLE:
+                            try:
+                                self.tray_icon.icon = self.create_tray_icon().icon
+                            except:
+                                pass
                             
-                time.sleep(30)
+                time.sleep(30)  # Check every 30 seconds
+                
             except Exception as e:
-                print(f"Error checking notifications: {{e}}")
-                time.sleep(60)
+                print(f"❌ Error checking notifications: {{e}}")
+                time.sleep(60)  # Wait longer on error
     
-    def is_notification_seen(self, notification):
-        notif_id = notification.get('id')
-        return any(n.get('id') == notif_id for n in self.notifications)
+    def handle_notification_actions(self, notification):
+        """Handle special notification actions and commands"""
+        message = notification.get('message', '').lower()
+        
+        # Check for special commands in notification
+        if 'show_overlay' in message or 'block_screen' in message:
+            self.overlay_manager.show_overlays()
+        elif 'hide_overlay' in message or 'unblock_screen' in message:
+            self.overlay_manager.hide_overlays()
+        elif 'minimize_windows' in message:
+            self.window_manager.minimize_windows()
+        elif 'block_processes' in message:
+            allowed_websites = notification.get('allowedWebsites', [])
+            self.window_manager.block_restricted_processes(allowed_websites)
     
-    def show_notification(self, notification):
+    def show_comprehensive_notification(self, notification):
+        """Show notification using the best available method"""
         message = notification.get('message', '')
         title = notification.get('title', 'Push Notification')
         
-        print(f"📢 {{title}}: {{message}}")
+        print(f"🔔 {{title}}: {{message}}")
         
-        # Try multiple notification methods
-        notification_shown = False
+        # Method 1: GUI Window (most comprehensive)
+        if GUI_AVAILABLE and notification.get('showWindow', True):
+            try:
+                notif_window = NotificationWindow(notification, self.notification_callback)
+                notif_window.create_window()
+                self.notification_windows.append(notif_window)
+                return
+            except Exception as e:
+                print(f"Error creating GUI notification: {{e}}")
         
+        # Method 2: System notifications (fallback)
+        self.show_system_notification(title, message)
+    
+    def show_system_notification(self, title, message):
+        """Show system-native notification"""
         try:
-            # Method 1: notify-send (most common on Linux)
-            if subprocess.run(['which', 'notify-send'], capture_output=True).returncode == 0:
-                subprocess.run([
-                    'notify-send', 
-                    '--app-name=PushNotifications',
-                    '--urgency=normal',
-                    '--expire-time=10000',
-                    title, 
-                    message
-                ], check=False)
-                notification_shown = True
-            
-            # Method 2: osascript for macOS
-            elif subprocess.run(['which', 'osascript'], capture_output=True).returncode == 0:
-                # Escape quotes in the message
-                escaped_message = message.replace('"', '\\"')
-                escaped_title = title.replace('"', '\\"')
-                applescript = f'display notification "{{escaped_message}}" with title "{{escaped_title}}" sound name "default"'
-                subprocess.run(['osascript', '-e', applescript], check=False)
-                notification_shown = True
-            
-            # Method 3: terminal-notifier for macOS (if installed via Homebrew)
-            elif subprocess.run(['which', 'terminal-notifier'], capture_output=True).returncode == 0:
-                subprocess.run([
-                    'terminal-notifier',
-                    '-title', title,
-                    '-message', message,
-                    '-group', 'pushnotifications'
-                ], check=False)
-                notification_shown = True
-            
-            # Method 4: Fallback to zenity dialog (GUI systems)
-            elif subprocess.run(['which', 'zenity'], capture_output=True).returncode == 0:
-                subprocess.run([
-                    'zenity', '--info',
-                    '--title=' + title,
-                    '--text=' + message,
-                    '--timeout=10'
-                ], check=False)
-                notification_shown = True
-            
-            # Method 5: kdialog for KDE environments
-            elif subprocess.run(['which', 'kdialog'], capture_output=True).returncode == 0:
-                subprocess.run([
-                    'kdialog', '--msgbox', message,
-                    '--title', title
-                ], check=False)
-                notification_shown = True
+            if self.system == "Darwin":  # macOS
+                # Try multiple macOS notification methods
+                methods = [
+                    # Method 1: AppleScript notification
+                    lambda: subprocess.run([
+                        'osascript', '-e',
+                        f'display notification "{{message.replace(chr(34), chr(92) + chr(34))}}" with title "{{title.replace(chr(34), chr(92) + chr(34))}}" sound name "default"'
+                    ], check=False),
+                    
+                    # Method 2: terminal-notifier (if available)
+                    lambda: subprocess.run([
+                        'terminal-notifier', '-title', title, '-message', message, '-group', 'pushnotifications'
+                    ], check=False) if subprocess.run(['which', 'terminal-notifier'], capture_output=True).returncode == 0 else None
+                ]
                 
+                for method in methods:
+                    try:
+                        result = method()
+                        if result is not None:
+                            return
+                    except:
+                        continue
+            
+            elif self.system == "Linux":
+                # Try multiple Linux notification methods
+                methods = [
+                    # Method 1: notify-send (most common)
+                    lambda: subprocess.run([
+                        'notify-send', '--app-name=PushNotifications',
+                        '--urgency=normal', '--expire-time=10000',
+                        title, message
+                    ], check=False) if subprocess.run(['which', 'notify-send'], capture_output=True).returncode == 0 else None,
+                    
+                    # Method 2: zenity dialog
+                    lambda: subprocess.run([
+                        'zenity', '--info', f'--title={{title}}', f'--text={{message}}', '--timeout=10'
+                    ], check=False) if subprocess.run(['which', 'zenity'], capture_output=True).returncode == 0 else None,
+                    
+                    # Method 3: kdialog (KDE)
+                    lambda: subprocess.run([
+                        'kdialog', '--msgbox', message, '--title', title
+                    ], check=False) if subprocess.run(['which', 'kdialog'], capture_output=True).returncode == 0 else None
+                ]
+                
+                for method in methods:
+                    try:
+                        result = method()
+                        if result is not None:
+                            return
+                    except:
+                        continue
         except Exception as e:
             print(f"Error showing system notification: {{e}}")
         
         # Final fallback: Terminal output with bell
-        if not notification_shown:
-            print(f"\a🔔 {{title}}: {{message}}")
+        print(f"\a🔔 {{title}}: {{message}}")
     
-    def complete_notification(self, notification_id):
+    def notification_callback(self, action, data):
+        """Handle callbacks from notification windows"""
         try:
-            requests.post(API_URL, json={{
+            if action == 'complete':
+                notif_id = data.get('notificationId')
+                self.complete_notification_by_id(notif_id)
+            elif action == 'snooze':
+                notif_id = data.get('notificationId')
+                minutes = data.get('minutes')
+                self.snooze_notification_by_id(notif_id, minutes)
+            elif action == 'request_website':
+                website = data.get('website')
+                self.send_website_request(website)
+        except Exception as e:
+            print(f"Error handling notification callback: {{e}}")
+    
+    def is_notification_seen(self, notification):
+        """Check if notification has been seen before"""
+        notif_id = notification.get('id')
+        return any(n.get('id') == notif_id for n in self.notifications)
+    
+    def complete_notification_by_id(self, notification_id):
+        """Mark specific notification as complete"""
+        try:
+            response = requests.post(API_URL, json={{
                 'action': 'markNotificationComplete',
                 'clientId': CLIENT_ID,
                 'macAddress': MAC_ADDRESS,
                 'notificationId': notification_id
             }}, timeout=10)
-            print(f"✅ Notification {{notification_id}} marked complete")
+            
+            if response.status_code == 200:
+                # Update local notification status
+                for notif in self.notifications:
+                    if notif.get('id') == notification_id:
+                        notif['completed'] = True
+                        break
+                print(f"✅ Notification {{notification_id}} marked complete")
+            else:
+                print(f"❌ Failed to mark notification complete: HTTP {{response.status_code}}")
+                
         except Exception as e:
-            print(f"Error completing notification: {{e}}")
+            print(f"❌ Error completing notification: {{e}}")
+    
+    def snooze_notification_by_id(self, notification_id, minutes):
+        """Snooze specific notification"""
+        try:
+            response = requests.post(API_URL, json={{
+                'action': 'snoozeNotification',
+                'clientId': CLIENT_ID,
+                'macAddress': MAC_ADDRESS,
+                'notificationId': notification_id,
+                'minutes': minutes
+            }}, timeout=10)
+            
+            if response.status_code == 200:
+                print(f"⏰ Notification {{notification_id}} snoozed for {{minutes}} minute(s)")
+            else:
+                print(f"❌ Failed to snooze notification: HTTP {{response.status_code}}")
+                
+        except Exception as e:
+            print(f"❌ Error snoozing notification: {{e}}")
+    
+    def mark_all_complete(self):
+        """Mark all active notifications as complete"""
+        active_notifications = [n for n in self.notifications if not n.get('completed', False)]
+        
+        if not active_notifications:
+            if GUI_AVAILABLE:
+                try:
+                    root = tk.Tk()
+                    root.withdraw()
+                    messagebox.showinfo("No Notifications", "No active notifications to complete.")
+                    root.destroy()
+                except:
+                    pass
+            return
+        
+        for notif in active_notifications:
+            self.complete_notification_by_id(notif.get('id'))
+        
+        if GUI_AVAILABLE:
+            try:
+                root = tk.Tk()
+                root.withdraw()
+                messagebox.showinfo("Complete", f"Marked {{len(active_notifications)}} notification(s) as complete.")
+                root.destroy()
+            except:
+                pass
     
     def send_website_request(self, website_url):
+        """Send website access request to server"""
         try:
-            requests.post(API_URL, json={{
+            response = requests.post(API_URL, json={{
                 'action': 'requestWebsiteAccess',
                 'clientId': CLIENT_ID,
                 'macAddress': MAC_ADDRESS,
                 'websiteUrl': website_url,
                 'timestamp': datetime.now().isoformat()
             }}, timeout=10)
-            print(f"🌐 Website access requested: {{website_url}}")
+            
+            if response.status_code == 200:
+                print(f"🌐 Website access requested: {{website_url}}")
+            else:
+                print(f"❌ Failed to request website access: HTTP {{response.status_code}}")
+                
         except Exception as e:
-            print(f"Error requesting website access: {{e}}")
+            print(f"❌ Error requesting website access: {{e}}")
     
     def run(self):
-        print(f"\n🚀 Push Client v{{CLIENT_VERSION}} starting...")
+        """Main client run method"""
+        print(f"\n🚀 Starting PushNotifications Client v{{CLIENT_VERSION}}...")
+        print(f"🔧 Initializing components...")
         
         # Start notification checking thread
         self.notification_thread = threading.Thread(target=self.check_notifications, daemon=True)
         self.notification_thread.start()
+        print("✅ Notification checker started")
         
         if TRAY_AVAILABLE:
             # Run with system tray
             print("✅ Starting with system tray support")
-            self.tray_icon = self.create_tray_icon()
-            if self.tray_icon:
-                self.tray_icon.run()
-            else:
-                print("⚠️ System tray failed, falling back to console mode")
+            try:
+                self.tray_icon = self.create_tray_icon()
+                if self.tray_icon:
+                    print("🎯 System tray icon created")
+                    print("\n🔄 Client is now running in the background")
+                    print("📱 Check your system tray for the PushNotifications icon")
+                    print("\n👋 To exit, right-click the tray icon and select 'Quit'")
+                    self.tray_icon.run()  # This blocks until the icon is stopped
+                else:
+                    print("⚠️ System tray failed, falling back to console mode")
+                    self.run_console_mode()
+            except Exception as e:
+                print(f"❌ System tray error: {{e}}")
+                print("🔄 Falling back to console mode")
                 self.run_console_mode()
         else:
             # Run in console mode
-            print("📟 Starting in console mode (no system tray)")
+            print("📟 Starting in console mode (system tray not available)")
             self.run_console_mode()
     
     def run_console_mode(self):
-        print("\n📋 Console Commands:")
-        print("  'status' - Show client status")
-        print("  'complete' - Mark first notification complete")
-        print("  'website' - Request website access")
-        print("  'quit' - Exit client")
-        print("\nPress Ctrl+C or type 'quit' to exit.\n")
+        """Run client in console/terminal mode"""
+        print("\n" + "="*60)
+        print("🖥️  CONSOLE MODE - PushNotifications Client")
+        print("="*60)
+        print("📋 Available Commands:")
+        print("  📊 'status'    - Show client status")
+        print("  📋 'list'      - List active notifications")
+        print("  ✅ 'complete'  - Mark first notification complete")
+        print("  ⏰ 'snooze'    - Snooze first notification")
+        print("  🌐 'website'   - Request website access")
+        print("  🟢 'overlay'   - Toggle screen overlay")
+        print("  ➖ 'minimize'  - Minimize all windows")
+        print("  ❓ 'help'      - Show this help")
+        print("  ❌ 'quit'      - Exit client")
+        print("\n⌨️  Press Ctrl+C or type 'quit' to exit\n")
         
         try:
             while self.running:
                 try:
                     cmd = input("PushClient> ").strip().lower()
+                    
                     if cmd == 'status':
                         self.show_status()
+                    elif cmd == 'list':
+                        self.show_notification_list()
                     elif cmd == 'complete':
-                        self.mark_complete()
+                        self.mark_complete_tray()
+                    elif cmd == 'snooze':
+                        try:
+                            minutes = int(input("Snooze for how many minutes? (default 15): ") or 15)
+                            active_notifications = [n for n in self.notifications if not n.get('completed', False)]
+                            if active_notifications:
+                                self.snooze_notification_by_id(active_notifications[0].get('id'), minutes)
+                            else:
+                                print("No active notifications to snooze.")
+                        except ValueError:
+                            print("Invalid number. Please enter a valid number of minutes.")
                     elif cmd == 'website':
-                        url = input("Website URL: ")
-                        if url:
+                        url = input("Website URL (https://): ").strip()
+                        if url and url != "https://":
                             self.send_website_request(url)
-                    elif cmd in ['quit', 'exit']:
+                        else:
+                            print("Invalid URL provided.")
+                    elif cmd == 'overlay':
+                        if self.overlay_manager.active:
+                            self.overlay_manager.hide_overlays()
+                        else:
+                            self.overlay_manager.show_overlays()
+                    elif cmd == 'minimize':
+                        self.window_manager.minimize_windows()
+                    elif cmd in ['quit', 'exit', 'q']:
                         break
-                    elif cmd == 'help':
-                        print("Available commands: status, complete, website, quit")
+                    elif cmd in ['help', '?', 'h']:
+                        print("\n📋 Available commands: status, list, complete, snooze, website, overlay, minimize, help, quit")
                     else:
-                        print("Unknown command. Type 'help' for available commands.")
+                        if cmd:
+                            print(f"❓ Unknown command: '{{cmd}}'. Type 'help' for available commands.")
+                        
                 except EOFError:
                     break
                 except KeyboardInterrupt:
                     break
+                except Exception as e:
+                    print(f"❌ Command error: {{e}}")
+                    
         except KeyboardInterrupt:
             pass
         
-        print("\n👋 Client shutting down...")
+        print("\n👋 PushNotifications Client shutting down...")
+        self.running = False
+        # Clean up resources
+        self.overlay_manager.hide_overlays()
+        for window in self.notification_windows:
+            window.close()
 
 if __name__ == "__main__":
     try:
-        client = PushNotificationsUnixClient()
+        client = PushNotificationsCrossplatformClient()
         client.run()
     except KeyboardInterrupt:
         print("\n👋 Client terminated by user")
     except Exception as e:
-        print(f"\n❌ Client error: {{e}}")
+        print(f"\n❌ Fatal client error: {{e}}")
         import traceback
         traceback.print_exc()
+        sys.exit(1)
 '''
     
 def _get_embedded_unix_uninstaller_code(self):
-        """Get the embedded Unix uninstaller code"""
+        """Get the embedded Unix uninstaller code with full approval system"""
+        # Properly format variables for the embedded code
+        api_url = self.api_url
+        mac_address = self.mac_address
+        client_id = self.device_data.get('clientId', 'unknown')
+        key_id = self.key_id
+        
         return f'''#!/usr/bin/env python3
 """
-PushNotifications Unix Uninstaller
+PushNotifications Cross-Platform Uninstaller
+Full-featured uninstaller with server approval system
 """
 
 import os
 import sys
+import json
+import time
 import shutil
+import subprocess
+import platform
 from pathlib import Path
+from datetime import datetime
 
-class UnixUninstaller:
+# Install and import requirements
+try:
+    import requests
+except ImportError:
+    print("Installing requests...")
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'requests'])
+    import requests
+
+# GUI imports for dialogs
+try:
+    import tkinter as tk
+    from tkinter import messagebox
+    GUI_AVAILABLE = True
+except ImportError:
+    GUI_AVAILABLE = False
+
+API_URL = "{api_url}/api/index"
+MAC_ADDRESS = "{mac_address}"
+CLIENT_ID = "{client_id}"
+KEY_ID = "{key_id}"
+
+class PushNotificationsUnixUninstaller:
     def __init__(self):
         self.install_path = Path(__file__).parent
+        self.system = platform.system()
+        print(f"PushNotifications Uninstaller ({self.system})")
+        print(f"Installation path: {self.install_path}")
         
-    def run(self):
-        print("Uninstalling PushNotifications...")
+    def show_message(self, title, message, message_type="info"):
+        """Show message using appropriate method for the platform"""
+        print(f"{title}: {message}")
+        
+        if GUI_AVAILABLE:
+            try:
+                root = tk.Tk()
+                root.withdraw()
+                if message_type == "error":
+                    messagebox.showerror(title, message)
+                elif message_type == "warning":
+                    messagebox.showwarning(title, message)
+                else:
+                    messagebox.showinfo(title, message)
+                root.destroy()
+                return
+            except:
+                pass
+        
+        # Fallback to system notifications
         try:
-            # Remove autostart entries
-            autostart_file = Path.home() / ".config/autostart/pushnotifications-client.desktop"
-            if autostart_file.exists():
-                autostart_file.unlink()
+            if self.system == "Darwin":
+                # macOS notification
+                escaped_title = title.replace('"', '\\"')
+                escaped_message = message.replace('"', '\\"')
+                applescript = f'display notification "{escaped_message}" with title "{escaped_title}" sound name "default"'
+                subprocess.run(['osascript', '-e', applescript], check=False)
+            elif subprocess.run(['which', 'notify-send'], capture_output=True).returncode == 0:
+                # Linux notification
+                subprocess.run(['notify-send', '--urgency=normal', title, message], check=False)
+        except:
+            pass
+    
+    def request_uninstall_approval(self):
+        """Request uninstall approval from server and wait for response"""
+        try:
+            print("\n" + "="*60)
+            print("UNINSTALL APPROVAL REQUEST")
+            print("="*60)
             
-            # Remove desktop shortcuts
+            self.show_message(
+                "Uninstall Request", 
+                "Requesting permission from administrator to uninstall PushNotifications. Please wait...",
+                "info"
+            )
+            
+            # First, submit the uninstall request
+            print("Submitting uninstall request to website...")
+            response = requests.post(API_URL, json={
+                'action': 'requestUninstall',
+                'clientId': CLIENT_ID,
+                'macAddress': MAC_ADDRESS,
+                'keyId': KEY_ID,
+                'installPath': str(self.install_path),
+                'platform': self.system,
+                'timestamp': datetime.now().isoformat(),
+                'reason': 'User requested uninstall'
+            }, timeout=30)
+            
+            if response.status_code != 200:
+                error_msg = f"Failed to submit uninstall request: HTTP {response.status_code}"
+                print(error_msg)
+                self.show_message("Request Failed", error_msg, "error")
+                return False
+                
+            result = response.json()
+            if not result.get('success'):
+                error_msg = f"Uninstall request failed: {result.get('message', 'Unknown error')}"
+                print(error_msg)
+                self.show_message("Request Failed", error_msg, "error")
+                return False
+                
+            request_id = result.get('requestId')
+            if not request_id:
+                error_msg = "No request ID received from server"
+                print(error_msg)
+                self.show_message("Request Failed", error_msg, "error")
+                return False
+                
+            print(f"✓ Uninstall request submitted successfully (ID: {request_id})")
+            print("\n📋 WAITING FOR ADMINISTRATOR APPROVAL")
+            print("-" * 50)
+            print("The uninstall request has been sent to the administrator.")
+            print("Please wait while they review and approve/deny the request.")
+            print("This process may take several minutes.")
+            print("\nYou can monitor the approval status on the admin website.")
+            
+            # Show notification about waiting
+            self.show_message(
+                "Approval Pending", 
+                "Uninstall request submitted. Waiting for administrator approval...",
+                "info"
+            )
+            
+            # Now poll for approval status
+            max_wait_time = 300  # 5 minutes maximum wait
+            poll_interval = 10   # Check every 10 seconds
+            waited_time = 0
+            
+            print(f"\n⏳ Polling for approval (timeout: {max_wait_time}s)...")
+            
+            while waited_time < max_wait_time:
+                time.sleep(poll_interval)
+                waited_time += poll_interval
+                
+                try:
+                    # Check for uninstall command from server
+                    check_response = requests.post(API_URL, json={
+                        'action': 'getClientNotifications',
+                        'clientId': CLIENT_ID,
+                        'macAddress': MAC_ADDRESS
+                    }, timeout=10)
+                    
+                    if check_response.status_code == 200:
+                        check_result = check_response.json()
+                        if check_result.get('success'):
+                            notifications = check_result.get('data', [])
+                            
+                            # Look for uninstall approval command
+                            for notification in notifications:
+                                message = notification.get('message', '')
+                                if message == '__UNINSTALL_APPROVED_COMMAND__':
+                                    print("\n✅ UNINSTALL APPROVED BY ADMINISTRATOR!")
+                                    self.show_message(
+                                        "Approved", 
+                                        "Uninstall request approved by administrator. Proceeding with removal...",
+                                        "info"
+                                    )
+                                    return True
+                                elif 'denied' in message.lower() or 'rejected' in message.lower():
+                                    print("\n❌ UNINSTALL REQUEST DENIED BY ADMINISTRATOR")
+                                    self.show_message(
+                                        "Denied", 
+                                        "Uninstall request was denied by the administrator.",
+                                        "warning"
+                                    )
+                                    return False
+                    
+                    progress = int((waited_time / max_wait_time) * 100)
+                    print(f"⏳ Still waiting for approval... ({waited_time}s/{max_wait_time}s - {progress}%)")
+                    
+                except Exception as poll_error:
+                    print(f"⚠️  Error checking approval status: {poll_error}")
+                    continue
+            
+            print("\n⏱️  TIMEOUT - No response from administrator")
+            timeout_msg = f"Timeout waiting for administrator approval after {max_wait_time} seconds. The request may still be pending."
+            print(timeout_msg)
+            self.show_message("Timeout", timeout_msg, "warning")
+            return False
+            
+        except Exception as e:
+            error_msg = f"Error requesting uninstall approval: {e}"
+            print(f"❌ {error_msg}")
+            self.show_message("Request Error", error_msg, "error")
+            return False
+    
+    def perform_uninstall(self):
+        """Perform comprehensive cross-platform uninstall"""
+        print("\n" + "="*60)
+        print("PERFORMING UNINSTALL")
+        print("="*60)
+        
+        uninstall_success = True
+        
+        try:
+            # 1. Stop any running client processes
+            print("\n🔄 Stopping client processes...")
+            self._stop_client_processes()
+            
+            # 2. Remove startup entries (platform-specific)
+            print("\n🚀 Removing startup entries...")
+            self._remove_startup_entries()
+            
+            # 3. Remove desktop shortcuts
+            print("\n🖥️  Removing desktop shortcuts...")
+            self._remove_desktop_shortcuts()
+            
+            # 4. Remove system services/daemons
+            print("\n⚙️  Removing system services...")
+            self._remove_system_services()
+            
+            # 5. Clean up configuration files
+            print("\n🗂️  Cleaning configuration files...")
+            self._cleanup_config_files()
+            
+            # 6. Report successful uninstall to server
+            print("\n📡 Reporting uninstall completion to server...")
+            self._report_uninstall_complete()
+            
+            # 7. Remove installation directory (last step)
+            print("\n📁 Removing installation directory...")
+            self._remove_installation_directory()
+            
+            print("\n✅ UNINSTALLATION COMPLETED SUCCESSFULLY")
+            self.show_message(
+                "Uninstall Complete", 
+                "PushNotifications has been successfully removed from your system.",
+                "info"
+            )
+            return True
+            
+        except Exception as e:
+            error_msg = f"Uninstallation error: {e}"
+            print(f"\n❌ {error_msg}")
+            self.show_message("Uninstall Error", error_msg, "error")
+            return False
+    
+    def _stop_client_processes(self):
+        """Stop any running client processes"""
+        try:
+            import psutil
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    cmdline = ' '.join(proc.info.get('cmdline', []))
+                    if ('Client.py' in cmdline and 
+                        str(self.install_path) in cmdline):
+                        print(f"  ⏹️  Stopping client process (PID: {proc.info['pid']})")
+                        proc.terminate()
+                        proc.wait(timeout=10)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                    continue
+        except ImportError:
+            print("  ⚠️  psutil not available - cannot stop processes gracefully")
+        except Exception as e:
+            print(f"  ⚠️  Error stopping client processes: {e}")
+    
+    def _remove_startup_entries(self):
+        """Remove platform-specific startup entries"""
+        try:
+            if self.system == "Darwin":  # macOS
+                # Remove Launch Agent
+                launch_agents_dir = Path.home() / "Library" / "LaunchAgents"
+                plist_file = launch_agents_dir / "com.pushnotifications.client.plist"
+                if plist_file.exists():
+                    # Unload first
+                    try:
+                        subprocess.run(['launchctl', 'unload', str(plist_file)], check=False)
+                    except:
+                        pass
+                    plist_file.unlink()
+                    print("  ✓ Removed macOS Launch Agent")
+                    
+            else:  # Linux and other Unix-like
+                # Remove XDG autostart entry
+                autostart_file = Path.home() / ".config/autostart/pushnotifications-client.desktop"
+                if autostart_file.exists():
+                    autostart_file.unlink()
+                    print("  ✓ Removed XDG autostart entry")
+                
+                # Remove systemd user service
+                try:
+                    subprocess.run(['systemctl', '--user', 'stop', 'pushnotifications-client.service'], 
+                                 check=False, capture_output=True)
+                    subprocess.run(['systemctl', '--user', 'disable', 'pushnotifications-client.service'], 
+                                 check=False, capture_output=True)
+                    
+                    service_file = Path.home() / ".config/systemd/user/pushnotifications-client.service"
+                    if service_file.exists():
+                        service_file.unlink()
+                        subprocess.run(['systemctl', '--user', 'daemon-reload'], check=False)
+                        print("  ✓ Removed systemd user service")
+                except Exception as e:
+                    print(f"  ℹ️  systemd service removal: {e}")
+                    
+        except Exception as e:
+            print(f"  ⚠️  Error removing startup entries: {e}")
+    
+    def _remove_desktop_shortcuts(self):
+        """Remove desktop shortcuts"""
+        try:
             desktop = Path.home() / "Desktop"
-            for shortcut in ["push-client.desktop", "push-repair.desktop"]:
+            shortcuts = ["push-client.desktop", "push-repair.desktop"]
+            
+            for shortcut in shortcuts:
                 shortcut_path = desktop / shortcut
                 if shortcut_path.exists():
                     shortcut_path.unlink()
+                    print(f"  ✓ Removed {shortcut}")
+        except Exception as e:
+            print(f"  ⚠️  Error removing desktop shortcuts: {e}")
+    
+    def _remove_system_services(self):
+        """Remove any system-level services or daemons"""
+        try:
+            # This is primarily for potential future system-level services
+            # Currently the application runs at user level
+            print("  ℹ️  No system services to remove (user-level installation)")
+        except Exception as e:
+            print(f"  ⚠️  Error checking system services: {e}")
+    
+    def _cleanup_config_files(self):
+        """Clean up configuration files and caches"""
+        try:
+            # Remove any application configuration files
+            config_locations = [
+                Path.home() / ".config/pushnotifications",
+                Path.home() / ".pushnotifications",
+                Path.home() / "Library/Preferences/com.pushnotifications.plist"  # macOS
+            ]
+            
+            for config_path in config_locations:
+                if config_path.exists():
+                    if config_path.is_file():
+                        config_path.unlink()
+                    else:
+                        shutil.rmtree(config_path)
+                    print(f"  ✓ Removed {config_path}")
+        except Exception as e:
+            print(f"  ⚠️  Error cleaning config files: {e}")
+    
+    def _report_uninstall_complete(self):
+        """Report successful uninstall to server"""
+        try:
+            requests.post(API_URL, json={
+                'action': 'reportUninstallComplete',
+                'clientId': CLIENT_ID,
+                'macAddress': MAC_ADDRESS,
+                'keyId': KEY_ID,
+                'platform': self.system,
+                'installPath': str(self.install_path),
+                'timestamp': datetime.now().isoformat()
+            }, timeout=10)
+            print("  ✓ Uninstall completion reported to server")
+        except Exception as e:
+            print(f"  ⚠️  Could not report to server: {e}")
+    
+    def _remove_installation_directory(self):
+        """Remove the installation directory as final step"""
+        try:
+            # Change to parent directory to avoid permission issues
+            os.chdir(self.install_path.parent)
             
             # Remove installation directory
-            shutil.rmtree(self.install_path, ignore_errors=True)
-            print("Uninstallation completed.")
+            if self.install_path.exists():
+                shutil.rmtree(self.install_path, ignore_errors=True)
+                print(f"  ✓ Removed installation directory: {self.install_path}")
+            else:
+                print("  ℹ️  Installation directory already removed")
+                
         except Exception as e:
-            print(f"Uninstallation error: {{e}}")
+            print(f"  ⚠️  Error removing installation directory: {e}")
+    
+    def run(self):
+        """Main uninstaller entry point"""
+        print("\n🗑️  PushNotifications Uninstaller Starting...")
+        print(f"Platform: {self.system}")
+        print(f"Client ID: {CLIENT_ID}")
+        print(f"MAC Address: {MAC_ADDRESS}")
+        
+        # Request approval from server
+        if self.request_uninstall_approval():
+            print("\n🎯 Uninstall approved. Proceeding with removal...")
+            if self.perform_uninstall():
+                print("\n🎉 PushNotifications successfully removed from your system!")
+                return True
+            else:
+                print("\n💥 Uninstallation encountered errors.")
+                return False
+        else:
+            print("\n🚫 Uninstall request denied or timed out.")
+            print("\n🔄 Attempting to restart client...")
+            
+            # Restart client if uninstall was denied
+            client_path = self.install_path / "Client.py"
+            if client_path.exists():
+                try:
+                    subprocess.Popen([
+                        sys.executable, str(client_path)
+                    ], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    print("  ✓ Client restarted successfully")
+                except Exception as e:
+                    print(f"  ⚠️  Error restarting client: {e}")
+            
+            return False
 
 if __name__ == "__main__":
-    uninstaller = UnixUninstaller()
-    uninstaller.run()
+    try:
+        uninstaller = PushNotificationsUnixUninstaller()
+        success = uninstaller.run()
+        sys.exit(0 if success else 1)
+    except KeyboardInterrupt:
+        print("\n\n⏹️  Uninstallation cancelled by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n\n💥 Fatal uninstaller error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 '''
     
     
