@@ -3165,7 +3165,7 @@ if __name__ == "__main__":
         print(f"Fatal error: {{e}}")
         sys.exit(1)
         '''
-    
+
     def _get_embedded_windows_uninstaller_code(self):
         """Get the embedded Windows uninstaller code"""
         # Properly format variables for the embedded code
