@@ -150,6 +150,11 @@ function initializeUserDownload() {
     
     // Load user installation key
     loadUserInstallationKey();
+    
+    // Load and update version information for download buttons
+    setTimeout(() => {
+        loadAndUpdateVersion();
+    }, 500);
 }
 
 // Admin panel initialization
@@ -169,6 +174,11 @@ function initializeAdmin() {
     
     // Setup admin panel
     setupAdminPanel();
+    
+    // Load and update version information for any download buttons on admin pages
+    setTimeout(() => {
+        loadAndUpdateVersion();
+    }, 500);
     
     // If this is the standalone account-admin page, load dropdowns directly
     if (window.location.pathname.endsWith('account-admin.html')) {
