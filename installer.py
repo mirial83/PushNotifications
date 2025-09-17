@@ -171,6 +171,9 @@ try:
 except ImportError:
     GUI_AVAILABLE = False
 
+# Global flag to control GUI dialog usage - only enable on Windows
+USE_GUI_DIALOGS = platform.system() == "Windows" and GUI_AVAILABLE
+
 # Cross-platform system tray support
 if platform.system() != "Windows":
     # Install cross-platform packages for macOS/Linux GUI support
@@ -196,7 +199,7 @@ class InstallationProgressDialog:
         self.status_label = None
         self.log_text = None
         
-        if GUI_AVAILABLE:
+        if USE_GUI_DIALOGS:
             self._create_dialog()
     
     def _create_dialog(self):
@@ -691,9 +694,9 @@ class PushNotificationsInstaller:
         self.cleanup_performed = False  # Track if cleanup was already performed
         self.device_registered = False  # Track if device was registered with server
         
-        # Initialize progress dialog for non-Windows platforms
+        # Initialize progress dialog only if GUI dialogs are enabled
         self.progress_dialog = None
-        if GUI_AVAILABLE and self.system != "Windows":
+        if USE_GUI_DIALOGS:
             self.progress_dialog = InstallationProgressDialog()
             self.progress_dialog.show()
             self.progress_dialog.add_log(f"PushNotifications Installer v{INSTALLER_VERSION}")
@@ -1260,10 +1263,8 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
-            # Force console input for macOS and Unix systems due to GUI compatibility issues
-            # Only use GUI on Windows where it works reliably
-            print(f"Debug: System detected as '{self.system}'")
-            if False:  # Completely disable GUI dialogs for installation key entry
+            print(f"Debug: System detected as '{self.system}', GUI dialogs: {USE_GUI_DIALOGS}")
+            if USE_GUI_DIALOGS:
                 try:
                     # Set environment variable to suppress tkinter deprecation warning
                     os.environ['TK_SILENCE_DEPRECATION'] = '1'
@@ -1987,6 +1988,10 @@ MAC_ADDRESS = "{self.mac_address}"
 CLIENT_ID = "{self.device_data.get('clientId')}"
 KEY_ID = "{self.key_id}"
 
+# Global flag to control GUI dialog usage - Windows only
+import platform
+USE_GUI_DIALOGS = platform.system() == "Windows"
+
 # Windows API constants
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -2703,7 +2708,10 @@ class PushNotificationsClient:
             status_text += f"Active Notifications: {{active_count}}\\n"
             status_text += f"Security Mode: {{'Active' if self.security_active else 'Inactive'}}"
             
-            messagebox.showinfo("Push Client Status", status_text)
+            if USE_GUI_DIALOGS:
+                messagebox.showinfo("Push Client Status", status_text)
+            else:
+                print(f"Push Client Status: {{status_text}}")
         except Exception as e:
             print(f"Error showing status: {{e}}")
     
@@ -2723,9 +2731,15 @@ def show_all_notifications(self, icon=None, item=None):
             active_notifications = [n for n in self.notifications if not n.get('completed', False)]
             if active_notifications:
                 self.complete_notification(active_notifications[0].get('id'))
-                messagebox.showinfo("Completed", "Notification marked as complete.")
+                if USE_GUI_DIALOGS:
+                    messagebox.showinfo("Completed", "Notification marked as complete.")
+                else:
+                    print("Completed: Notification marked as complete.")
             else:
-                messagebox.showinfo("No Notifications", "No active notifications to complete.")
+                if USE_GUI_DIALOGS:
+                    messagebox.showinfo("No Notifications", "No active notifications to complete.")
+                else:
+                    print("No Notifications: No active notifications to complete.")
         except Exception as e:
             print(f"Error in tray mark complete: {{e}}")
     
@@ -2734,29 +2748,45 @@ def show_all_notifications(self, icon=None, item=None):
         try:
             active_notifications = [n for n in self.notifications if not n.get('completed', False)]
             if not active_notifications:
-                messagebox.showinfo("No Notifications", "No active notifications for website requests.")
+                if USE_GUI_DIALOGS:
+                    messagebox.showinfo("No Notifications", "No active notifications for website requests.")
+                else:
+                    print("No Notifications: No active notifications for website requests.")
                 return
                 
-            website = simpledialog.askstring(
-                "Website Access Request",
-                "Enter the website URL you want to request access to:",
-                initialvalue="https://"
-            )
+            if USE_GUI_DIALOGS:
+                website = simpledialog.askstring(
+                    "Website Access Request",
+                    "Enter the website URL you want to request access to:",
+                    initialvalue="https://"
+                )
+            else:
+                website = input("Enter the website URL you want to request access to (or press Enter to cancel): ").strip()
+                if not website:
+                    return
             
             if website:
                 self.request_website_access(active_notifications[0].get('id'), website)
-                messagebox.showinfo("Request Sent", f"Website access request sent for: {{website}}")
+                if USE_GUI_DIALOGS:
+                    messagebox.showinfo("Request Sent", f"Website access request sent for: {{website}}")
+                else:
+                    print(f"Request Sent: Website access request sent for: {{website}}")
         except Exception as e:
             print(f"Error in tray request website: {{e}}")
     
     def tray_request_deletion(self, icon=None, item=None):
         """Request deletion/uninstallation from tray"""
         try:
-            reason = simpledialog.askstring(
-                "Request Deletion",
-                "Please provide a reason for requesting deletion:",
-                initialvalue="User requested uninstall"
-            )
+            if USE_GUI_DIALOGS:
+                reason = simpledialog.askstring(
+                    "Request Deletion",
+                    "Please provide a reason for requesting deletion:",
+                    initialvalue="User requested uninstall"
+                )
+            else:
+                reason = input("Please provide a reason for requesting deletion (or press Enter to cancel): ").strip()
+                if not reason:
+                    reason = "User requested uninstall"
             
             if reason:
                 requests.post(API_URL, json={{
@@ -2767,18 +2797,24 @@ def show_all_notifications(self, icon=None, item=None):
                     'timestamp': datetime.now().isoformat()
                 }}, timeout=10)
                 
-                messagebox.showinfo("Request Sent", "Deletion request sent for admin approval.")
+                if USE_GUI_DIALOGS:
+                    messagebox.showinfo("Request Sent", "Deletion request sent for admin approval.")
+                else:
+                    print("Request Sent: Deletion request sent for admin approval.")
         except Exception as e:
             print(f"Error in tray request deletion: {{e}}")
     
     def tray_submit_bug(self, icon=None, item=None):
         """Submit bug report from tray"""
         try:
-            bug_description = simpledialog.askstring(
-                "Submit Bug Report",
-                "Describe the bug or issue:",
-                initialvalue=""
-            )
+            if USE_GUI_DIALOGS:
+                bug_description = simpledialog.askstring(
+                    "Submit Bug Report",
+                    "Describe the bug or issue:",
+                    initialvalue=""
+                )
+            else:
+                bug_description = input("Describe the bug or issue (or press Enter to cancel): ").strip()
             
             if bug_description:
                 # Collect system info for bug report
@@ -2800,7 +2836,10 @@ def show_all_notifications(self, icon=None, item=None):
                     'timestamp': datetime.now().isoformat()
                 }}, timeout=10)
                 
-                messagebox.showinfo("Bug Report Sent", "Thank you! Your bug report has been submitted.")
+                if USE_GUI_DIALOGS:
+                    messagebox.showinfo("Bug Report Sent", "Thank you! Your bug report has been submitted.")
+                else:
+                    print("Bug Report Sent: Thank you! Your bug report has been submitted.")
         except Exception as e:
             print(f"Error in tray submit bug: {{e}}")
     
@@ -2808,7 +2847,10 @@ def show_all_notifications(self, icon=None, item=None):
         """Snooze all notifications from tray"""
         try:
             self.snooze_notifications(minutes)
-            messagebox.showinfo("Snoozed", f"All notifications snoozed for {{minutes}} minutes.")
+            if USE_GUI_DIALOGS:
+                messagebox.showinfo("Snoozed", f"All notifications snoozed for {{minutes}} minutes.")
+            else:
+                print(f"Snoozed: All notifications snoozed for {{minutes}} minutes.")
         except Exception as e:
             print(f"Error in tray snooze all: {{e}}")
     
@@ -3653,10 +3695,13 @@ except ImportError:
     GUI_AVAILABLE = False
     print("Warning: GUI features not available")
 
+# Global flag to control GUI dialog usage - disable on non-Windows
+USE_GUI_DIALOGS = False  # Disabled for Unix/macOS to prevent black box issues
+
 # Cross-platform GUI utility functions
 def show_message_dialog(title, message, dialog_type="info", parent=None):
     """Show a properly configured message dialog for cross-platform compatibility"""
-    if not GUI_AVAILABLE:
+    if not USE_GUI_DIALOGS or not GUI_AVAILABLE:
         print(f"{{title}}: {{message}}")
         return
     
@@ -4992,10 +5037,13 @@ try:
 except ImportError:
     GUI_AVAILABLE = False
 
+# Global flag to control GUI dialog usage - disable on non-Windows
+USE_GUI_DIALOGS = False  # Disabled for Unix/macOS to prevent black box issues
+
 # Cross-platform GUI utility function
 def show_message_dialog(title, message, dialog_type="info"):
     """Show a properly configured message dialog"""
-    if not GUI_AVAILABLE:
+    if not USE_GUI_DIALOGS or not GUI_AVAILABLE:
         print(f"{{title}}: {{message}}")
         return
     
@@ -5047,7 +5095,7 @@ class PushNotificationsUnixUninstaller:
         """Show message using appropriate method for the platform"""
         print(f"{title}: {message}")
         
-        if GUI_AVAILABLE:
+        if USE_GUI_DIALOGS and GUI_AVAILABLE:
             try:
                 show_message_dialog(title, message, message_type)
                 return
@@ -7119,7 +7167,7 @@ def main():
                     print("\n⚠️  This is a required security update.")
                     proceed = True
                 else:
-                    if GUI_AVAILABLE:
+                    if USE_GUI_DIALOGS:
                         try:
                             import tkinter.messagebox as mb
                             proceed = mb.askyesno(
@@ -7151,7 +7199,7 @@ def main():
         success = installer.run_installation()
         
         if success:
-            if GUI_AVAILABLE:
+            if USE_GUI_DIALOGS:
                 try:
                     root = tk.Tk()
                     root.withdraw()
