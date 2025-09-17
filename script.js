@@ -151,10 +151,24 @@ function initializeUserDownload() {
     // Load user installation key
     loadUserInstallationKey();
     
-    // Load and update version information for download buttons
+    // Load and update version information for download buttons immediately and with retry
+    loadAndUpdateVersion();
     setTimeout(() => {
         loadAndUpdateVersion();
     }, 500);
+    // Additional retry in case the server is slow
+    setTimeout(() => {
+        const versionElements = document.querySelectorAll('.version-text');
+        const needsRetry = Array.from(versionElements).some(el => 
+            el.textContent === 'Loading...' || 
+            el.textContent === 'Error loading' || 
+            el.textContent === 'Network error'
+        );
+        if (needsRetry) {
+            console.log('🔄 Retrying version load due to loading/error state');
+            loadAndUpdateVersion();
+        }
+    }, 2000);
 }
 
 // Admin panel initialization
@@ -175,10 +189,24 @@ function initializeAdmin() {
     // Setup admin panel
     setupAdminPanel();
     
-    // Load and update version information for any download buttons on admin pages
+    // Load and update version information for any download buttons on admin pages immediately and with retry
+    loadAndUpdateVersion();
     setTimeout(() => {
         loadAndUpdateVersion();
     }, 500);
+    // Additional retry in case the server is slow
+    setTimeout(() => {
+        const versionElements = document.querySelectorAll('.version-text');
+        const needsRetry = Array.from(versionElements).some(el => 
+            el.textContent === 'Loading...' || 
+            el.textContent === 'Error loading' || 
+            el.textContent === 'Network error'
+        );
+        if (needsRetry) {
+            console.log('🔄 Retrying version load due to loading/error state');
+            loadAndUpdateVersion();
+        }
+    }, 2000);
     
     // If this is the standalone account-admin page, load dropdowns directly
     if (window.location.pathname.endsWith('account-admin.html')) {
@@ -204,8 +232,20 @@ function initializeAdmin() {
         // Add a small delay to ensure DOM is fully loaded
         setTimeout(() => {
             initializeClientAdministration();
-            // Also load version information for download buttons
+            // Also load version information for download buttons with retry
             loadAndUpdateVersion();
+            setTimeout(() => {
+                const versionElements = document.querySelectorAll('.version-text');
+                const needsRetry = Array.from(versionElements).some(el => 
+                    el.textContent === 'Loading...' || 
+                    el.textContent === 'Error loading' || 
+                    el.textContent === 'Network error'
+                );
+                if (needsRetry) {
+                    console.log('🔄 Retrying client-admin version load due to loading/error state');
+                    loadAndUpdateVersion();
+                }
+            }, 2000);
         }, 500);
     }
 }
@@ -2703,24 +2743,24 @@ async function loadAndUpdateVersion() {
             console.log(`✅ Successfully updated ${versionTextElements.length} version text elements and ${versionBadges.length} version badges`);
         } else {
             console.warn('⚠️ Failed to load version info from API:', result);
-            console.log('🔄 Falling back to default version v2.1.0');
+            console.log('🔄 Unable to load version - keeping loading state');
             
-            // Fall back to a default version if API call fails
+            // Show error state instead of hardcoded fallback
             versionTextElements.forEach((element, index) => {
                 const oldText = element.textContent;
-                element.textContent = 'v2.1.0';
-                console.log(`📝 Fallback update ${index + 1}: "${oldText}" → "v2.1.0"`);
+                element.textContent = 'Error loading';
+                console.log(`📝 Error state ${index + 1}: "${oldText}" → "Error loading"`);
             });
         }
     } catch (error) {
         console.error('❌ Error loading version information:', error);
-        console.log('🔄 Falling back to default version v2.1.0 due to error');
+        console.log('🔄 Network/API error - showing error state');
         
-        // Fall back to existing version on error
+        // Show error state instead of hardcoded fallback
         versionTextElements.forEach((element, index) => {
             const oldText = element.textContent;
-            element.textContent = 'v2.1.0';
-            console.log(`📝 Error fallback ${index + 1}: "${oldText}" → "v2.1.0"`);
+            element.textContent = 'Network error';
+            console.log(`📝 Network error ${index + 1}: "${oldText}" → "Network error"`);
         });
     }
 }
