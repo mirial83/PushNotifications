@@ -2398,7 +2398,7 @@ class OverlayManager:
             # Position on monitor
             x, y = monitor.x, monitor.y
             width, height = monitor.width, monitor.height
-            overlay.geometry(f"{width}x{height}+{x}+{y}")
+            overlay.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
             
             return overlay
         except Exception as e:
