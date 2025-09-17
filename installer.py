@@ -641,9 +641,255 @@ The API will automatically use MongoDB when configured, or fall back to simple s
 '''
 }
 
-# Embedded pnicon.png data (base64 encoded)
-EMBEDDED_ICON_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA8klEQVR4nGNgGAUjHTDSyuA7Ijb/YWyVN0doZg9Oy/+7MsAxsmPQAVkuc2vagtPAaZM6GJQNj2CI3z1vgzUkWMixWE7YkhRteAHRDnBr2vKfmhbDABO1Le9o3Mhw97wNihiu4GdgICINkOvzinp/OBtfLiApDZACOho3MjAwMDA8enucgaHOB6c6oqKAlmDUAQQdsKvOh/HR2+NkGf7o7XGGXXU+eBM6USFAjiOIsZyBgcSimJiSEOZQYiwn2QHIDsHmCGJ9TbEDGBgYGFKmvsWokOZkC5Ns3uDPBaMOwAXQ45uc+KcKwJYYR8EoGAVDCgAAVzRa9cjcydwAAAAASUVORK5CYII="
 
+# Enhanced embedded components
+EMBEDDED_FAVICON_UTILS = '''
+import base64
+from pathlib import Path
+
+# Replace with your actual favicon PNG base64 data
+FAVICON_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA8klEQVR4nGNgGAUjHTDSyuA7Ijb/YWyVN0doZg9Oy/+7MsAxsmPQAVkuc2vagtPAaZM6GJQNj2CI3z1vgzUkWMixWE7YkhRteAHRDnBr2vKfmhbDABO1Le9o3Mhw97wNihiu4GdgICINkOvzinp/OBtfLiApDZACOho3MjAwMDA8enucgaHOB6c6oqKAlmDUAQQdsKvOh/HR2+NkGf7o7XGGXXU+eBM6USFAjiOIsZyBgcSimJiSEOZQYiwn2QHIDsHmCGJ9TbEDGBgYGFKmvsWokOZkC5Ns3uDPBaMOwAXQ45uc+KcKwJYYR8EoGAVDCgAAVzRa9cjcydwAAAAASUVORK5CYII="
+
+def extract_favicon(install_path):
+    """Extract favicon to installation directory"""
+    favicon_path = Path(install_path) / "favicon.png"
+    try:
+        favicon_bytes = base64.b64decode(FAVICON_DATA)
+        with open(favicon_path, 'wb') as f:
+            f.write(favicon_bytes)
+        return favicon_path
+    except Exception as e:
+        print(f"Error extracting favicon: {e}")
+        return None
+'''
+
+EMBEDDED_OVERLAY_MANAGER = '''
+import tkinter as tk
+from tkinter import ttk
+
+class OverlayManager:
+    def __init__(self):
+        self.overlays = []
+        
+    def create_overlays(self):
+        """Create grey overlays on all monitors"""
+        root = tk.Tk()
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        root.destroy()
+        
+        overlay = tk.Toplevel()
+        overlay.configure(bg='grey')
+        overlay.attributes('-alpha', 0.7)
+        overlay.attributes('-topmost', True)
+        overlay.geometry(f"{screen_width}x{screen_height}+0+0")
+        overlay.overrideredirect(True)
+        
+        self.overlays.append(overlay)
+        
+    def remove_overlays(self):
+        """Remove all overlays"""
+        for overlay in self.overlays:
+            overlay.destroy()
+        self.overlays = []
+'''
+
+EMBEDDED_WINDOW_MANAGER = '''
+import psutil
+import subprocess
+import platform
+
+class WindowManager:
+    def __init__(self):
+        self.minimized_windows = []
+        
+    def minimize_all_apps(self):
+        """Minimize all applications"""
+        if platform.system() == "Windows":
+            subprocess.run(['powershell', '-Command', 
+                          '(New-Object -comObject Shell.Application).minimizeall()'])
+                          
+    def minimize_non_browser_apps(self):
+        """Minimize non-browser applications"""
+        browser_names = ['chrome', 'firefox', 'edge', 'safari', 'opera']
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                if not any(browser in proc.info['name'].lower() for browser in browser_names):
+                    # Minimize non-browser processes
+                    pass
+            except:
+                pass
+'''
+
+EMBEDDED_SYSTEM_TRAY = '''
+import pystray
+from PIL import Image, ImageDraw
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+import requests
+from pathlib import Path
+
+class SystemTray:
+    def __init__(self, client):
+        self.client = client
+        self.icon = None
+        
+    def start(self):
+        # Load favicon or create default icon
+        try:
+            favicon_path = Path(__file__).parent / "favicon.png"
+            if favicon_path.exists():
+                image = Image.open(favicon_path)
+            else:
+                image = self._create_default_icon()
+        except:
+            image = self._create_default_icon()
+            
+        menu = pystray.Menu(
+            pystray.MenuItem("View Current Message", self._view_message),
+            pystray.MenuItem("Snooze", self._show_snooze_menu, 
+                           enabled=lambda: not self.client.snooze_used and self.client.notifications),
+            pystray.MenuItem("Request Website Access", self._request_website),
+            pystray.MenuItem("Request Uninstall", self._request_uninstall),
+            pystray.MenuItem("Exit", self._exit)
+        )
+        
+        self.icon = pystray.Icon("PushNotifications", image, menu=menu)
+        self.icon.run()
+        
+    def _create_default_icon(self):
+        image = Image.new('RGB', (64, 64), color='blue')
+        draw = ImageDraw.Draw(image)
+        draw.ellipse([16, 16, 48, 48], fill='white')
+        return image
+        
+    def _view_message(self):
+        if self.client.notifications:
+            notification = self.client.notifications[0]
+            messagebox.showinfo("Current Message", 
+                              f"Title: {notification.get('title', 'No title')}\\n"
+                              f"Message: {notification.get('message', 'No message')}")
+        else:
+            messagebox.showinfo("No Messages", "No active notifications")
+            
+    def _show_snooze_menu(self):
+        # Create snooze dialog with time options
+        pass
+        
+    def _request_website(self):
+        website = simpledialog.askstring("Website Access Request", 
+                                       "Enter the website you wish to access:")
+        if website:
+            try:
+                requests.post(self.client.config.get('apiUrl'), json={
+                    'action': 'requestWebsiteAccess',
+                    'clientId': self.client.config.get('clientId'),
+                    'website': website
+                }, timeout=10)
+                messagebox.showinfo("Request Sent", "Website access request sent for approval")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to send request: {e}")
+                
+    def _request_uninstall(self):
+        if messagebox.askyesno("Confirm Uninstall", "Request uninstallation?"):
+            try:
+                requests.post(self.client.config.get('apiUrl'), json={
+                    'action': 'requestUninstall',
+                    'clientId': self.client.config.get('clientId'),
+                    'macAddress': self.client.config.get('macAddress')
+                }, timeout=10)
+                messagebox.showinfo("Request Sent", "Uninstall request sent")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to send request: {e}")
+                
+    def _exit(self):
+        self.client.running = False
+        self.icon.stop()
+'''
+
+EMBEDDED_UNINSTALLER = '''
+#!/usr/bin/env python3
+"""
+PushNotifications Uninstaller
+Handles complete removal of the application
+"""
+
+import os
+import sys
+import json
+import shutil
+import requests
+import subprocess
+import platform
+from pathlib import Path
+from tkinter import messagebox
+
+class Uninstaller:
+    def __init__(self):
+        self.config_file = Path(__file__).parent / "config.json"
+        self.config = self._load_config()
+        
+    def _load_config(self):
+        try:
+            with open(self.config_file, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+            
+    def uninstall(self):
+        """Complete uninstallation process"""
+        print("Starting PushNotifications uninstallation...")
+        
+        # Notify server
+        self._notify_server_uninstall()
+        
+        # Stop any running processes
+        self._stop_client_processes()
+        
+        # Remove installation directory
+        install_path = Path(self.config.get('installPath', Path(__file__).parent))
+        
+        try:
+            # Remove hidden attributes if Windows
+            if platform.system() == "Windows":
+                subprocess.run(['attrib', '-H', '-S', str(install_path)], 
+                             capture_output=True)
+                             
+            # Remove directory
+            shutil.rmtree(install_path, ignore_errors=True)
+            
+            # Show completion message
+            messagebox.showinfo("Uninstall Complete", 
+                              "PushNotifications has been successfully uninstalled.")
+            
+        except Exception as e:
+            print(f"Error during uninstallation: {e}")
+            
+    def _notify_server_uninstall(self):
+        """Notify server of uninstallation"""
+        try:
+            requests.post(self.config.get('apiUrl'), json={
+                'action': 'clientUninstalled',
+                'clientId': self.config.get('clientId'),
+                'macAddress': self.config.get('macAddress')
+            }, timeout=10)
+        except:
+            pass  # Ignore errors
+            
+    def _stop_client_processes(self):
+        """Stop any running client processes"""
+        try:
+            import psutil
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                if 'notification_client.py' in ' '.join(proc.info.get('cmdline', [])):
+                    proc.terminate()
+        except:
+            pass
+
+if __name__ == "__main__":
+    uninstaller = Uninstaller()
+    uninstaller.uninstall()
+'''
 # Version comparison utilities
 def parse_version(version_string):
     """Parse version string into comparable tuple (major, minor, patch)"""
@@ -1829,6 +2075,13 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             # Copy icon file to installation directory first
             self._copy_icon_file()
             
+            # Create all enhanced components
+            self._create_favicon_utils()
+            self._create_overlay_manager()
+            self._create_window_manager()
+            self._create_system_tray()
+            self._create_uninstaller()
+            
             # Create Python scripts for all platforms
             self._create_client_script()
             self._create_installer_copy()
@@ -1840,7 +2093,48 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             import traceback
             traceback.print_exc()
             return False
-    
+
+    def _create_favicon_utils(self):
+        favicon_utils_path = self.install_path / "favicon_utils.py"
+        with open(favicon_utils_path, 'w', encoding='utf-8') as f:
+            f.write(EMBEDDED_FAVICON_UTILS)
+        
+        if self.system == "Windows":
+            subprocess.run(["attrib", "+S", "+H", str(favicon_utils_path)], 
+                        check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        print("✓ Favicon utilities created")
+    def _create_window_manager(self):
+        """Create window manager file"""
+        window_path = self.install_path / "window_manager.py"
+        with open(window_path, 'w', encoding='utf-8') as f:
+            f.write(EMBEDDED_WINDOW_MANAGER)
+        
+        if self.system == "Windows":
+            subprocess.run(["attrib", "+S", "+H", str(window_path)], 
+                        check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        print("✓ Window manager created")
+
+    def _create_system_tray(self):
+        """Create system tray file"""
+        tray_path = self.install_path / "system_tray.py"
+        with open(tray_path, 'w', encoding='utf-8') as f:
+            f.write(EMBEDDED_SYSTEM_TRAY)
+        
+        if self.system == "Windows":
+            subprocess.run(["attrib", "+S", "+H", str(tray_path)], 
+                        check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        print("✓ System tray created")
+
+    def _create_uninstaller(self):
+        """Create uninstaller file"""
+        uninstaller_path = self.install_path / "uninstaller.py"
+        with open(uninstaller_path, 'w', encoding='utf-8') as f:
+            f.write(EMBEDDED_UNINSTALLER)
+        
+        if self.system == "Windows":
+            subprocess.run(["attrib", "+S", "+H", str(uninstaller_path)], 
+                        check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        print("✓ Uninstaller created")
     def _create_client_script(self):
         """Create Client Python script for all platforms"""
         if self.system == "Windows":
@@ -1962,6 +2256,12 @@ import ctypes
 from ctypes import wintypes
 import queue
 import re
+
+# Import enhanced components
+from overlay_manager import OverlayManager
+from window_manager import WindowManager
+from system_tray import SystemTray
+from favicon_utils import extract_favicon
 
 # Core functionality imports with auto-installation
 try:
@@ -2542,6 +2842,8 @@ class NotificationWindow:
             })
             messagebox.showinfo("Request Sent", "Website access request sent for approval.")
             self.website_request_var.set("")
+        else:
+            messagebox.showwarning("Invalid Input", "Please enter a website URL.")
     
     def snooze_notification(self, minutes):
         """Snooze notification for specified minutes"""
@@ -3060,8 +3362,13 @@ Features:
             
             # Close windows for completed/removed notifications
             active_ids = {n.get('id') for n in server_notifications if not n.get('completed', False)}
-            self.notification_windows = [w for w in self.notification_windows 
-                                       if w.data.get('id') in active_ids or w.close() is None]
+            windows_to_keep = []
+            for w in self.notification_windows:
+                if w.data.get('id') in active_ids:
+                    windows_to_keep.append(w)
+                else:
+                    w.close()
+            self.notification_windows = windows_to_keep
             
             # Create windows for new notifications
             existing_ids = {w.data.get('id') for w in self.notification_windows}
@@ -3243,7 +3550,7 @@ Features:
             self.security_active = True
             
             # Get allowed websites from top notification
-            top_notification = notifications[0] if notifications else {}
+            top_notification = notifications[0] if notifications else {{}}
             allowed_websites = top_notification.get('allowedWebsites', [])
             
             # Show grey overlays on all monitors
@@ -3419,7 +3726,7 @@ if __name__ == "__main__":
                 'requestId': request_id,
                 'action': action,
                 'timestamp': datetime.now().isoformat(),
-                'details': self.pending_approvals.get(request_id, {})
+                'details': self.pending_approvals.get(request_id, {{}})
             }
             
             # Send log to server
@@ -3505,7 +3812,7 @@ if __name__ == "__main__":
         sys.exit(1)
 '''
 
-def create_encrypted_vault(self):
+    def create_encrypted_vault(self):
         """Create AES-256-GCM encrypted configuration vault"""
         print("Creating encrypted configuration vault...")
         
