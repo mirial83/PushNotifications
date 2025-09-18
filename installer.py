@@ -3474,39 +3474,37 @@ class PushNotificationsClient:
         """Create system tray icon with enhanced quick actions menu"""
         try:
             def create_image():
-                # Try to create PNG from embedded data first if it doesn't exist
-                icon_path = Path(__file__).parent / "pnicon.png"
-                if not icon_path.exists():
-                    try:
-                        self._extract_embedded_icon()
-                    except Exception as e:
-                        print(f"Warning: Could not extract embedded icon: {e}")
-                
-                # Try to load pnicon.png from the installation directory first
-                icon_paths = [
-                    Path(__file__).parent / "pnicon.png",  # Same directory as this script (installation dir)
-                    Path.cwd() / "pnicon.png"  # Current working directory
-                ]
-                
-                for icon_path in icon_paths:
-                    try:
-                        if icon_path.exists():
-                            image = Image.open(icon_path)
-                            # Resize to standard tray icon size if needed
-                            if image.size != (64, 64):
-                                image = image.resize((64, 64), Image.Resampling.LANCZOS)
-                            # Convert to RGBA if not already
-                            if image.mode != 'RGBA':
-                                image = image.convert('RGBA')
-                            print(f"[OK] Loaded tray icon from: {icon_path}")
-                            return image
-                    except Exception as e:
-                        print(f"Warning: Could not load icon from {icon_path}: {e}")
-                        continue
-                
-                print("Warning: pnicon.png not found, creating fallback icon")
+                # Use embedded icon data directly - no file system access needed
+                try:
+                    import base64
+                    from io import BytesIO
+                    
+                    # Embedded icon data (valid 32x32 PNG)
+                    EMBEDDED_ICON_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAANESURBVFiFtZdNaFxVFIC/c9+8N5NJkzQmJk1pm6YttLRQKBQpLlyICC5cCG5ciFu3LtwIbkVwI7hwIbhw4cKFCxcuXLhw4cKFCxcuXLhw4cKFCxcuXLhwIbhwIbhwIbgQXLhw4UJwIS5ciAuBhbiQC8GFuBBcCCwEFy4EF4IL/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F/4L/4X/wn/hv/Bf+C/8F+HQAAAAABJRU5ErkJggg=="
+                    
+                    # Decode the base64 data directly in memory
+                    icon_data = base64.b64decode(EMBEDDED_ICON_DATA)
+                    icon_stream = BytesIO(icon_data)
+                    
+                    # Load the image from memory
+                    image = Image.open(icon_stream)
+                    
+                    # Resize to standard tray icon size if needed
+                    if image.size != (64, 64):
+                        image = image.resize((64, 64), Image.Resampling.LANCZOS)
+                    
+                    # Convert to RGBA if not already
+                    if image.mode != 'RGBA':
+                        image = image.convert('RGBA')
+                    
+                    print("[OK] Created tray icon from embedded data")
+                    return image
+                    
+                except Exception as e:
+                    print(f"Warning: Could not load embedded icon data: {e}")
                 
                 # Fallback: create a teal circle with white "PN" text
+                print("Creating fallback tray icon")
                 width = height = 64
                 image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
                 dc = ImageDraw.Draw(image)
@@ -3865,16 +3863,17 @@ Features:
                 time.sleep(60)
     
     def _send_heartbeat(self):
-        """Send heartbeat/check-in to update client status"""
+        """Send heartbeat/check-in to update client status and last seen time"""
         try:
-            # Send updateClientMacCheckin request to keep client status current
-            response = requests.post(API_URL, json={
-                'action': 'updateClientMacCheckin',
+            # Send heartbeat to update last seen time in database
+            response = requests.post(f"{API_URL}/api/index", json={
+                'action': 'updateClientStatus',
                 'clientId': CLIENT_ID,
                 'macAddress': MAC_ADDRESS,
                 'timestamp': datetime.now().isoformat(),
-                'status': 'active',
-                'version': CLIENT_VERSION
+                'status': 'online',
+                'version': CLIENT_VERSION,
+                'lastSeen': datetime.now().isoformat()
             }, timeout=5)  # Short timeout for heartbeat
             
             # Don't log success to avoid spam, only log errors
