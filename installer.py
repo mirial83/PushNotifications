@@ -769,7 +769,7 @@ class SystemTray:
         if self.client.notifications:
             notification = self.client.notifications[0]
             messagebox.showinfo("Current Message", 
-                              f"Title: {notification.get('title', 'No title')}\\n"
+                              f"Title: {notification.get('title', 'No title')}\n"
                               f"Message: {notification.get('message', 'No message')}")
         else:
             messagebox.showinfo("No Messages", "No active notifications")
@@ -2320,7 +2320,7 @@ if os.name == "nt":
                     else:
                         __import__(pkg)
                 except Exception as e:
-                    print(f"Warning: Could not install {{pkg}}: {{e}}")
+                    print(f"Warning: Could not install {pkg}: {e}")
     
     try:
         import pystray
@@ -2332,10 +2332,16 @@ if os.name == "nt":
         import screeninfo
         WINDOWS_FEATURES_AVAILABLE = True
     except ImportError as e:
-        print(f"Warning: Windows features limited due to missing modules: {{e}}")
+        print(f"Warning: Windows features limited due to missing modules: {e}")
         WINDOWS_FEATURES_AVAILABLE = False
 
-print(f"PushNotifications Client v{CLIENT_VERSION} starting...")
+# Configuration variables (will be populated by installer)
+CLIENT_VERSION = "{INSTALLER_VERSION}"
+CLIENT_ID = "placeholder"
+MAC_ADDRESS = "placeholder"
+API_URL = "placeholder"
+
+print(f"PushNotifications Client v{{CLIENT_VERSION}} starting...")
 if __name__ == "__main__":
     print("This is a basic template client. Full implementation would be more complex.")
     import time
@@ -2683,7 +2689,7 @@ class NotificationWindow:
                     win32gui.FlashWindow(hwnd, True)
                     
                 except Exception as e:
-                    print(f"Warning: Could not set window styles: {{e}}")
+                    print(f"Warning: Could not set window styles: {e}")
             
             
             # Force window redraw and ensure proper DPI scaling
@@ -2725,7 +2731,7 @@ class NotificationWindow:
             x = max(0, min(x, self.window.winfo_screenwidth() - width))
             y = max(0, min(y, self.window.winfo_screenheight() - height))
             
-            self.window.geometry(f"{{width}}x{{height}}+{{x}}+{{y}}")
+            self.window.geometry(f"{width}x{height}+{x}+{y}")
             self.window.update()
             
             # Modern design theme colors
@@ -2805,7 +2811,7 @@ class NotificationWindow:
             allowed_websites = self.data.get('allowedWebsites', [])
             if allowed_websites:
                 websites_label = tk.Label(content_frame, 
-                                        text=f"Allowed websites: {{', '.join(allowed_websites)}}",
+                                        text=f"Allowed websites: {', '.join(allowed_websites)}",
                                         bg=colors['bg'], wraplength=360, justify=tk.LEFT,
                                         font=("Arial", 9), fg="#666")
                 websites_label.pack(pady=(0, 10))
@@ -2897,7 +2903,7 @@ class NotificationWindow:
                 minimize_btn.pack(side=tk.RIGHT, padx=5)
             
         except Exception as e:
-            print(f"Error creating notification window: {{e}}")
+            print(f"Error creating notification window: {e}")
     
     def request_website_access(self):
         """Request access to a specific website"""
@@ -3139,10 +3145,10 @@ class PushNotificationsClient:
         """Show client status"""
         try:
             active_count = len([n for n in self.notifications if not n.get('completed', False)])
-            status_text = f"Push Client v{CLIENT_VERSION}\\n"
-            status_text += f"Client ID: {CLIENT_ID}\\n"
-            status_text += f"Status: Running\\n"
-            status_text += f"Active Notifications: {active_count}\\n"
+            status_text = f"Push Client v{CLIENT_VERSION}\n"
+            status_text += f"Client ID: {CLIENT_ID}\n"
+            status_text += f"Status: Running\n"
+            status_text += f"Active Notifications: {active_count}\n"
             status_text += f"Security Mode: {'Active' if self.security_active else 'Inactive'}"
             
             if USE_GUI_DIALOGS:
@@ -3178,7 +3184,7 @@ class PushNotificationsClient:
                 else:
                     print("No Notifications: No active notifications to complete.")
         except Exception as e:
-            print(f"Error in tray mark complete: {{e}}")
+            print(f"Error in tray mark complete: {e}")
     
     def tray_request_website(self, icon=None, item=None):
         """Request website access from tray"""
@@ -3209,7 +3215,7 @@ class PushNotificationsClient:
                 else:
                     print(f"Request Sent: Website access request sent for: {website}")
         except Exception as e:
-            print(f"Error in tray request website: {{e}}")
+            print(f"Error in tray request website: {e}")
     
     def tray_request_deletion(self, icon=None, item=None):
         """Request uninstallation from tray"""
@@ -3239,7 +3245,7 @@ class PushNotificationsClient:
                 else:
                     print("Request Sent: Deletion request sent for admin approval.")
         except Exception as e:
-            print(f"Error in tray request deletion: {{e}}")
+            print(f"Error in tray request deletion: {e}")
     
     def tray_submit_bug(self, icon=None, item=None):
         """Submit bug report from tray"""
@@ -3278,7 +3284,7 @@ class PushNotificationsClient:
                 else:
                     print("Bug Report Sent: Thank you! Your bug report has been submitted.")
         except Exception as e:
-            print(f"Error in tray submit bug: {{e}}")
+            print(f"Error in tray submit bug: {e}")
     
     def tray_snooze_all(self, minutes):
         """Snooze all notifications from tray"""
@@ -3289,7 +3295,7 @@ class PushNotificationsClient:
             else:
                 print(f"Snoozed: All notifications snoozed for {minutes} minutes.")
         except Exception as e:
-            print(f"Error in tray snooze all: {{e}}")
+            print(f"Error in tray snooze all: {e}")
     
     def show_settings(self, icon=None, item=None):
         """Show client settings"""
@@ -3325,7 +3331,7 @@ class PushNotificationsClient:
                      command=settings_window.destroy).pack(pady=10)
                      
         except Exception as e:
-            print(f"Error showing settings: {{e}}")
+            print(f"Error showing settings: {e}")
     
     def show_about(self, icon=None, item=None):
         """Show about dialog"""
@@ -3346,7 +3352,7 @@ Features:
             
             messagebox.showinfo("About PushNotifications", about_text)
         except Exception as e:
-            print(f"Error showing about: {{e}}")
+            print(f"Error showing about: {e}")
     
     def _restart_client(self):
         """Restart the client application"""
@@ -3371,7 +3377,7 @@ Features:
             threading.Thread(target=restart_after_delay, daemon=True).start()
             
         except Exception as e:
-            print(f"Error restarting client: {{e}}")
+            print(f"Error restarting client: {e}")
     
     def quit_application(self, icon=None, item=None):
         """Handle application quit - clean shutdown only"""
@@ -3421,7 +3427,7 @@ Features:
                 time.sleep(30)  # Check every 30 seconds
                 
             except Exception as e:
-                print(f"Error in notification check: {{e}}")
+                print(f"Error in notification check: {e}")
                 time.sleep(60)
     
     def _send_heartbeat(self):
@@ -3443,7 +3449,7 @@ Features:
                 
         except Exception as e:
             # Log heartbeat errors but don't let them crash the client
-            print(f"Heartbeat error: {{e}}")
+            print(f"Heartbeat error: {e}")
     
     def process_notifications(self, server_notifications):
         """Process notifications from server and update display"""
@@ -3474,7 +3480,7 @@ Features:
             self.evaluate_security_state()
             
         except Exception as e:
-            print(f"Error processing notifications: {{e}}")
+            print(f"Error processing notifications: {e}")
     
     def create_notification_window(self, notification_data):
         """Create a new notification window"""
@@ -3487,7 +3493,7 @@ Features:
             self.layer_notification_windows()
             
         except Exception as e:
-            print(f"Error creating notification window: {{e}}")
+            print(f"Error creating notification window: {e}")
     
     def layer_notification_windows(self):
         """Layer notification windows with newest on top"""
@@ -3537,10 +3543,10 @@ Features:
                                 win32gui.SWP_SHOWWINDOW
                             )
                         except Exception as e:
-                            print(f"Warning: Could not set window z-order: {{e}}")
+                            print(f"Warning: Could not set window z-order: {e}")
                     
         except Exception as e:
-            print(f"Error layering windows: {{e}}")
+            print(f"Error layering windows: {e}")
     
     def handle_notification_action(self, action, data):
         """Handle actions from notification windows"""
@@ -3555,7 +3561,7 @@ Features:
                 self.request_website_access(data['notificationId'], data['website'])
                 
         except Exception as e:
-            print(f"Error handling notification action: {{e}}")
+            print(f"Error handling notification action: {e}")
     
     def snooze_notifications(self, minutes):
         """Snooze all notifications for specified minutes"""
@@ -3575,7 +3581,7 @@ Features:
             }, timeout=10)
             
         except Exception as e:
-            print(f"Error snoozing notifications: {{e}}")
+            print(f"Error snoozing notifications: {e}")
     
     def complete_notification(self, notification_id):
         """Mark notification as complete"""
@@ -3599,7 +3605,7 @@ Features:
             self.evaluate_security_state()
             
         except Exception as e:
-            print(f"Error completing notification: {{e}}")
+            print(f"Error completing notification: {e}")
     
     def request_website_access(self, notification_id, website):
         """Request access to a specific website"""
@@ -3612,7 +3618,7 @@ Features:
             }, timeout=10)
             
         except Exception as e:
-            print(f"Error requesting website access: {{e}}")
+            print(f"Error requesting website access: {e}")
     
     def evaluate_security_state(self):
         """Evaluate and apply security state based on active notifications"""
@@ -3635,7 +3641,7 @@ Features:
                     self.deactivate_security_features()
                     
         except Exception as e:
-            print(f"Error evaluating security state: {{e}}")
+            print(f"Error evaluating security state: {e}")
     
     def activate_security_features(self, notifications):
         """Activate security features (overlay, minimize, restrict)"""
@@ -3656,7 +3662,7 @@ Features:
             self.window_manager.block_restricted_processes(allowed_websites)
             
         except Exception as e:
-            print(f"Error activating security features: {{e}}")
+            print(f"Error activating security features: {e}")
     
     def deactivate_security_features(self):
         """Deactivate security features"""
@@ -3670,7 +3676,7 @@ Features:
             self.window_manager.restore_windows()
             
         except Exception as e:
-            print(f"Error deactivating security features: {{e}}")
+            print(f"Error deactivating security features: {e}")
     
     def send_shutdown_notification(self):
         """Send clean shutdown notification to server"""
@@ -3707,10 +3713,13 @@ Features:
                     'timestamp': datetime.now().isoformat()
                 }, timeout=10)
             except Exception as e:
-                print(f"Error sending uninstall acknowledgment: {{e}}")
+                print(f"Error sending uninstall acknowledgment: {e}")
             
             # Exit the client
             self.running = False
+            
+        except Exception as e:
+            print(f"Error handling uninstall command: {e}")
     
     def _check_for_client_updates(self):
         """Check for client updates"""
@@ -3731,7 +3740,7 @@ Features:
                         subprocess.Popen([sys.executable, str(installer_path), "--update"],
                                        creationflags=subprocess.CREATE_NO_WINDOW)
         except Exception as e:
-            print(f"Error checking for updates: {{e}}")
+            print(f"Error checking for updates: {e}")
     
     def run(self):
         """Main application loop"""
@@ -3753,7 +3762,7 @@ Features:
                     time.sleep(1)
                     
         except Exception as e:
-            print(f"Error in main run loop: {{e}}")
+            print(f"Error in main run loop: {e}")
         finally:
             self.deactivate_security_features()
 
