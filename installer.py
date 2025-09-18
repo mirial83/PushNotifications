@@ -2970,7 +2970,7 @@ class PushNotificationsClient:
         except Exception as e:
             print(f"Error showing status: {e}")
     
-def show_all_notifications(self, icon=None, item=None):
+    def show_all_notifications(self, icon=None, item=None):
         """Show all notification windows"""
         # First, restore any minimized windows
         for window in self.notification_windows:
