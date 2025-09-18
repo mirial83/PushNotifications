@@ -2317,7 +2317,7 @@ if os.name == "nt":
                     else:
                         __import__(pkg)
                 except Exception as e:
-                    print(f"Warning: Could not install {{{{pkg}}}}: {{{{e}}}}")
+                    print(f"Warning: Could not install {pkg}: {e}")
     
     try:
         import pystray
@@ -2329,7 +2329,7 @@ if os.name == "nt":
         import screeninfo
         WINDOWS_FEATURES_AVAILABLE = True
     except ImportError as e:
-        print(f"Warning: Windows features limited due to missing modules: {{{{e}}}}")
+        print(f"Warning: Windows features limited due to missing modules: {e}")
         WINDOWS_FEATURES_AVAILABLE = False
 
 # Client configuration
@@ -2393,16 +2393,16 @@ class OverlayManager:
                         win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE
                     )
                 except Exception as e:
-                    print(f"Warning: Could not set overlay window styles: {{{{e}}}}")
+                    print(f"Warning: Could not set overlay window styles: {e}")
             
             # Position on monitor
             x, y = monitor.x, monitor.y
             width, height = monitor.width, monitor.height
-            overlay.geometry(f"{{{{width}}}}x{{{{height}}}}+{{{{x}}}}+{{{{y}}}}")
+            overlay.geometry(f"{width}x{height}+{x}+{y}")
             
             return overlay
         except Exception as e:
-            print(f"Error creating overlay: {{{{e}}}}")
+            print(f"Error creating overlay: {e}")
             return None
     
     def show_overlays(self):
@@ -2415,11 +2415,11 @@ class OverlayManager:
                 monitors = screeninfo.get_monitors()
             else:
                 # Fallback: create overlay for primary monitor
-                monitors = [type('Monitor', (), {{
+                monitors = [type('Monitor', (), {
                     'x': 0, 'y': 0, 
                     'width': user32.GetSystemMetrics(0),
                     'height': user32.GetSystemMetrics(1)
-                }})()]
+                })()]
             
             root = tk.Tk()
             root.withdraw()  # Hide root window
@@ -2432,7 +2432,7 @@ class OverlayManager:
             
             self.active = True
         except Exception as e:
-            print(f"Error showing overlays: {{e}}")
+            print(f"Error showing overlays: {e}")
     
     def hide_overlays(self):
         """Hide all overlays"""
@@ -2451,11 +2451,11 @@ class WindowManager:
         self.minimized_windows = []
         # Process executable names to monitor and potentially terminate
         # These refer to Windows process names (actual .exe files) that may be running
-        self.restricted_processes = {{
+        self.restricted_processes = {
             'browsers': ['chrome.exe', 'firefox.exe', 'msedge.exe', 'opera.exe', 'brave.exe', 'iexplore.exe'],
             'vpn': ['openvpn.exe', 'nordvpn.exe', 'expressvpn.exe', 'cyberghost.exe', 'tunnelbear.exe'],
             'proxy': ['proxifier.exe', 'proxycap.exe', 'sockscap.exe']
-        }}
+        }
         # System processes that should never be terminated even if detected
         self.allowed_processes = ['taskmgr.exe', 'dwm.exe', 'winlogon.exe', 'csrss.exe', 'lsass.exe', 'services.exe']
     
@@ -2476,7 +2476,7 @@ class WindowManager:
             
             win32gui.EnumWindows(enum_windows_callback, None)
         except Exception as e:
-            print(f"Error minimizing windows: {{e}}")
+            print(f"Error minimizing windows: {e}")
     
     def restore_windows(self):
         """Restore previously minimized windows"""
@@ -2513,7 +2513,7 @@ class WindowManager:
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception as e:
-            print(f"Error blocking processes: {{e}}")
+            print(f"Error blocking processes: {e}")
 
 def enable_dpi_awareness():
     """Enable DPI awareness for proper scaling on high-DPI displays"""
@@ -2528,7 +2528,7 @@ def enable_dpi_awareness():
                 ctypes.windll.user32.SetProcessDPIAware()
             return True
         except Exception as e:
-            print(f"Warning: Could not enable DPI awareness: {{e}}")
+            print(f"Warning: Could not enable DPI awareness: {e}")
     return False
 
 class NotificationWindow:
@@ -2550,7 +2550,7 @@ class NotificationWindow:
                     import ctypes
                     ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
                 except Exception as e:
-                    print(f"Warning: Could not set DPI awareness: {{e}}")
+                    print(f"Warning: Could not set DPI awareness: {e}")
 
             self.window = tk.Toplevel()
             self.window.title("Push Notification")
