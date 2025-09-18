@@ -2287,13 +2287,13 @@ except ImportError:
 
 # Windows-specific imports with auto-installation
 if os.name == "nt":
-    required_packages = {{
+    required_packages = {
         'pystray': 'pystray>=0.19.4',
         'PIL': 'Pillow>=10.0.0',
         'screeninfo': 'screeninfo>=0.8.1',
         'win32gui': 'pywin32>=306',
         'tkinter': None  # Built-in
-    }}
+    }
     
     for pkg, pip_pkg in required_packages.items():
         try:
