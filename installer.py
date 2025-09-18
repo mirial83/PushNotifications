@@ -3406,6 +3406,7 @@ class PushNotificationsClient:
         self.snooze_end_time = None
         self.security_active = False
         self.force_quit_detected = False
+        self.client_operational = False  # Flag to control when heartbeat starts
         
         # Set proper process title for Task Manager
         self._set_process_title()
@@ -3826,6 +3827,10 @@ Features:
     
     def check_notifications(self):
         """Main notification checking loop with heartbeat functionality"""
+        # Add startup delay to ensure client is fully initialized
+        print("Starting notification checker...")
+        time.sleep(5)  # Wait 5 seconds before starting network operations
+        
         while self.running:
             try:
                 # Check if snooze period has ended
@@ -3833,33 +3838,48 @@ Features:
                     self.snooze_end_time = None
                     self.evaluate_security_state()
                 
-                # Send heartbeat/check-in to update client status
-                self._send_heartbeat()
+                # Only send heartbeat if client is fully operational
+                if hasattr(self, 'client_operational') and self.client_operational:
+                    self._send_heartbeat()
                 
                 # Fetch notifications from server
-                response = requests.post(API_URL, json={
-                    'action': 'getNotifications',
-                    'clientId': CLIENT_ID,
-                    'macAddress': MAC_ADDRESS
-                }, timeout=10)
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    if result.get('success'):
-                        server_notifications = result.get('notifications', [])
-                        self.process_notifications(server_notifications)
+                try:
+                    response = requests.post(API_URL, json={
+                        'action': 'getNotifications',
+                        'clientId': CLIENT_ID,
+                        'macAddress': MAC_ADDRESS
+                    }, timeout=10)
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        if result.get('success'):
+                            server_notifications = result.get('notifications', [])
+                            self.process_notifications(server_notifications)
+                            # Mark client as operational after first successful API call
+                            self.client_operational = True
+                    else:
+                        print(f"API response error: {response.status_code}")
+                        
+                except requests.exceptions.RequestException as e:
+                    print(f"Network error in notification check: {e}")
+                    # Continue loop but don't crash
                 
                 # Periodic update check (every hour)
                 if not hasattr(self, '_last_update_check'):
                     self._last_update_check = time.time()
                 elif time.time() - self._last_update_check > 3600:
-                    self._check_for_client_updates()
+                    try:
+                        self._check_for_client_updates()
+                    except Exception as e:
+                        print(f"Error checking for updates: {e}")
                     self._last_update_check = time.time()
                 
                 time.sleep(30)  # Check every 30 seconds
                 
             except Exception as e:
-                print(f"Error in notification check: {e}")
+                print(f"Error in notification check loop: {e}")
+                import traceback
+                traceback.print_exc()
                 time.sleep(60)
     
     def _send_heartbeat(self):
@@ -4178,16 +4198,23 @@ Features:
     def run(self):
         """Main application loop"""
         try:
+            print("Initializing Push Client...")
+            
             # Create tray icon if available
             if WINDOWS_FEATURES_AVAILABLE:
+                print("Creating tray icon...")
                 self.tray_icon = self.create_tray_icon()
+                print("Tray icon created successfully")
             
             # Start notification checker in background thread
+            print("Starting notification checker thread...")
             notif_thread = threading.Thread(target=self.check_notifications, daemon=True)
             notif_thread.start()
+            print("Notification checker thread started")
             
             # Run main loop
             if self.tray_icon and WINDOWS_FEATURES_AVAILABLE:
+                print("Starting tray icon main loop...")
                 self.tray_icon.run()
             else:
                 print("Push Client running in console mode...")
@@ -4196,7 +4223,10 @@ Features:
                     
         except Exception as e:
             print(f"Error in main run loop: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
+            print("Shutting down client...")
             self.deactivate_security_features()
 
 if __name__ == "__main__":
