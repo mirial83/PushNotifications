@@ -4181,53 +4181,7 @@ def main():
         print("=" * 50)
         print("Starting installation process...")
         
-        # Check for administrator privileges on Windows (auto-elevate required)
-        if platform.system() == "Windows":
-            try:
-                # Check if already running as admin
-                is_admin = bool(ctypes.windll.shell32.IsUserAnAdmin())
-                if not is_admin:
-                    print("Administrator privileges required. Requesting elevation...")
-                    
-                    # Use the most reliable elevation method
-                    script_path = os.path.abspath(sys.argv[0])
-                    script_args = ' '.join([f'"{arg}"' for arg in sys.argv])
-                    
-                    try:
-                        shell32 = ctypes.windll.shell32
-                        shell32.ShellExecuteW.argtypes = [
-                            ctypes.wintypes.HWND, ctypes.wintypes.LPCWSTR, ctypes.wintypes.LPCWSTR,
-                            ctypes.wintypes.LPCWSTR, ctypes.wintypes.LPCWSTR, ctypes.c_int
-                        ]
-                        shell32.ShellExecuteW.restype = ctypes.c_void_p
-                        
-                        result = shell32.ShellExecuteW(
-                            None, "runas", sys.executable, script_args, None, 1
-                        )
-                        
-                        result_int = ctypes.cast(result, ctypes.c_void_p).value or 0
-                        if result_int > 32:
-                            print("[OK] Administrator privileges requested - elevated window will open")
-                            sys.exit(0)
-                        else:
-                            print(f"[ERR] Elevation failed with error code: {result_int}")
-                            print("Installation cannot proceed without administrator privileges.")
-                            input("Press Enter to exit...")
-                            sys.exit(1)
-                    except Exception as e:
-                        print(f"[ERR] Elevation failed: {e}")
-                        print("Installation cannot proceed without administrator privileges.")
-                        input("Press Enter to exit...")
-                        sys.exit(1)
-                else:
-                    print("[OK] Running with administrator privileges")
-            except Exception as e:
-                print(f"Error checking administrator privileges: {e}")
-                print("Installation cannot proceed without administrator privileges.")
-                input("Press Enter to exit...")
-                sys.exit(1)
-        
-        # Parse command line arguments
+        # Parse command line arguments first to handle help/docs before admin check
         api_url = None
         repair_mode = False
         update_mode = False
