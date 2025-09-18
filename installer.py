@@ -2342,6 +2342,188 @@ if __name__ == "__main__":
     while True:
         time.sleep(30)  # Keep running
 '''
+    
+    def create_encrypted_vault(self):
+        """Create AES-256-GCM encrypted configuration vault"""
+        print("Creating encrypted configuration vault...")
+        
+        try:
+            # Prepare vault data with comprehensive client configuration
+            vault_data = {
+                'deviceId': self.device_data.get('deviceId'),
+                'clientId': self.device_data.get('clientId'),
+                'keyId': self.key_id,
+                'apiUrl': self.api_url,
+                'macAddress': self.mac_address,
+                'username': self.username,
+                'clientName': self.client_name,
+                'installPath': str(self.install_path),
+                'version': INSTALLER_VERSION,
+                'encryptionMetadata': self.encryption_metadata,
+                'clientPolicy': getattr(self, 'client_policy', {}),
+                'macDetectionMethod': getattr(self, 'mac_detection_method', 'unknown'),
+                'created': datetime.now().isoformat(),
+                'lastUpdated': datetime.now().isoformat(),
+                # Runtime configuration
+                'config': {
+                    'heartbeatInterval': 300,  # 5 minutes
+                    'updateCheckInterval': 86400,  # Daily
+                    'notificationPollInterval': 30,  # 30 seconds
+                    'overlayOpacity': 0.25,  # 25% grey
+                    'snoozeOptions': [5, 15, 30],  # minutes
+                    'flashIntervals': [300, 240, 180, 120, 90, 60, 45, 30, 20, 15, 10, 5],  # seconds
+                    'allowedTaskManagerApps': [
+                        'taskmgr.exe', 'dwm.exe', 'winlogon.exe', 'csrss.exe',
+                        'lsass.exe', 'services.exe', 'svchost.exe'
+                    ],
+                    'browserProcesses': [
+                        'chrome.exe', 'msedge.exe', 'firefox.exe', 'opera.exe',
+                        'brave.exe', 'iexplore.exe', 'safari.exe'
+                    ]
+                }
+            }
+            
+            vault_path = self.install_path / ".vault"
+            
+            # Implement AES-256-GCM encryption with server-derived key
+            # Note: In production, master key comes from server, derived locally for vault encryption
+            vault_json = json.dumps(vault_data, indent=2).encode('utf-8')
+            
+            # Generate a vault-specific salt and nonce
+            import secrets
+            salt = secrets.token_bytes(16)
+            nonce = secrets.token_bytes(12)  # GCM nonce
+            
+            # For demo: derive key from key_id (in production, fetch from server)
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=self.encryption_metadata.get('iterations', 100000),
+            )
+            # In production: key = server_provided_key
+            # For demo: derive from key_id
+            demo_key_material = f"{self.key_id}:{self.mac_address}:vault_key".encode()
+            derived_key = kdf.derive(demo_key_material)
+            
+            # Encrypt with AES-256-GCM
+            aesgcm = AESGCM(derived_key)
+            encrypted_data = aesgcm.encrypt(nonce, vault_json, None)
+            
+            # Create vault file structure
+            vault_header = {
+                'version': 'VAULT_V2_AES256GCM',
+                'keyId': self.key_id,
+                'algorithm': 'AES-256-GCM',
+                'created': datetime.now().isoformat(),
+                'salt': salt.hex(),
+                'nonce': nonce.hex()
+            }
+            
+            # Write encrypted vault
+            with open(vault_path, 'wb') as f:
+                # Write header (unencrypted metadata)
+                header_json = json.dumps(vault_header, indent=2).encode('utf-8')
+                f.write(len(header_json).to_bytes(4, 'little'))  # Header length
+                f.write(header_json)
+                # Write encrypted payload
+                f.write(encrypted_data)
+            
+            # Set Windows hidden and system attributes
+            if self.system == "Windows":
+                subprocess.run([
+                    "attrib", "+S", "+H", str(vault_path)
+                ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                # Unix permissions
+                os.chmod(vault_path, 0o600)  # Read/write for owner only
+            
+            # Create additional security marker
+            marker_path = self.install_path / ".security_marker"
+            marker_data = {
+                'installId': str(uuid.uuid4()),
+                'keyId': self.key_id,
+                'pathHash': hashlib.sha256(str(self.install_path).encode()).hexdigest(),
+                'created': datetime.now().isoformat(),
+                'version': INSTALLER_VERSION
+            }
+            
+            with open(marker_path, 'w') as f:
+                json.dump(marker_data, f, indent=2)
+            
+            if self.system == "Windows":
+                subprocess.run([
+                    "attrib", "+S", "+H", str(marker_path)
+                ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            # Securely clear key material from memory
+            derived_key = b'\x00' * len(derived_key)
+            demo_key_material = b'\x00' * len(demo_key_material)
+            
+            print("[OK] AES-256-GCM encrypted vault created")
+            print(f"  Encryption Algorithm: {vault_header['algorithm']}")
+            print(f"  Key ID: {self.key_id}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"[ERR] Failed to create encrypted vault: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def run_installation(self):
+        """Run the complete installation process with progress tracking"""
+        print("Starting PushNotifications Installation")
+        print("=" * 60)
+        
+        # Check admin privileges (skip on macOS since we install in user directory)
+        if self.system != "Darwin" and not self.check_admin_privileges():
+            print("Administrator privileges required for installation.")
+            if not self.restart_with_admin():
+                print("[ERR] Installation failed: Could not obtain administrator privileges")
+                return False
+            return True  # Process will restart with admin
+        
+        if self.system == "Darwin":
+            print("[OK] Running with user privileges (macOS install in user directory)")
+        else:
+            print("[OK] Running with administrator privileges")
+        
+        # Validate installation key
+        if not self.validate_installation_key():
+            print("[ERR] Installation failed: Invalid installation key")
+            return False
+        
+        # Register device
+        if not self.register_device():
+            print("[ERR] Installation failed: Device registration failed")
+            return False
+        
+        # Create hidden installation directory
+        if not self.create_hidden_install_directory():
+            print("[ERR] Installation failed: Could not create installation directory")
+            return False
+        
+        # Create encrypted vault
+        if not self.create_encrypted_vault():
+            print("[ERR] Installation failed: Could not create encrypted vault")
+            return False
+        
+        # Create embedded client components
+        if not self.create_embedded_client_components():
+            print("[ERR] Installation failed: Could not create client components")
+            return False
+        
+        # Create desktop shortcuts
+        if not self.create_desktop_shortcuts():
+            print("[WARNING] Could not create desktop shortcuts (non-critical)")
+        
+        print("[COMPLETED] Installation completed successfully!")
+        return True
+
+
+# External utility classes and functions for embedded client code
 class WindowManager:
     """Manages window minimization and process restrictions"""
     
@@ -3593,7 +3775,16 @@ if __name__ == "__main__":
             print(f"Fatal error: {e}")
         sys.exit(1)
 
-        # File/directory monitoring patterns
+
+class FileProtectionService:
+    """File system protection service for installation security"""
+    
+    def __init__(self, install_path):
+        self.install_path = install_path
+        self.running = True
+        self.pending_approvals = {}
+        
+        # Protected paths for file monitoring
         self.protected_paths = {
             str(self.install_path),
             str(self.install_path.parent),
@@ -3603,15 +3794,11 @@ if __name__ == "__main__":
         }
         
         print(f"File Protection Service initialized for: {self.install_path}")
-        
-        # Implement AES-256-GCM encryption with server-derived key
-        # Note: In production, master key comes from server, derived locally for vault encryption
-        vault_json = json.dumps(vault_data, indent=2).encode('utf-8')
-        
-        # Generate a vault-specific salt and nonce
-        import secrets
-        salt = secrets.token_bytes(16)
-        nonce = secrets.token_bytes(12)  # GCM nonce
+    
+    def terminate_process(self, process_id):
+        """Safely terminate a process"""
+        try:
+            proc = psutil.Process(process_id)
             proc.terminate()
             
             # Wait a bit and force kill if necessary
@@ -3629,16 +3816,21 @@ if __name__ == "__main__":
     def restore_file_attributes(self, file_path):
         """Restore proper file attributes"""
         try:
-            if WINDOWS_SECURITY_AVAILABLE and os.name == 'nt':
-                # Restore hidden and system attributes
-                attrs = (win32con.FILE_ATTRIBUTE_HIDDEN | 
-                        win32con.FILE_ATTRIBUTE_SYSTEM)
-                
-                win32file.SetFileAttributes(str(file_path), attrs)
-                print(f"[OK] Restored attributes for: {Path(file_path).name}")
+            if platform.system() == "Windows":
+                try:
+                    import win32file
+                    import win32con
+                    # Restore hidden and system attributes
+                    attrs = (win32con.FILE_ATTRIBUTE_HIDDEN | 
+                            win32con.FILE_ATTRIBUTE_SYSTEM)
+                    
+                    win32file.SetFileAttributes(str(file_path), attrs)
+                    print(f"[OK] Restored attributes for: {Path(file_path).name}")
+                except ImportError:
+                    print("Warning: win32file not available for attribute restoration")
             
         except Exception as e:
-            print(f"Error restoring attributes: {{e}}")
+            print(f"Error restoring attributes: {e}")
     
     def log_approval_action(self, request_id, action):
         """Log approval actions for audit trail"""
@@ -3647,18 +3839,19 @@ if __name__ == "__main__":
                 'requestId': request_id,
                 'action': action,
                 'timestamp': datetime.now().isoformat(),
-                'details': self.pending_approvals.get(request_id, {{}})
+                'details': self.pending_approvals.get(request_id, {})
             }
             
-            # Send log to server
-            requests.post(API_URL, json={
+            # Send log to server - using DEFAULT_API_URL as fallback
+            api_url = getattr(self, 'api_url', DEFAULT_API_URL)
+            requests.post(f"{api_url}/api/index", json={
                 'action': 'logApprovalAction',
-                'clientId': CLIENT_ID,
+                'clientId': getattr(self, 'client_id', 'unknown'),
                 'logData': log_data
             }, timeout=10)
             
         except Exception as e:
-            print(f"Error logging approval action: {{e}}")
+            print(f"Error logging approval action: {e}")
     
     def cleanup_old_requests(self):
         """Clean up old pending approval requests"""
@@ -3678,16 +3871,48 @@ if __name__ == "__main__":
                 time.sleep(3600)  # Clean up every hour
                 
             except Exception as e:
-                print(f"Error in cleanup: {{e}}")
+                print(f"Error in cleanup: {e}")
                 time.sleep(3600)
+    
+    def monitor_suspicious_processes(self):
+        """Monitor for suspicious processes that might interfere with installation"""
+        while self.running:
+            try:
+                # Monitor for processes that might try to tamper with installation
+                suspicious_processes = ['uninstall', 'delete', 'remove', 'clean']
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if any(suspicious in ' '.join(proc.info.get('cmdline', [])).lower() 
+                              for suspicious in suspicious_processes):
+                            print(f"[ALERT] Suspicious process detected: {proc.info['name']}")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                        
+                time.sleep(60)  # Check every minute
+            except Exception as e:
+                print(f"Error in process monitoring: {e}")
+                time.sleep(60)
+    
+    def monitor_file_system_changes(self):
+        """Monitor file system changes to protected paths"""
+        while self.running:
+            try:
+                # Basic file existence check
+                for protected_path in self.protected_paths:
+                    if not Path(protected_path).exists():
+                        print(f"[ALERT] Protected file missing: {protected_path}")
+                        # Could trigger restoration process here
+                        
+                time.sleep(300)  # Check every 5 minutes
+            except Exception as e:
+                print(f"Error in file system monitoring: {e}")
+                time.sleep(300)
     
     def run(self):
         """Main service loop"""
-        print(f"[SHIELD]  File System Protection Service Started")
+        print(f"[SHIELD] File System Protection Service Started")
         print(f"    Install Path: {self.install_path}")
         print(f"    Protected Paths: {len(self.protected_paths)}")
-        print(f"    Client ID: {CLIENT_ID}")
-        print(f"    API URL: {API_URL}")
         
         try:
             # Start monitoring threads
@@ -3716,7 +3941,7 @@ if __name__ == "__main__":
             print("\n[STOP] File Protection Service stopping...")
             self.stop()
         except Exception as e:
-            print(f"[BOOM] Service error: {{e}}")
+            print(f"[BOOM] Service error: {e}")
             self.stop()
     
     def stop(self):
@@ -3724,302 +3949,8 @@ if __name__ == "__main__":
         self.running = False
         print("[OK] File Protection Service stopped")
 
-if __name__ == "__main__":
-    try:
-        service = FileSystemProtectionService()
-        service.run()
-    except Exception as e:
-        print(f"Fatal error: {{e}}")
-        sys.exit(1)
-'''
-
-    def create_encrypted_vault(self):
-        """Create AES-256-GCM encrypted configuration vault"""
-        print("Creating encrypted configuration vault...")
-        
-        try:
-            # Prepare vault data with comprehensive client configuration
-            vault_data = {
-                'deviceId': self.device_data.get('deviceId'),
-                'clientId': self.device_data.get('clientId'),
-                'keyId': self.key_id,
-                'apiUrl': self.api_url,
-                'macAddress': self.mac_address,
-                'username': self.username,
-                'clientName': self.client_name,
-                'installPath': str(self.install_path),
-                'version': INSTALLER_VERSION,
-                'encryptionMetadata': self.encryption_metadata,
-                'clientPolicy': getattr(self, 'client_policy', {}),
-                'macDetectionMethod': getattr(self, 'mac_detection_method', 'unknown'),
-                'created': datetime.now().isoformat(),
-                'lastUpdated': datetime.now().isoformat(),
-                # Runtime configuration
-                'config': {
-                    'heartbeatInterval': 300,  # 5 minutes
-                    'updateCheckInterval': 86400,  # Daily
-                    'notificationPollInterval': 30,  # 30 seconds
-                    'overlayOpacity': 0.25,  # 25% grey
-                    'snoozeOptions': [5, 15, 30],  # minutes
-                    'flashIntervals': [300, 240, 180, 120, 90, 60, 45, 30, 20, 15, 10, 5],  # seconds
-                    'allowedTaskManagerApps': [
-                        'taskmgr.exe', 'dwm.exe', 'winlogon.exe', 'csrss.exe',
-                        'lsass.exe', 'services.exe', 'svchost.exe'
-                    ],
-                    'browserProcesses': [
-                        'chrome.exe', 'msedge.exe', 'firefox.exe', 'opera.exe',
-                        'brave.exe', 'iexplore.exe', 'safari.exe'
-                    ]
-                }
-            }
-            
-            vault_path = self.install_path / ".vault"
-            
-            # Implement AES-256-GCM encryption with server-derived key
-            # Note: In production, master key comes from server, derived locally for vault encryption
-            vault_json = json.dumps(vault_data, indent=2).encode('utf-8')
-            
-            # Generate a vault-specific salt and nonce
-            import secrets
-            salt = secrets.token_bytes(16)
-            nonce = secrets.token_bytes(12)  # GCM nonce
-            
-            # For demo: derive key from key_id (in production, fetch from server)
-            kdf = PBKDF2HMAC(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=salt,
-                iterations=self.encryption_metadata.get('iterations', 100000),
-            )
-            # In production: key = server_provided_key
-            # For demo: derive from key_id
-            demo_key_material = f"{self.key_id}:{self.mac_address}:vault_key".encode()
-            derived_key = kdf.derive(demo_key_material)
-            
-            # Encrypt with AES-256-GCM
-            aesgcm = AESGCM(derived_key)
-            encrypted_data = aesgcm.encrypt(nonce, vault_json, None)
-            
-            # Create vault file structure
-            vault_header = {
-                'version': 'VAULT_V2_AES256GCM',
-                'keyId': self.key_id,
-                'algorithm': 'AES-256-GCM',
-                'created': datetime.now().isoformat(),
-                'salt': salt.hex(),
-                'nonce': nonce.hex()
-            }
-            
-            # Write encrypted vault
-            with open(vault_path, 'wb') as f:
-                # Write header (unencrypted metadata)
-                header_json = json.dumps(vault_header, indent=2).encode('utf-8')
-                f.write(len(header_json).to_bytes(4, 'little'))  # Header length
-                f.write(header_json)
-                # Write encrypted payload
-                f.write(encrypted_data)
-            
-            # Set Windows hidden and system attributes
-            if self.system == "Windows":
-                subprocess.run([
-                    "attrib", "+S", "+H", str(vault_path)
-                ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            else:
-                # Unix permissions
-                os.chmod(vault_path, 0o600)  # Read/write for owner only
-            
-            # Create additional security marker
-            marker_path = self.install_path / ".security_marker"
-            marker_data = {
-                'installId': str(uuid.uuid4()),
-                'keyId': self.key_id,
-                'pathHash': hashlib.sha256(str(self.install_path).encode()).hexdigest(),
-                'created': datetime.now().isoformat(),
-                'version': INSTALLER_VERSION
-            }
-            
-            with open(marker_path, 'w') as f:
-                json.dump(marker_data, f, indent=2)
-            
-            if self.system == "Windows":
-                subprocess.run([
-                    "attrib", "+S", "+H", str(marker_path)
-                ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            # Securely clear key material from memory
-            derived_key = b'\x00' * len(derived_key)
-            demo_key_material = b'\x00' * len(demo_key_material)
-            
-            print("[OK] AES-256-GCM encrypted vault created")
-            print(f"  Encryption Algorithm: {vault_header['algorithm']}")
-            print(f"  Key ID: {self.key_id}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"[ERR] Failed to create encrypted vault: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-
-    def run_installation(self):
-        """Run the complete installation process with progress tracking"""
-        print("Starting PushNotifications Installation")
-        print("=" * 60)
-        
-        # Check admin privileges (skip on macOS since we install in user directory)
-        if self.system != "Darwin" and not self.check_admin_privileges():
-            print("Administrator privileges required for installation.")
-            if not self.restart_with_admin():
-                print("[ERR] Installation failed: Could not obtain administrator privileges")
-                return False
-            return True  # Process will restart with admin
-        
-        if self.system == "Darwin":
-            print("[OK] Running with user privileges (macOS install in user directory)")
-        else:
-            print("[OK] Running with administrator privileges")
-        
-        # Validate installation key
-        if not self.validate_installation_key():
-            print("[ERR] Installation failed: Invalid installation key")
-            return False
-        
-        # Register device
-        if not self.register_device():
-            print("[ERR] Installation failed: Device registration failed")
-            return False
-        
-        # Create hidden installation directory
-        if not self.create_hidden_install_directory():
-            print("[ERR] Installation failed: Could not create installation directory")
-            return False
-        
-        # Create embedded client components
-        if not self.create_embedded_client_components():
-            print("[ERR] Installation failed: Could not create client components")
-            return False
-        
-        print("[COMPLETED] Installation completed successfully!")
-        return True
-
 # Standalone functions outside the class
-def _get_embedded_unix_client_code(installer_instance):
-    """Get the embedded Unix client code with comprehensive cross-platform functionality"""
-    # Use simple string replacement to avoid f-string complexity issues
-    client_code = '''#!/usr/bin/env python3
-"""
-PushNotifications Unix/Linux/macOS Client
-Cross-platform notification management system
-Version: INSTALLER_VERSION_PLACEHOLDER
-"""
-
-import os
-import sys
-import json
-import time
-import threading
-import subprocess
-from pathlib import Path
-from datetime import datetime, timedelta
-
-# Core functionality imports with auto-installation
-try:
-    import requests
-except ImportError:
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'requests'])
-    import requests
-
-try:
-    import psutil
-except ImportError:
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'psutil==5.9.0'])
-    import psutil
-
-# Cross-platform GUI imports
-try:
-    import tkinter as tk
-    from tkinter import messagebox, simpledialog, ttk
-    GUI_AVAILABLE = True
-except ImportError:
-    GUI_AVAILABLE = False
-    print("Warning: tkinter not available - using console mode")
-
-# Client configuration
-CLIENT_VERSION = "CLIENT_VERSION_PLACEHOLDER"
-API_URL = "API_URL_PLACEHOLDER"
-MAC_ADDRESS = "MAC_ADDRESS_PLACEHOLDER"
-CLIENT_ID = "CLIENT_ID_PLACEHOLDER"
-KEY_ID = "KEY_ID_PLACEHOLDER"
-
-class UnixNotificationClient:
-    """Cross-platform notification client for Unix/Linux/macOS"""
-    
-    def __init__(self):
-        self.running = True
-        self.notifications = []
-        
-    def run(self):
-        """Main client loop"""
-        print(f"PushNotifications Client v{CLIENT_VERSION} running...")
-        print("Note: This is a basic cross-platform client")
-        
-        # Start notification checker in background
-        notif_thread = threading.Thread(target=self.check_notifications, daemon=True)
-        notif_thread.start()
-        
-        # Simple console loop
-        try:
-            while self.running:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("\nShutting down client...")
-            self.running = False
-    
-    def check_notifications(self):
-        """Check for notifications from server"""
-        while self.running:
-            try:
-                response = requests.post(API_URL, json={
-                    'action': 'getNotifications',
-                    'clientId': CLIENT_ID,
-                    'macAddress': MAC_ADDRESS
-                }, timeout=10)
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    if result.get('success'):
-                        notifications = result.get('notifications', [])
-                        self.process_notifications(notifications)
-                
-                time.sleep(30)  # Check every 30 seconds
-                
-            except Exception as e:
-                print(f"Error checking notifications: {e}")
-                time.sleep(60)
-    
-    def process_notifications(self, notifications):
-        """Process notifications (basic console display)"""
-        for notification in notifications:
-            if not notification.get('completed', False):
-                print(f"\n[ANNOUNCE] NEW NOTIFICATION:")
-                print(f"Message: {notification.get('message', 'No message')}")
-                print(f"ID: {notification.get('id')}")
-                print(f"Type 'complete {notification.get('id')}' to mark as complete")
-
-if __name__ == "__main__":
-    client = UnixNotificationClient()
-    client.run()
-'''
-    # Replace placeholders with actual values
-    client_code = client_code.replace('INSTALLER_VERSION_PLACEHOLDER', INSTALLER_VERSION)
-    client_code = client_code.replace('CLIENT_VERSION_PLACEHOLDER', INSTALLER_VERSION)
-    client_code = client_code.replace('API_URL_PLACEHOLDER', f"{installer_instance.api_url}/api/index")
-    client_code = client_code.replace('MAC_ADDRESS_PLACEHOLDER', installer_instance.mac_address)
-    client_code = client_code.replace('CLIENT_ID_PLACEHOLDER', str(installer_instance.device_data.get('clientId', 'unknown')))
-    client_code = client_code.replace('KEY_ID_PLACEHOLDER', str(installer_instance.key_id))
-    
-    return client_code
+# Unix functionality removed - Windows-only installer
 
 def notify_installation_failure(installer_instance, stage, error_message):
     """Notify the server that the installation has failed"""
