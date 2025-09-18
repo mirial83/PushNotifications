@@ -2981,7 +2981,7 @@ class PushNotificationsClient:
                             print(f"[OK] Loaded tray icon from: {icon_path}")
                             return image
                     except Exception as e:
-                        print(f"Warning: Could not load icon from {{icon_path}}: {{e}}")
+                        print(f"Warning: Could not load icon from {icon_path}: {e}")
                         continue
                 
                 print("Warning: pnicon.png not found, creating fallback icon")
