@@ -2823,10 +2823,10 @@ class NotificationWindow:
         """Request access to a specific website"""
         website = self.website_request_var.get().strip()
         if website:
-            self.callback('request_website', {
+            self.callback('request_website', {{
                 'notificationId': self.data.get('id'),
                 'website': website
-            })
+            }})
             messagebox.showinfo("Request Sent", "Website access request sent for approval.")
             self.website_request_var.set("")
         else:
@@ -2834,17 +2834,17 @@ class NotificationWindow:
     
     def snooze_notification(self, minutes):
         """Snooze notification for specified minutes"""
-        self.callback('snooze', {
+        self.callback('snooze', {{
             'notificationId': self.data.get('id'),
             'minutes': minutes
-        })
+        }})
         self.close()
     
     def complete_notification(self):
         """Mark notification as complete"""
-        self.callback('complete', {
+        self.callback('complete', {{
             'notificationId': self.data.get('id')
-        })
+        }})
         self.close()
     
     def minimize_notification(self):
