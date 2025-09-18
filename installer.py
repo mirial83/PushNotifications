@@ -3906,11 +3906,12 @@ if __name__ == "__main__":
 # Standalone functions outside the class
 def _get_embedded_unix_client_code(installer_instance):
     """Get the embedded Unix client code with comprehensive cross-platform functionality"""
-    return f'''#!/usr/bin/env python3
+    # Use simple string replacement to avoid f-string complexity issues
+    client_code = '''#!/usr/bin/env python3
 """
 PushNotifications Unix/Linux/macOS Client
 Cross-platform notification management system
-Version: {INSTALLER_VERSION}
+Version: INSTALLER_VERSION_PLACEHOLDER
 """
 
 import os
@@ -3945,11 +3946,11 @@ except ImportError:
     print("Warning: tkinter not available - using console mode")
 
 # Client configuration
-CLIENT_VERSION = "{INSTALLER_VERSION}"
-API_URL = "{installer_instance.api_url}/api/index"
-MAC_ADDRESS = "{installer_instance.mac_address}"
-CLIENT_ID = "{installer_instance.device_data.get('clientId')}"
-KEY_ID = "{installer_instance.key_id}"
+CLIENT_VERSION = "CLIENT_VERSION_PLACEHOLDER"
+API_URL = "API_URL_PLACEHOLDER"
+MAC_ADDRESS = "MAC_ADDRESS_PLACEHOLDER"
+CLIENT_ID = "CLIENT_ID_PLACEHOLDER"
+KEY_ID = "KEY_ID_PLACEHOLDER"
 
 class UnixNotificationClient:
     """Cross-platform notification client for Unix/Linux/macOS"""
@@ -3960,7 +3961,7 @@ class UnixNotificationClient:
         
     def run(self):
         """Main client loop"""
-        print(f"PushNotifications Client v{{CLIENT_VERSION}} running...")
+        print(f"PushNotifications Client v{CLIENT_VERSION} running...")
         print("Note: This is a basic cross-platform client")
         
         # Start notification checker in background
@@ -3979,11 +3980,11 @@ class UnixNotificationClient:
         """Check for notifications from server"""
         while self.running:
             try:
-                response = requests.post(API_URL, json={{
+                response = requests.post(API_URL, json={
                     'action': 'getNotifications',
                     'clientId': CLIENT_ID,
                     'macAddress': MAC_ADDRESS
-                }}, timeout=10)
+                }, timeout=10)
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -3994,7 +3995,7 @@ class UnixNotificationClient:
                 time.sleep(30)  # Check every 30 seconds
                 
             except Exception as e:
-                print(f"Error checking notifications: {{e}}")
+                print(f"Error checking notifications: {e}")
                 time.sleep(60)
     
     def process_notifications(self, notifications):
@@ -4002,14 +4003,23 @@ class UnixNotificationClient:
         for notification in notifications:
             if not notification.get('completed', False):
                 print(f"\n[ANNOUNCE] NEW NOTIFICATION:")
-                print(f"Message: {{notification.get('message', 'No message')}}")
-                print(f"ID: {{notification.get('id')}}")
-                print(f"Type 'complete {{notification.get('id')}}' to mark as complete")
+                print(f"Message: {notification.get('message', 'No message')}")
+                print(f"ID: {notification.get('id')}")
+                print(f"Type 'complete {notification.get('id')}' to mark as complete")
 
 if __name__ == "__main__":
     client = UnixNotificationClient()
     client.run()
 '''
+    # Replace placeholders with actual values
+    client_code = client_code.replace('INSTALLER_VERSION_PLACEHOLDER', INSTALLER_VERSION)
+    client_code = client_code.replace('CLIENT_VERSION_PLACEHOLDER', INSTALLER_VERSION)
+    client_code = client_code.replace('API_URL_PLACEHOLDER', f"{installer_instance.api_url}/api/index")
+    client_code = client_code.replace('MAC_ADDRESS_PLACEHOLDER', installer_instance.mac_address)
+    client_code = client_code.replace('CLIENT_ID_PLACEHOLDER', str(installer_instance.device_data.get('clientId', 'unknown')))
+    client_code = client_code.replace('KEY_ID_PLACEHOLDER', str(installer_instance.key_id))
+    
+    return client_code
 
 def notify_installation_failure(installer_instance, stage, error_message):
     """Notify the server that the installation has failed"""
