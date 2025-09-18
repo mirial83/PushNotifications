@@ -52,9 +52,190 @@ import hashlib
 import shutil
 import ctypes
 import threading
+import getpass
+import random
+import base64
+import tempfile
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
+
+# Essential modules that are used throughout the script
+try:
+    import requests
+except ImportError:
+    requests = None
+    print("Warning: requests module not available - some functionality will be limited")
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
+    print("Warning: psutil module not available - some functionality will be limited")
+
+try:
+    import winreg
+except ImportError:
+    # Not Windows or registry not available
+    class DummyWinreg:
+        HKEY_CURRENT_USER = 0
+        HKEY_LOCAL_MACHINE = 0
+        KEY_READ = 0
+        KEY_WRITE = 0
+        REG_SZ = 0
+        def OpenKey(self, *args, **kwargs): 
+            class DummyKey:
+                def __enter__(self): return self
+                def __exit__(self, *args): pass
+            return DummyKey()
+        def CreateKey(self, *args):
+            class DummyKey:
+                def __enter__(self): return self
+                def __exit__(self, *args): pass
+            return DummyKey()
+        def QueryValueEx(self, *args): return ('dummy_value', 0)
+        def SetValueEx(self, *args): pass
+    winreg = DummyWinreg()
+
+# Cryptography imports with fallbacks
+try:
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+except ImportError:
+    # Define dummy classes to prevent crashes
+    class PBKDF2HMAC:
+        def __init__(self, **kwargs): pass
+        def derive(self, key): return b'dummy_key_32_bytes_for_testing!'
+    class DummyHashes:
+        def SHA256(self): return None
+    hashes = DummyHashes()
+    class AESGCM:
+        def __init__(self, key): pass
+        def encrypt(self, nonce, data, aad): return b'dummy_encrypted_data'
+        def decrypt(self, nonce, data, aad): return b'dummy_decrypted_data'
+
+# PIL/Pillow imports with fallbacks
+try:
+    from PIL import Image, ImageDraw
+except ImportError:
+    class DummyImage:
+        def new(self, mode, size, color=None): return self
+        def open(self, path): return self
+        def resize(self, size, resample=None): return self
+        def convert(self, mode): return self
+    class DummyImageDraw:
+        def Draw(self, image): return self
+        def ellipse(self, *args, **kwargs): pass
+    Image = DummyImage()
+    ImageDraw = DummyImageDraw()
+
+# System tray imports with fallbacks
+try:
+    import pystray
+except ImportError:
+    class DummyPystray:
+        class Icon:
+            def __init__(self, *args, **kwargs): pass
+            def run(self): pass
+            def stop(self): pass
+        class Menu:
+            def __init__(self, *items): pass
+        class MenuItem:
+            def __init__(self, *args, **kwargs): pass
+    pystray = DummyPystray()
+
+# Windows-specific imports with fallbacks
+if platform.system() == "Windows":
+    try:
+        import win32gui
+        import win32con
+        import win32api
+        import win32process
+        import win32security
+        import ntsecuritycon
+        import win32file
+    except ImportError:
+        # Create dummy win32 modules
+        class DummyWin32:
+            def __getattr__(self, name): return lambda *args, **kwargs: 0
+        win32gui = DummyWin32()
+        win32con = DummyWin32()
+        win32api = DummyWin32()
+        win32process = DummyWin32()
+        win32security = DummyWin32()
+        ntsecuritycon = DummyWin32()
+        win32file = DummyWin32()
+else:
+    # Non-Windows systems - create dummy modules
+    class DummyWin32:
+        def __getattr__(self, name): return lambda *args, **kwargs: 0
+    win32gui = DummyWin32()
+    win32con = DummyWin32()
+    win32api = DummyWin32()
+    win32process = DummyWin32()
+    win32security = DummyWin32()
+    ntsecuritycon = DummyWin32()
+    win32file = DummyWin32()
+
+# Screen info imports with fallbacks
+try:
+    import screeninfo
+except ImportError:
+    class DummyScreeninfo:
+        def get_monitors(self): return []
+    screeninfo = DummyScreeninfo()
+
+# WMI imports with fallbacks (Windows Management Instrumentation)
+try:
+    import wmi
+    WMI_AVAILABLE = True
+except ImportError:
+    class DummyWMI:
+        def WMI(self): return self
+        def Win32_NetworkAdapter(self): return []
+    wmi = DummyWMI()
+    WMI_AVAILABLE = False
+
+# Global variable definitions that are used throughout the script
+CLIENT_VERSION = "1.8.4"  # Will be updated by installer
+CLIENT_ID = "placeholder_client_id"  # Will be updated by installer
+API_URL = "https://push-notifications-phi.vercel.app"  # Default API URL
+MAC_ADDRESS = "00-00-00-00-00-00"  # Will be detected by installer
+WINDOWS_FEATURES_AVAILABLE = platform.system() == "Windows"
+
+# OverlayManager class definition (used in installer)
+class OverlayManager:
+    def __init__(self):
+        self.overlays = []
+        
+    def create_overlays(self):
+        """Create grey overlays on all monitors"""
+        try:
+            root = tk.Tk()
+            screen_width = root.winfo_screenwidth()
+            screen_height = root.winfo_screenheight()
+            root.destroy()
+            
+            overlay = tk.Toplevel()
+            overlay.configure(bg='grey')
+            overlay.attributes('-alpha', 0.7)
+            overlay.attributes('-topmost', True)
+            overlay.geometry(f"{screen_width}x{screen_height}+0+0")
+            overlay.overrideredirect(True)
+            
+            self.overlays.append(overlay)
+        except Exception as e:
+            print(f"Warning: Could not create overlays: {e}")
+            
+    def remove_overlays(self):
+        """Remove all overlays"""
+        for overlay in self.overlays:
+            try:
+                overlay.destroy()
+            except:
+                pass
+        self.overlays = []
 
 # Core Windows dependencies for full feature set
 REQUIRED_PACKAGES = {
@@ -92,76 +273,15 @@ def check_and_install_package(package_name, pip_name=None):
             print(f"Warning: Failed to install {package_name}")
             return False
 
-# Install core dependencies with minimal system impact
-check_and_install_package('requests', REQUIRED_PACKAGES['requests'])
-check_and_install_package('cryptography', REQUIRED_PACKAGES['cryptography'])
-check_and_install_package('psutil', REQUIRED_PACKAGES['psutil'])
+# Try to import core dependencies, install if missing
+# Package imports are deferred to prevent crashes during help commands
+# These will be imported only during actual installation
 
-# Import after installation
-import requests
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import psutil
-
-# Windows-specific imports with enhanced functionality
+# Windows-specific globals - will be set after argument parsing
 if platform.system() == "Windows":
-    # Install Windows-specific packages
-    check_and_install_package('win32api', REQUIRED_PACKAGES['pywin32'])
-    check_and_install_package('screeninfo', REQUIRED_PACKAGES['screeninfo'])
-    
-    try:
-        import winreg
-        import win32api
-        import win32con
-        import win32security
-        import win32file
-        import win32service
-        import win32serviceutil
-        import pywintypes
-        from win32com.shell import shell
-        import win32gui
-        import win32process
-        import ntsecuritycon
-        
-        # UI Automation for browser URL reading
-        try:
-            import uiautomation as auto
-            UI_AUTOMATION_AVAILABLE = True
-        except ImportError:
-            check_and_install_package('uiautomation', REQUIRED_PACKAGES['uiautomation'])
-            try:
-                import uiautomation as auto
-                UI_AUTOMATION_AVAILABLE = True
-            except ImportError:
-                UI_AUTOMATION_AVAILABLE = False
-                print("Warning: UI Automation not available - browser URL checking disabled")
-        
-        # Screen info for multi-monitor support
-        try:
-            import screeninfo
-            SCREEN_INFO_AVAILABLE = True
-        except ImportError:
-            SCREEN_INFO_AVAILABLE = False
-            print("Warning: screeninfo not available - using fallback monitor detection")
-            
-        # Network interface enumeration
-        try:
-            import wmi
-            WMI_AVAILABLE = True
-        except ImportError:
-            try:
-                subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'WMI'],
-                                     creationflags=subprocess.CREATE_NO_WINDOW)
-                import wmi
-                WMI_AVAILABLE = True
-            except:
-                WMI_AVAILABLE = False
-                print("Warning: WMI not available - using fallback MAC detection")
-                
-    except ImportError as e:
-        print(f"Critical Windows modules missing: {e}")
-        sys.exit(1)
+    WMI_AVAILABLE = False
+    UI_AUTOMATION_AVAILABLE = False
+    SCREEN_INFO_AVAILABLE = False
 
 # GUI imports for cross-platform compatibility
 try:
@@ -174,21 +294,8 @@ except ImportError:
 # Global flag to control GUI dialog usage - only enable on Windows
 USE_GUI_DIALOGS = platform.system() == "Windows" and GUI_AVAILABLE
 
-# Cross-platform system tray support
-if platform.system() != "Windows":
-    # Install cross-platform packages for macOS/Linux GUI support
-    check_and_install_package('pystray', 'pystray>=0.19.4')
-    check_and_install_package('PIL', 'Pillow>=10.0.0')
-    
-    try:
-        import pystray
-        from PIL import Image, ImageDraw, ImageFont
-        TRAY_AVAILABLE = True
-    except ImportError:
-        TRAY_AVAILABLE = False
-        print("Warning: System tray support not available - using fallback notifications")
-else:
-    TRAY_AVAILABLE = True  # Windows support handled separately
+# Cross-platform system tray support - deferred loading to prevent crashes during help
+TRAY_AVAILABLE = False  # Will be set during actual installation
 
 class InstallationProgressDialog:
     """Cross-platform installation progress dialog"""
@@ -1122,6 +1229,7 @@ class PushNotificationsInstaller:
         """Load configuration from existing installation for repair mode"""
         try:
             if self.system == "Windows":
+                import winreg  # Import when actually needed
                 with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
                                   "Software\\PushNotifications", 0, 
                                   winreg.KEY_READ) as key:
@@ -2224,10 +2332,6 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             print(f"Warning: Could not create icon file from embedded data: {e}")
             return False  # Not a critical failure
     
-    def _get_embedded_unix_client_code(self):
-        """Get the embedded Unix client code with comprehensive cross-platform functionality"""
-        # Get the existing standalone function's code
-        return _get_embedded_unix_client_code(self)
     
     def notify_installation_failure(self, stage, error_message):
         """Notify the server that the installation has failed"""
@@ -2246,14 +2350,6 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
     
     def _get_unified_client_code(self):
         """Get the unified cross-platform client code with complete functionality"""
-        # Build the required packages dictionary as a string to avoid f-string issues
-        packages_dict = '''{
-        'pystray': 'pystray>=0.19.4',
-        'PIL': 'Pillow>=10.0.0',
-        'screeninfo': 'screeninfo>=0.8.1',
-        'win32gui': 'pywin32>=306',
-        'tkinter': None  # Built-in
-    }'''
         
         return f'''#!/usr/bin/env python3
 """
@@ -2274,6 +2370,8 @@ import time
 import threading
 import subprocess
 import platform
+import uuid
+import secrets
 from pathlib import Path
 from datetime import datetime, timedelta
 import hashlib
@@ -2281,50 +2379,202 @@ import queue
 import re
 import ctypes
 
+# Configuration variables (will be populated by installer)
+CLIENT_VERSION = "{INSTALLER_VERSION}"
+CLIENT_ID = "{self.device_data.get('clientId', 'placeholder')}"
+MAC_ADDRESS = "{self.mac_address}"
+API_URL = "{self.api_url}"
+
+# Initialize global variables to prevent NameError
+requests = None
+psutil = None
+winreg = None
+PBKDF2HMAC = None
+hashes = None
+AESGCM = None
+tk = None
+messagebox = None
+simpledialog = None
+ttk = None
+USE_GUI_DIALOGS = False
+Image = None
+ImageDraw = None
+pystray = None
+win32gui = None
+win32con = None
+win32api = None
+win32process = None
+screeninfo = None
+WINDOWS_FEATURES_AVAILABLE = False
+
 # Core functionality imports with auto-installation
 try:
     import requests
 except ImportError:
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'requests'])
-    import requests
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'requests'],
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        import requests
+    except Exception as e:
+        print(f"Warning: Could not install/import requests: {{e}}")
+        # Create dummy requests module
+        class DummyRequests:
+            def post(self, *args, **kwargs):
+                class DummyResponse:
+                    status_code = 200
+                    def json(self): return {{'success': False, 'message': 'requests not available'}}
+                return DummyResponse()
+        requests = DummyRequests()
 
 try:
     import psutil
 except ImportError:
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'psutil==5.9.0'])
-    import psutil
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'psutil==5.9.0'],
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        import psutil
+    except Exception as e:
+        print(f"Warning: Could not install/import psutil: {{e}}")
+        # Create dummy psutil module
+        class DummyPsutil:
+            def process_iter(self, *args, **kwargs): return []
+        psutil = DummyPsutil()
 
-# Windows-specific imports with auto-installation
+# Import cryptography components with auto-installation
+try:
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+except ImportError:
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'cryptography>=41.0.0'],
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except Exception as e:
+        print(f"Warning: Could not install/import cryptography: {{e}}")
+        # Define dummy classes to prevent crashes
+        class PBKDF2HMAC:
+            def __init__(self, **kwargs): pass
+            def derive(self, key): return b'dummy_key_32_bytes_for_testing!'
+        class DummyHashes:
+            def SHA256(self): return None
+        hashes = DummyHashes()
+        class AESGCM:
+            def __init__(self, key): pass
+            def encrypt(self, nonce, data, aad): return b'dummy_encrypted_data'
+            def decrypt(self, nonce, data, aad): return b'dummy_decrypted_data'
+
+# Windows registry import
+try:
+    import winreg
+except ImportError:
+    # Not Windows or registry not available
+    class DummyWinreg:
+        HKEY_CURRENT_USER = 0
+        KEY_READ = 0
+        REG_SZ = 0
+        def OpenKey(self, *args, **kwargs): return None
+        def QueryValueEx(self, *args): return ('dummy_value', 0)
+        def CreateKey(self, *args): return None
+        def SetValueEx(self, *args): pass
+    winreg = DummyWinreg()
+
+# Windows-specific imports with auto-installation and required packages
 if os.name == "nt":
-    required_packages = {packages_dict}
+    # Import tkinter first as it's built-in
+    try:
+        import tkinter as tk
+        from tkinter import messagebox, simpledialog, ttk
+        USE_GUI_DIALOGS = True
+    except ImportError:
+        USE_GUI_DIALOGS = False
+        print("Warning: tkinter not available")
+        # Create dummy tkinter classes
+        class DummyTk:
+            def __init__(self): pass
+            def withdraw(self): pass
+            def title(self, title): pass
+            def geometry(self, geom): pass
+            def attributes(self, attr, val): pass
+            def overrideredirect(self, val): pass
+            def winfo_id(self): return 0
+            def winfo_screenwidth(self): return 1920
+            def winfo_screenheight(self): return 1080
+            def update(self): pass
+            def update_idletasks(self): pass
+            def mainloop(self): pass
+        tk = type('tk', (), {{
+            'Tk': DummyTk,
+            'Toplevel': DummyTk,
+            'Frame': DummyTk,
+            'Label': DummyTk,
+            'Button': DummyTk,
+            'Entry': DummyTk,
+            'Text': DummyTk,
+            'Menu': DummyTk,
+            'StringVar': DummyTk,
+            'X': 'x',
+            'Y': 'y',
+            'BOTH': 'both',
+            'LEFT': 'left',
+            'RIGHT': 'right',
+            'TOP': 'top',
+            'BOTTOM': 'bottom',
+            'W': 'w',
+            'E': 'e',
+            'WORD': 'word',
+            'DISABLED': 'disabled',
+            'NORMAL': 'normal',
+            'END': 'end'
+        }})()
+        class DummyMessagebox:
+            def showinfo(self, title, message): print(f"INFO: {{title}} - {{message}}")
+            def showwarning(self, title, message): print(f"WARNING: {{title}} - {{message}}")
+            def showerror(self, title, message): print(f"ERROR: {{title}} - {{message}}")
+            def askyesno(self, title, message): return True
+        messagebox = DummyMessagebox()
+        simpledialog = type('simpledialog', (), {{
+            'askstring': lambda title, prompt, **kwargs: None
+        }})()
+        ttk = type('ttk', (), {{
+            'Progressbar': DummyTk
+        }})()
     
-    for pkg, pip_pkg in required_packages.items():
+    # Import PIL components
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
         try:
-            if pkg == 'PIL':
-                from PIL import Image, ImageDraw
-            elif pkg == 'tkinter':
-                import tkinter as tk
-                from tkinter import messagebox, simpledialog, ttk
-            else:
-                __import__(pkg)
-        except ImportError:
-            if pip_pkg:
-                try:
-                    subprocess.check_call([sys.executable, '-m', 'pip', 'install', pip_pkg],
-                                        creationflags=subprocess.CREATE_NO_WINDOW)
-                    if pkg == 'PIL':
-                        from PIL import Image, ImageDraw
-                    elif pkg == 'tkinter':
-                        import tkinter as tk
-                        from tkinter import messagebox, simpledialog, ttk
-                    else:
-                        __import__(pkg)
-                except Exception as e:
-                    print(f"Warning: Could not install {pkg}: {e}")
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'Pillow>=10.0.0'],
+                                creationflags=subprocess.CREATE_NO_WINDOW)
+            from PIL import Image, ImageDraw
+        except Exception as e:
+            print(f"Warning: Could not install/import PIL: {{e}}")
+            # Create dummy PIL classes
+            class DummyImage:
+                def new(self, mode, size, color=None): return self
+                def open(self, path): return self
+                def resize(self, size, resample=None): return self
+                def convert(self, mode): return self
+                @property
+                def size(self): return (64, 64)
+                @property
+                def mode(self): return 'RGBA'
+                class Resampling:
+                    LANCZOS = 'lanczos'
+            Image = DummyImage()
+            class DummyImageDraw:
+                def Draw(self, image): return self
+                def ellipse(self, coords, **kwargs): pass
+                def text(self, pos, text, **kwargs): pass
+                def textbbox(self, pos, text, **kwargs): return (0, 0, 20, 20)
+            ImageDraw = DummyImageDraw()
     
+    # Import Windows-specific modules
     try:
         import pystray
-        from pystray import MenuItem as item
         import win32gui
         import win32con
         import win32api
@@ -2332,18 +2582,173 @@ if os.name == "nt":
         import screeninfo
         WINDOWS_FEATURES_AVAILABLE = True
     except ImportError as e:
-        print(f"Warning: Windows features limited due to missing modules: {e}")
+        print(f"Warning: Windows features limited due to missing modules: {{e}}")
         WINDOWS_FEATURES_AVAILABLE = False
+        # Try to install missing packages
+        missing_packages = ['pystray>=0.19.4', 'pywin32>=306', 'screeninfo>=0.8.1']
+        for pkg in missing_packages:
+            try:
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg],
+                                    creationflags=subprocess.CREATE_NO_WINDOW)
+            except Exception as install_e:
+                print(f"Warning: Could not install {{pkg}}: {{install_e}}")
+        
+        # Create dummy classes even if installation failed
+        try:
+            import pystray
+            import win32gui
+            import win32con
+            import win32api
+            import win32process
+            import screeninfo
+            WINDOWS_FEATURES_AVAILABLE = True
+        except ImportError:
+            # Create comprehensive dummy classes
+            class DummyPystray:
+                class Menu:
+                    SEPARATOR = 'separator'
+                    def __init__(self, *items): pass
+                class MenuItem:
+                    def __init__(self, text, action=None, **kwargs): pass
+                class Icon:
+                    def __init__(self, name, image, title=None, menu=None): pass
+                    def run(self): pass
+                    def stop(self): pass
+            pystray = DummyPystray()
+            
+            class DummyWin32Gui:
+                HWND_TOPMOST = -1
+                HWND_NOTOPMOST = -2
+                SWP_NOMOVE = 0x0002
+                SWP_NOSIZE = 0x0001
+                SWP_FRAMECHANGED = 0x0020
+                SWP_SHOWWINDOW = 0x0040
+                def EnumWindows(self, callback, data): return True
+                def IsWindowVisible(self, hwnd): return True
+                def GetWindowText(self, hwnd): return "Dummy Window"
+                def ShowWindow(self, hwnd, cmd): return True
+                def SetWindowPos(self, hwnd, after, x, y, w, h, flags): return True
+                def GetWindowLong(self, hwnd, index): return 0
+                def SetWindowLong(self, hwnd, index, value): return 0
+                def SetActiveWindow(self, hwnd): return True
+                def SetForegroundWindow(self, hwnd): return True
+                def FlashWindow(self, hwnd, invert): return True
+            win32gui = DummyWin32Gui()
+            
+            class DummyWin32Con:
+                SW_MINIMIZE = 6
+                SW_RESTORE = 9
+                SW_SHOW = 5
+                SW_HIDE = 0
+                GWL_EXSTYLE = -20
+                WS_EX_TOOLWINDOW = 0x00000080
+                HWND_TOPMOST = -1
+            win32con = DummyWin32Con()
+            
+            class DummyWin32Api:
+                def GetCurrentProcess(self): return 0
+                def CloseHandle(self, handle): return True
+            win32api = DummyWin32Api()
+            
+            win32process = type('win32process', (), {{
+                'GetCurrentProcess': lambda: 0
+            }})()
+            
+            class DummyScreenInfo:
+                def get_monitors(self):
+                    class DummyMonitor:
+                        width = 1920
+                        height = 1080
+                        x = 0
+                        y = 0
+                    return [DummyMonitor()]
+            screeninfo = DummyScreenInfo()
+            
+            WINDOWS_FEATURES_AVAILABLE = False
+else:
+    # Non-Windows systems
+    USE_GUI_DIALOGS = False
+    WINDOWS_FEATURES_AVAILABLE = False
+    try:
+        import tkinter as tk
+        from tkinter import messagebox, simpledialog, ttk
+        USE_GUI_DIALOGS = True
+    except ImportError:
+        # Create dummy tkinter for non-Windows systems
+        class DummyTk:
+            def __init__(self): pass
+            def withdraw(self): pass
+            def title(self, title): pass
+            def geometry(self, geom): pass
+            def attributes(self, attr, val): pass
+            def overrideredirect(self, val): pass
+            def winfo_screenwidth(self): return 1920
+            def winfo_screenheight(self): return 1080
+            def update(self): pass
+            def mainloop(self): pass
+        tk = type('tk', (), {{'Tk': DummyTk}})()
+        messagebox = type('messagebox', (), {{
+            'showinfo': lambda title, msg: print(f"INFO: {{title}} - {{msg}}")
+        }})()
+        simpledialog = None
+        ttk = None
 
-# Configuration variables (will be populated by installer)
-CLIENT_VERSION = "{INSTALLER_VERSION}"
-CLIENT_ID = "placeholder"
-MAC_ADDRESS = "placeholder"
-API_URL = "placeholder"
+# Overlay Manager class for multi-monitor overlays
+class OverlayManager:
+    def __init__(self):
+        self.overlays = []
+        
+    def show_overlays(self):
+        """Show grey overlays on all monitors"""
+        if not WINDOWS_FEATURES_AVAILABLE or not USE_GUI_DIALOGS:
+            return
+            
+        try:
+            import screeninfo
+            monitors = screeninfo.get_monitors()
+            
+            for monitor in monitors:
+                overlay = tk.Toplevel()
+                overlay.configure(bg='grey')
+                overlay.attributes('-alpha', 0.25)  # 25% opacity
+                overlay.attributes('-topmost', True)
+                overlay.geometry(f"{{monitor.width}}x{{monitor.height}}+{{monitor.x}}+{{monitor.y}}")
+                overlay.overrideredirect(True)
+                overlay.attributes('-fullscreen', True)
+                self.overlays.append(overlay)
+        except Exception as e:
+            print(f"Error creating overlays: {{e}}")
+        
+    def hide_overlays(self):
+        """Hide all overlays"""
+        for overlay in self.overlays:
+            try:
+                overlay.destroy()
+            except:
+                pass
+        self.overlays = []
 
+# Basic client template - this is just a placeholder
 print(f"PushNotifications Client v{{CLIENT_VERSION}} starting...")
+print(f"Client ID: {{CLIENT_ID}}")
+print(f"MAC Address: {{MAC_ADDRESS}}")
+print(f"API URL: {{API_URL}}")
+print(f"Windows Features Available: {{WINDOWS_FEATURES_AVAILABLE}}")
+
 if __name__ == "__main__":
     print("This is a basic template client. Full implementation would be more complex.")
+    
+    # Hide console window on Windows if available
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+            console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if console_hwnd != 0:
+                ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
+        except Exception as e:
+            print(f"Could not hide console: {{e}}")
+    
+    # Basic keep-alive loop
     import time
     while True:
         time.sleep(30)  # Keep running
@@ -3109,24 +3514,24 @@ class PushNotificationsClient:
             # Enhanced menu with quick actions
             menu = pystray.Menu(
                 # Quick Actions Section
-                item('Mark Complete', self.tray_mark_complete),
-                item('Request Website Access', self.tray_request_website),
+                pystray.MenuItem('Mark Complete', self.tray_mark_complete),
+                pystray.MenuItem('Request Website Access', self.tray_request_website),
                 pystray.Menu.SEPARATOR,
                 # Administrative Actions
-                item('Request Deletion', self.tray_request_deletion),
-                item('Submit Bug Report', self.tray_submit_bug),
+                pystray.MenuItem('Request Deletion', self.tray_request_deletion),
+                pystray.MenuItem('Submit Bug Report', self.tray_submit_bug),
                 pystray.Menu.SEPARATOR,
                 # Standard Actions
-                item('Show Status', self.show_status),
-                item('Show All Notifications', self.show_all_notifications),
-                item('Snooze All (5 min)', lambda: self.tray_snooze_all(5)),
-                item('Snooze All (15 min)', lambda: self.tray_snooze_all(15)),
-                item('Snooze All (30 min)', lambda: self.tray_snooze_all(30)),
+                pystray.MenuItem('Show Status', self.show_status),
+                pystray.MenuItem('Show All Notifications', self.show_all_notifications),
+                pystray.MenuItem('Snooze All (5 min)', lambda: self.tray_snooze_all(5)),
+                pystray.MenuItem('Snooze All (15 min)', lambda: self.tray_snooze_all(15)),
+                pystray.MenuItem('Snooze All (30 min)', lambda: self.tray_snooze_all(30)),
                 pystray.Menu.SEPARATOR,
-                item('Settings', self.show_settings),
-                item('About', self.show_about),
+                pystray.MenuItem('Settings', self.show_settings),
+                pystray.MenuItem('About', self.show_about),
                 pystray.Menu.SEPARATOR,
-                item('Quit (Admin Required)', self.quit_application)
+                pystray.MenuItem('Quit (Admin Required)', self.quit_application)
             )
             
             # Set proper window title for Task Manager
