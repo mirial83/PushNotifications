@@ -2894,7 +2894,7 @@ class NotificationWindow:
             
             return clean_text
         except Exception as e:
-            print(f"Error stripping HTML: {{e}}")
+            print(f"Error stripping HTML: {e}")
             # Return original text if processing fails
             return text
 
@@ -2938,7 +2938,7 @@ class PushNotificationsClient:
                 win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, 
                                      win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) | win32con.WS_EX_TOOLWINDOW)
             except Exception as e:
-                print(f"Warning: Could not hide from taskbar: {{e}}")
+                print(f"Warning: Could not hide from taskbar: {e}")
     
     def _set_process_title(self):
         """Set proper process title for Task Manager and hide console"""
@@ -2956,7 +2956,7 @@ class PushNotificationsClient:
                     ctypes.windll.user32.ShowWindow(console_hwnd, 0)
                     
         except Exception as e:
-            print(f"Warning: Could not set process title or hide console: {{e}}")
+            print(f"Warning: Could not set process title or hide console: {e}")
         
     def create_tray_icon(self):
         """Create system tray icon with enhanced quick actions menu"""
@@ -3052,7 +3052,7 @@ class PushNotificationsClient:
             
             return pystray.Icon("PushNotifications", create_image(), "PushNotifications Client", menu)
         except Exception as e:
-            print(f"Error creating tray icon: {{e}}")
+            print(f"Error creating tray icon: {e}")
             return None
     
     def show_status(self, icon=None, item=None):
@@ -3070,7 +3070,7 @@ class PushNotificationsClient:
             else:
                 print(f"Push Client Status: {status_text}")
         except Exception as e:
-            print(f"Error showing status: {{e}}")
+            print(f"Error showing status: {e}")
     
 def show_all_notifications(self, icon=None, item=None):
         """Show all notification windows"""
