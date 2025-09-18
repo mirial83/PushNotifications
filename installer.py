@@ -3449,10 +3449,38 @@ class PushNotificationsClient:
         except Exception as e:
             print(f"Warning: Could not set process title or hide console: {e}")
         
+    def _extract_embedded_icon(self):
+        """Extract embedded icon data to PNG file"""
+        try:
+            import base64
+            icon_path = Path(__file__).parent / "pnicon.png"
+            
+            # Use the same embedded icon data from the installer
+            EMBEDDED_ICON_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA8klEQVR4nGNgGAUjHTDSyuA7Ijb/YWyVN0doZg9Oy/+7MsAxsmPQAVkuc2tagtPAaZM6GJQNj2CI3z1vgzUkWMixWE7YkhRteAHRDnBr2vKfmhbDABO1Le9o3Mhw97wNihiu4GdgICINkOvzinp/OBtfLiApDZACOho3MjAwMDA8enucgaHOB6c6oqKAlmDUAQQdsKvOh/HR2+NkGf7o7XEGXXU+eBM6USFAjiOIsZyBgcSimJiSEOZQYiwn2QHIDsHmCGJ9TbEDGBgYGFKmvsWokOZkC5Ns3uDPBaMOwAXQ45uc+KcKwJYYR8EoGAVDCgAAVzRa9cjcydwAAAAASUVORK5CYII="
+            
+            # Decode and write the embedded icon data
+            icon_data = base64.b64decode(EMBEDDED_ICON_DATA)
+            with open(icon_path, 'wb') as f:
+                f.write(icon_data)
+            
+            print(f"[OK] Extracted embedded icon to: {icon_path.name}")
+            return True
+        except Exception as e:
+            print(f"Error extracting embedded icon: {e}")
+            return False
+    
     def create_tray_icon(self):
         """Create system tray icon with enhanced quick actions menu"""
         try:
             def create_image():
+                # Try to create PNG from embedded data first if it doesn't exist
+                icon_path = Path(__file__).parent / "pnicon.png"
+                if not icon_path.exists():
+                    try:
+                        self._extract_embedded_icon()
+                    except Exception as e:
+                        print(f"Warning: Could not extract embedded icon: {e}")
+                
                 # Try to load pnicon.png from the installation directory first
                 icon_paths = [
                     Path(__file__).parent / "pnicon.png",  # Same directory as this script (installation dir)
