@@ -1063,14 +1063,14 @@ class PushNotificationsClient:
             pystray.MenuItem('View Current Notification', self._view_notification),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem('Snooze', pystray.Menu(
-                pystray.MenuItem('5 minutes', lambda: self._snooze(5)),
-                pystray.MenuItem('15 minutes', lambda: self._snooze(15)),
-                pystray.MenuItem('30 minutes', lambda: self._snooze(30))
-            ), enabled=lambda: not self.snooze_used and bool(self.notifications)),
+                pystray.MenuItem('5 minutes', lambda icon: self._snooze(5)),
+                pystray.MenuItem('15 minutes', lambda icon: self._snooze(15)),
+                pystray.MenuItem('30 minutes', lambda icon: self._snooze(30))
+            ), enabled=lambda icon: not self.snooze_used and bool(self.notifications)),
             pystray.MenuItem('Request Website Access', self._request_website),
             pystray.MenuItem('Complete Current Notification', 
                            self._complete_notification,
-                           enabled=lambda: bool(self.notifications)),
+                           enabled=lambda icon: bool(self.notifications)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem('Request Uninstall', self._request_uninstall),
             pystray.MenuItem('Exit', self._quit)
@@ -4019,17 +4019,17 @@ class PushNotificationsClient:
                 # Snooze Actions - enabled only when notifications exist and not already snoozed
                 pystray.MenuItem(
                     'Snooze All (5 min)', 
-                    lambda: self.tray_snooze_all(5),
+                    lambda icon: self.tray_snooze_all(5),
                     enabled=lambda item: self.can_snooze()
                 ),
                 pystray.MenuItem(
                     'Snooze All (15 min)', 
-                    lambda: self.tray_snooze_all(15),
+                    lambda icon: self.tray_snooze_all(15),
                     enabled=lambda item: self.can_snooze()
                 ),
                 pystray.MenuItem(
                     'Snooze All (30 min)', 
-                    lambda: self.tray_snooze_all(30),
+                    lambda icon: self.tray_snooze_all(30),
                     enabled=lambda item: self.can_snooze()
                 ),
                 pystray.Menu.SEPARATOR,
