@@ -4001,23 +4001,54 @@ class PushNotificationsClient:
                 
                 return image
             
-            # Enhanced menu with quick actions
+            # Enhanced menu with dynamic states using helper functions
             menu = pystray.Menu(
-                # Quick Actions Section
-                pystray.MenuItem('Mark Complete', self.tray_mark_complete),
-                pystray.MenuItem('Request Website Access', self.tray_request_website),
+                # Quick Actions Section - dynamically enabled based on notification state
+                pystray.MenuItem(
+                    'Mark Complete', 
+                    self.tray_mark_complete, 
+                    enabled=lambda item: self.has_active_notifications()
+                ),
+                pystray.MenuItem(
+                    'Request Website Access', 
+                    self.tray_request_website,
+                    enabled=lambda item: self.has_website_notification()
+                ),
                 pystray.Menu.SEPARATOR,
-                # Administrative Actions
+                
+                # Snooze Actions - enabled only when notifications exist and not already snoozed
+                pystray.MenuItem(
+                    'Snooze All (5 min)', 
+                    lambda: self.tray_snooze_all(5),
+                    enabled=lambda item: self.can_snooze()
+                ),
+                pystray.MenuItem(
+                    'Snooze All (15 min)', 
+                    lambda: self.tray_snooze_all(15),
+                    enabled=lambda item: self.can_snooze()
+                ),
+                pystray.MenuItem(
+                    'Snooze All (30 min)', 
+                    lambda: self.tray_snooze_all(30),
+                    enabled=lambda item: self.can_snooze()
+                ),
+                pystray.Menu.SEPARATOR,
+                
+                # Display Actions - Show Status always available, Show Notifications only when they exist
+                pystray.MenuItem('Show Status', self.show_status),
+                pystray.MenuItem(
+                    'Show All Notifications', 
+                    self.show_all_notifications,
+                    enabled=lambda item: self.has_active_notifications()
+                ),
+                pystray.Menu.SEPARATOR,
+                
+                # Administrative Actions - always available
                 pystray.MenuItem('Request Deletion', self.tray_request_deletion),
                 pystray.MenuItem('Submit Bug Report', self.tray_submit_bug),
                 pystray.Menu.SEPARATOR,
-                # Standard Actions
-                pystray.MenuItem('Show Status', self.show_status),
-                pystray.MenuItem('Show All Notifications', self.show_all_notifications),
-                pystray.MenuItem('Snooze All (5 min)', lambda: self.tray_snooze_all(5)),
-                pystray.MenuItem('Snooze All (15 min)', lambda: self.tray_snooze_all(15)),
-                pystray.MenuItem('Snooze All (30 min)', lambda: self.tray_snooze_all(30)),
-                pystray.Menu.SEPARATOR,
+                
+                # System Actions - always available
                 pystray.MenuItem('Settings', self.show_settings),
                 pystray.MenuItem('About', self.show_about),
                 pystray.Menu.SEPARATOR,
@@ -4064,6 +4095,26 @@ class PushNotificationsClient:
         
         # Then re-layer all windows
         self.layer_notification_windows()
+    
+    def has_active_notifications(self):
+        """Check if there are any active (non-completed) notifications"""
+        return any(not n.get('completed', False) for n in self.notifications)
+    
+    def can_snooze(self):
+        """Check if snoozing is available (has notifications and not already snoozed)"""
+        return self.has_active_notifications() and not self.is_snoozed()
+    
+    def is_snoozed(self):
+        """Check if notifications are currently snoozed"""
+        return bool(self.snooze_end_time and datetime.now() < self.snooze_end_time)
+    
+    def has_website_notification(self):
+        """Check if current notification allows website requests"""
+        if not self.has_active_notifications():
+            return False
+        active_notif = next((n for n in self.notifications if not n.get('completed', False)), None)
+        # Check if notification allows website requests - either has allowed websites list or allows all
+        return active_notif and ('allowedWebsites' in active_notif or active_notif.get('allowWebsites', False))
     
     def tray_mark_complete(self, icon=None, item=None):
         """Mark the first active notification as complete from tray"""
