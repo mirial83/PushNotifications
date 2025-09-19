@@ -871,6 +871,97 @@ class OverlayManager:
         self.overlays = []
 '''
 
+EMBEDDED_SYSTEM_TRAY = '''
+import os
+import sys
+import json
+import time
+import logging
+import requests
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+import pystray
+from tkinter import messagebox, simpledialog
+
+logger = logging.getLogger(__name__)
+
+class SystemTray:
+    def __init__(self):
+        self.icon = None
+        self.running = True
+        
+    def create_icon(self):
+        """Create and configure the system tray icon"""
+        # Create a teal circular icon with "PN" text
+        image = Image.new("RGB", (64, 64), color="teal")
+        dc = ImageDraw.Draw(image)
+        dc.ellipse([2, 2, 62, 62], fill="teal")
+        
+        try:
+            # Try to add "PN" text
+            if os.name == "nt":  # Windows
+                font = ImageFont.truetype("arial.ttf", 24)
+            else:
+                font = ImageFont.load_default()
+            text = "PN"
+            text_bbox = dc.textbbox((0, 0), text, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+            x = (64 - text_width) // 2
+            y = (64 - text_height) // 2
+            dc.text((x, y), text, fill="white", font=font)
+        except Exception as e:
+            logger.warning(f"Could not add text to icon: {e}")
+        
+        # Create the menu
+        menu = (
+            pystray.MenuItem("Request Website Access", self._request_website),
+            pystray.MenuItem("Request Uninstall", self._request_uninstall),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Exit", self._quit)
+        )
+        
+        # Create and return the icon
+        self.icon = pystray.Icon(
+            "PushNotifications",
+            image,
+            menu=menu
+        )
+        return self.icon
+    
+    def _request_website(self, icon):
+        """Request access to a website"""
+        website = simpledialog.askstring("Website Access Request",
+                                      "Enter the website URL you would like to access:")
+        if not website:
+            return
+        messagebox.showinfo("Request Sent", 
+                          "Website access request has been submitted for approval.")
+    
+    def _request_uninstall(self, icon):
+        """Request application uninstallation"""
+        reason = simpledialog.askstring("Uninstall Request",
+                                     "Please provide a reason for uninstallation:")
+        if not reason:
+            return
+        messagebox.showinfo("Request Sent",
+                          "Your uninstall request has been submitted for approval.")
+    
+    def _quit(self, icon):
+        """Clean shutdown of the application"""
+        self.running = False
+        icon.stop()
+        
+    def run(self):
+        """Main system tray run loop"""
+        try:
+            icon = self.create_icon()
+            icon.run()
+        except Exception as e:
+            logger.error(f"System tray error: {e}")
+            sys.exit(1)
+'''
+
 EMBEDDED_WINDOW_MANAGER = '''
 import psutil
 import subprocess
