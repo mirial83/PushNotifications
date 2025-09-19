@@ -6,16 +6,17 @@
 # task manager name update
 
 """
-PushNotifications Universal Client Installer
+PushNotifications Windows Client Installer
 Version: 1.8.4
 
-Cross-platform installer with native Python operation:
+Windows-only installer with native Python operation:
 
-[GLOBAL] UNIVERSAL PYTHON INSTALLER
-- Single .py file runs on Windows, macOS, Linux
-- Windows: Runs as Python script with admin privileges
-- No external dependencies required for basic installation
-- Automatically detects OS and adapts functionality
+ADMINISTRATOR PRIVILEGES REQUIRED:
+- Administrator privileges are REQUIRED for ALL operations including:
+  • Installation and system setup
+  • Client operation and ongoing functionality
+  • System integration and security features
+  • Process management and window control
 
 [WINDOWS] WINDOWS ENTERPRISE FEATURES
 - Python-based operation with admin privileges
@@ -28,11 +29,6 @@ Cross-platform installer with native Python operation:
 - Website allowlist enforcement and request system
 - Server-managed uninstallation via taskbar
 
-[APPLE][LINUX] MACOS/LINUX COMPATIBILITY
-- Platform-specific overlay and minimization where possible
-- Adapted security model within OS constraints
-- Cross-platform Python dependency management
-
 [SECURITY] SECURITY & ENCRYPTION
 - AES-256-GCM encrypted installation directories
 - Server-managed encryption keys
@@ -42,7 +38,6 @@ Cross-platform installer with native Python operation:
 
 import os
 import sys
-import platform
 import subprocess
 import json
 import time
@@ -73,29 +68,8 @@ except ImportError:
     psutil = None
     print("Warning: psutil module not available - some functionality will be limited")
 
-try:
-    import winreg
-except ImportError:
-    # Not Windows or registry not available
-    class DummyWinreg:
-        HKEY_CURRENT_USER = 0
-        HKEY_LOCAL_MACHINE = 0
-        KEY_READ = 0
-        KEY_WRITE = 0
-        REG_SZ = 0
-        def OpenKey(self, *args, **kwargs): 
-            class DummyKey:
-                def __enter__(self): return self
-                def __exit__(self, *args): pass
-            return DummyKey()
-        def CreateKey(self, *args):
-            class DummyKey:
-                def __enter__(self): return self
-                def __exit__(self, *args): pass
-            return DummyKey()
-        def QueryValueEx(self, *args): return ('dummy_value', 0)
-        def SetValueEx(self, *args): pass
-    winreg = DummyWinreg()
+# Windows-only installer - winreg is required
+import winreg
 
 # Cryptography imports with fallbacks
 try:
@@ -145,38 +119,14 @@ except ImportError:
             def __init__(self, *args, **kwargs): pass
     pystray = DummyPystray()
 
-# Windows-specific imports with fallbacks
-if platform.system() == "Windows":
-    try:
-        import win32gui
-        import win32con
-        import win32api
-        import win32process
-        import win32security
-        import ntsecuritycon
-        import win32file
-    except ImportError:
-        # Create dummy win32 modules
-        class DummyWin32:
-            def __getattr__(self, name): return lambda *args, **kwargs: 0
-        win32gui = DummyWin32()
-        win32con = DummyWin32()
-        win32api = DummyWin32()
-        win32process = DummyWin32()
-        win32security = DummyWin32()
-        ntsecuritycon = DummyWin32()
-        win32file = DummyWin32()
-else:
-    # Non-Windows systems - create dummy modules
-    class DummyWin32:
-        def __getattr__(self, name): return lambda *args, **kwargs: 0
-    win32gui = DummyWin32()
-    win32con = DummyWin32()
-    win32api = DummyWin32()
-    win32process = DummyWin32()
-    win32security = DummyWin32()
-    ntsecuritycon = DummyWin32()
-    win32file = DummyWin32()
+# Windows-only installer - Windows-specific imports required
+import win32gui
+import win32con
+import win32api
+import win32process
+import win32security
+import ntsecuritycon
+import win32file
 
 # Screen info imports with fallbacks
 try:
@@ -202,7 +152,8 @@ CLIENT_VERSION = "1.8.4"  # Will be updated by installer
 CLIENT_ID = "placeholder_client_id"  # Will be updated by installer
 API_URL = "https://push-notifications-phi.vercel.app"  # Default API URL
 MAC_ADDRESS = "00-00-00-00-00-00"  # Will be detected by installer
-WINDOWS_FEATURES_AVAILABLE = platform.system() == "Windows"
+# Windows-only installer - Windows features always available
+WINDOWS_FEATURES_AVAILABLE = True
 
 # OverlayManager class definition (used in installer)
 class OverlayManager:
@@ -267,7 +218,7 @@ def check_and_install_package(package_name, pip_name=None):
         print(f"Installing {package_name}...")
         try:
             subprocess.check_call([sys.executable, '-m', 'pip', 'install', pip_name],
-                                 creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == 'Windows' else 0)
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
             return True
         except subprocess.CalledProcessError:
             print(f"Warning: Failed to install {package_name}")
@@ -278,12 +229,11 @@ def check_and_install_package(package_name, pip_name=None):
 # These will be imported only during actual installation
 
 # Windows-specific globals - will be set after argument parsing
-if platform.system() == "Windows":
-    WMI_AVAILABLE = False
-    UI_AUTOMATION_AVAILABLE = False
-    SCREEN_INFO_AVAILABLE = False
+WMI_AVAILABLE = False
+UI_AUTOMATION_AVAILABLE = False
+SCREEN_INFO_AVAILABLE = False
 
-# GUI imports for cross-platform compatibility
+# GUI imports - required for Windows installer
 try:
     import tkinter as tk
     from tkinter import messagebox, simpledialog, ttk
@@ -291,8 +241,8 @@ try:
 except ImportError:
     GUI_AVAILABLE = False
 
-# Global flag to control GUI dialog usage - only enable on Windows
-USE_GUI_DIALOGS = platform.system() == "Windows" and GUI_AVAILABLE
+# Global flag to control GUI dialog usage - always enabled for Windows installer
+USE_GUI_DIALOGS = True
 
 # Cross-platform system tray support - deferred loading to prevent crashes during help
 TRAY_AVAILABLE = False  # Will be set during actual installation
@@ -807,27 +757,33 @@ class OverlayManager:
 EMBEDDED_WINDOW_MANAGER = '''
 import psutil
 import subprocess
-import platform
 
 class WindowManager:
+    """Windows window management functionality for PushNotifications client."""
+    
     def __init__(self):
         self.minimized_windows = []
+        self.browser_processes = [
+            'chrome.exe', 'msedge.exe', 'firefox.exe', 
+            'opera.exe', 'brave.exe', 'iexplore.exe'
+        ]
         
     def minimize_all_apps(self):
-        """Minimize all applications"""
-        if platform.system() == "Windows":
-            subprocess.run(['powershell', '-Command', 
-                          '(New-Object -comObject Shell.Application).minimizeall()'])
-                          
+        """Minimize all applications using Windows Shell API"""
+        subprocess.run(['powershell', '-Command',
+                       '(New-Object -comObject Shell.Application).minimizeall()'])
+        
     def minimize_non_browser_apps(self):
-        """Minimize non-browser applications"""
-        browser_names = ['chrome', 'firefox', 'edge', 'safari', 'opera']
+        """Minimize all non-browser applications based on process name"""
         for proc in psutil.process_iter(['pid', 'name']):
             try:
-                if not any(browser in proc.info['name'].lower() for browser in browser_names):
-                    # Minimize non-browser processes
+                if not any(browser in proc.info['name'].lower() 
+                          for browser in self.browser_processes):
+                    # Here we would add process minimization logic
+                    # For now just tracking which ones would be minimized
                     pass
-            except:
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                # Ignore processes we can't access
                 pass
 '''
 
@@ -960,10 +916,9 @@ class Uninstaller:
         install_path = Path(self.config.get('installPath', Path(__file__).parent))
         
         try:
-            # Remove hidden attributes if Windows
-            if platform.system() == "Windows":
-                subprocess.run(['attrib', '-H', '-S', str(install_path)], 
-                             capture_output=True)
+        # Remove hidden attributes (Windows-only)
+            subprocess.run(['attrib', '-H', '-S', str(install_path)], 
+                         capture_output=True)
                              
             # Remove directory
             shutil.rmtree(install_path, ignore_errors=True)
@@ -1021,11 +976,10 @@ def compare_versions(current, latest):
     else:
         return -1
 
-# Windows API constants
-if platform.system() == "Windows":
-    user32 = ctypes.windll.user32
-    kernel32 = ctypes.windll.kernel32
-    advapi32 = ctypes.windll.advapi32
+# Windows API constants (Windows-only installer)
+user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
+advapi32 = ctypes.windll.advapi32
 
 
 # Windows administrative functionality is now handled directly within the installer
@@ -1033,10 +987,16 @@ if platform.system() == "Windows":
 
 
 class PushNotificationsInstaller:
-    """Advanced installer with Python-based implementation and full security features"""
+    """Advanced installer with Python-based implementation and full security features
+    
+    IMPORTANT: This installer and the PushNotifications client require administrator
+    privileges for ALL operations including installation, client operation, system
+    integration, and security features. Admin privileges are enforced at startup.
+    """
     
     def __init__(self, api_url=None):
-        self.system = platform.system()
+        # Windows-only installer - no cross-platform support
+        self.system = "Windows"
         self.api_url = api_url or DEFAULT_API_URL
         self.installation_key = None
         self.device_data = {}
@@ -1072,78 +1032,77 @@ class PushNotificationsInstaller:
         print()
 
     def _get_real_mac_address(self):
-        """Get the real primary network interface MAC address using multiple methods"""
+        """Get the real primary network interface MAC address using WMI and other Windows-specific methods"""
         mac_address = None
         detection_method = "unknown"
         
         try:
-            if self.system == "Windows":
-                # Method 1: WMI for active physical adapters (preferred)
-                if WMI_AVAILABLE:
-                    try:
-                        c = wmi.WMI()
-                        # Prefer Ethernet, then Wi-Fi adapters
-                        adapter_priorities = ['Ethernet', 'Wi-Fi', 'Wireless']
-                        
-                        for priority in adapter_priorities:
-                            for interface in c.Win32_NetworkAdapter():
-                                if (interface.NetEnabled and 
-                                    interface.PhysicalAdapter and 
-                                    interface.MACAddress and
-                                    interface.Name and
-                                    priority.lower() in interface.Name.lower()):
-                                    mac_address = interface.MACAddress.replace(':', '-').upper()
-                                    detection_method = f"WMI_{priority}"
-                                    break
+            # Method 1: WMI for active physical adapters (preferred)
+            if WMI_AVAILABLE:
+                try:
+                    c = wmi.WMI()
+                    # Prefer Ethernet, then Wi-Fi adapters
+                    adapter_priorities = ['Ethernet', 'Wi-Fi', 'Wireless']
+                    
+                    for priority in adapter_priorities:
+                        for interface in c.Win32_NetworkAdapter():
+                            if (interface.NetEnabled and 
+                                interface.PhysicalAdapter and 
+                                interface.MACAddress and
+                                interface.Name and
+                                priority.lower() in interface.Name.lower()):
+                                mac_address = interface.MACAddress.replace(':', '-').upper()
+                                detection_method = f"WMI_{priority}"
+                                break
+                        if mac_address:
+                            break
+                    
+                    # Fallback to any active physical adapter
+                    if not mac_address:
+                        for interface in c.Win32_NetworkAdapter():
+                            if (interface.NetEnabled and 
+                                interface.PhysicalAdapter and 
+                                interface.MACAddress):
+                                mac_address = interface.MACAddress.replace(':', '-').upper()
+                                detection_method = "WMI_Generic"
+                                break
+                                
+                except Exception as e:
+                    print(f"WMI MAC detection failed: {e}")
+            
+            # Method 2: Windows Management via subprocess
+            if not mac_address:
+                try:
+                    result = subprocess.run(['getmac', '/fo', 'csv', '/v'], 
+                                          capture_output=True, text=True,
+                                          creationflags=subprocess.CREATE_NO_WINDOW)
+                    if result.returncode == 0:
+                        lines = result.stdout.strip().split('\n')[1:]  # Skip header
+                        for line in lines:
+                            parts = [p.strip('"') for p in line.split(',')]
+                            if len(parts) >= 3 and parts[2] != 'N/A' and 'Physical' in line:
+                                mac_address = parts[2].replace('-', '-').upper()
+                                detection_method = "getmac"
+                                break
+                except Exception as e:
+                    print(f"getmac detection failed: {e}")
+            
+            # Method 3: psutil network interfaces
+            if not mac_address:
+                try:
+                    for interface, addrs in psutil.net_if_addrs().items():
+                        # Prioritize Ethernet and Wi-Fi interfaces
+                        if any(x in interface.lower() for x in ['ethernet', 'wi-fi', 'wireless', 'wlan', 'eth']):
+                            for addr in addrs:
+                                if hasattr(addr, 'family') and addr.family == psutil.AF_LINK:
+                                    if addr.address and addr.address != '00-00-00-00-00-00':
+                                        mac_address = addr.address.replace(':', '-').upper()
+                                        detection_method = f"psutil_{interface}"
+                                        break
                             if mac_address:
                                 break
-                        
-                        # Fallback to any active physical adapter
-                        if not mac_address:
-                            for interface in c.Win32_NetworkAdapter():
-                                if (interface.NetEnabled and 
-                                    interface.PhysicalAdapter and 
-                                    interface.MACAddress):
-                                    mac_address = interface.MACAddress.replace(':', '-').upper()
-                                    detection_method = "WMI_Generic"
-                                    break
-                                    
-                    except Exception as e:
-                        print(f"WMI MAC detection failed: {e}")
-                
-                # Method 2: Windows Management via subprocess
-                if not mac_address:
-                    try:
-                        result = subprocess.run(['getmac', '/fo', 'csv', '/v'], 
-                                              capture_output=True, text=True,
-                                              creationflags=subprocess.CREATE_NO_WINDOW)
-                        if result.returncode == 0:
-                            lines = result.stdout.strip().split('\n')[1:]  # Skip header
-                            for line in lines:
-                                parts = [p.strip('"') for p in line.split(',')]
-                                if len(parts) >= 3 and parts[2] != 'N/A' and 'Physical' in line:
-                                    mac_address = parts[2].replace('-', '-').upper()
-                                    detection_method = "getmac"
-                                    break
-                    except Exception as e:
-                        print(f"getmac detection failed: {e}")
-                
-                # Method 3: psutil network interfaces
-                if not mac_address:
-                    try:
-                        for interface, addrs in psutil.net_if_addrs().items():
-                            # Prioritize Ethernet and Wi-Fi interfaces
-                            if any(x in interface.lower() for x in ['ethernet', 'wi-fi', 'wireless', 'wlan', 'eth']):
-                                for addr in addrs:
-                                    if hasattr(addr, 'family') and addr.family == psutil.AF_LINK:
-                                        if addr.address and addr.address != '00-00-00-00-00-00':
-                                            mac_address = addr.address.replace(':', '-').upper()
-                                            detection_method = f"psutil_{interface}"
-                                            break
-                                if mac_address:
-                                    break
-                    except Exception as e:
-                        print(f"psutil MAC detection failed: {e}")
+                except Exception as e:
+                    print(f"psutil MAC detection failed: {e}")
             
             # Method 4: uuid.getnode() fallback (cross-platform)
             if not mac_address:
@@ -1182,109 +1141,75 @@ class PushNotificationsInstaller:
             return "00-FF-FF-FF-FF-FF"
     
     def _has_existing_installation(self):
-        """Check if there's an existing installation to repair - simplified approach"""
+        """Check Windows registry for existing installation to repair"""
         try:
-            if self.system == "Windows":
-                # Check registry key only - don't scan directories to avoid crashes
-                try:
-                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
-                                      "Software\\PushNotifications", 0, 
-                                      winreg.KEY_READ) as key:
-                        # Registry key exists - assume installation exists
-                        # Files will be overwritten during installation if needed
-                        try:
-                            existing_version, _ = winreg.QueryValueEx(key, "Version")
-                            print(f"[OK] Found existing installation registry entry (version: {existing_version})")
-                            print("  Installation will overwrite existing files")
-                            return True
-                        except:
-                            # Registry exists but no version - still treat as existing
-                            print("[OK] Found existing installation registry entry")
-                            print("  Installation will overwrite existing files")
-                            return True
-                except (OSError, FileNotFoundError):
-                    # No registry key - new installation
-                    return False
-                    
-            else:
-                # On Unix-like systems, simple check for common paths
-                common_install_paths = [
-                    Path.home() / ".local" / "share" / "PushNotifications",
-                    Path.home() / "Applications" / "PushNotifications",
-                    Path("/usr/local/share/PushNotifications"),
-                    Path("/opt/PushNotifications")
-                ]
-                
-                for path in common_install_paths:
-                    if path.exists() and (path / "Client.py").exists():
-                        print(f"[OK] Found existing installation: {path}")
+            # Check registry key only - don't scan directories to avoid crashes
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
+                                  "Software\\PushNotifications", 0, 
+                                  winreg.KEY_READ) as key:
+                    # Registry key exists - assume installation exists
+                    # Files will be overwritten during installation if needed
+                    try:
+                        existing_version, _ = winreg.QueryValueEx(key, "Version")
+                        print(f"[OK] Found existing installation registry entry (version: {existing_version})")
                         print("  Installation will overwrite existing files")
                         return True
-                        
+                    except:
+                        # Registry exists but no version - still treat as existing
+                        print("[OK] Found existing installation registry entry")
+                        print("  Installation will overwrite existing files")
+                        return True
+            except (OSError, FileNotFoundError):
+                # No registry key - new installation
+                return False
+                    
         except Exception as e:
             print(f"Warning: Error checking for existing installation: {e}")
         
         return False
     
     def _load_existing_config(self):
-        """Load configuration from existing installation for repair mode"""
+        """Load configuration from existing Windows registry for repair mode"""
         try:
-            if self.system == "Windows":
-                import winreg  # Import when actually needed
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
-                                  "Software\\PushNotifications", 0, 
-                                  winreg.KEY_READ) as key:
-                    self.key_id, _ = winreg.QueryValueEx(key, "KeyId")
-                    self.mac_address, _ = winreg.QueryValueEx(key, "MacAddress")
-                    self.username, _ = winreg.QueryValueEx(key, "Username")
-                    self.api_url, _ = winreg.QueryValueEx(key, "ApiUrl")
-                    
-                    # Set dummy installation key for repair
-                    self.installation_key = "REPAIR_MODE"
-                    
-                    # Create device data for repair
-                    self.device_data = {
-                        'deviceId': f"repair_{self.mac_address}",
-                        'clientId': f"repair_{self.mac_address}",
-                        'isNewInstallation': False
-                    }
-                    
-                    # Set encryption metadata
-                    self.encryption_metadata = {
-                        'keyId': self.key_id,
-                        'algorithm': 'AES-256-GCM',
-                        'keyDerivation': 'PBKDF2',
-                        'iterations': 100000,
-                        'serverManaged': True
-                    }
-                    
-                    print(f"[OK] Loaded existing configuration for repair")
-                    print(f"  Key ID: {self.key_id}")
-                    print(f"  MAC Address: {self.mac_address}")
-                    print(f"  Username: {self.username}")
-            else:
-                # On Unix-like systems, we'll use current detected values and assume upgrade
-                print("[OK] Unix/macOS upgrade mode - using current system configuration")
-                print(f"  MAC Address: {self.mac_address}")
-                print(f"  Username: {self.username}")
-                print(f"  API URL: {self.api_url}")
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
+                              "Software\\PushNotifications", 0, 
+                              winreg.KEY_READ) as key:
+                self.key_id, _ = winreg.QueryValueEx(key, "KeyId")
+                self.mac_address, _ = winreg.QueryValueEx(key, "MacAddress")
+                self.username, _ = winreg.QueryValueEx(key, "Username")
+                self.api_url, _ = winreg.QueryValueEx(key, "ApiUrl")
                 
-                # Set upgrade installation key - will be validated normally
-                self.installation_key = "UPGRADE_MODE"
+                # Set dummy installation key for repair
+                self.installation_key = "REPAIR_MODE"
                 
-                # Create device data for upgrade
+                # Create device data for repair
                 self.device_data = {
-                    'deviceId': f"upgrade_{self.mac_address}",
-                    'clientId': f"upgrade_{self.mac_address}",
+                    'deviceId': f"repair_{self.mac_address}",
+                    'clientId': f"repair_{self.mac_address}",
                     'isNewInstallation': False
                 }
+                
+                # Set encryption metadata
+                self.encryption_metadata = {
+                    'keyId': self.key_id,
+                    'algorithm': 'AES-256-GCM',
+                    'keyDerivation': 'PBKDF2',
+                    'iterations': 100000,
+                    'serverManaged': True
+                }
+                
+                print(f"[OK] Loaded existing configuration for repair")
+                print(f"  Key ID: {self.key_id}")
+                print(f"  MAC Address: {self.mac_address}")
+                print(f"  Username: {self.username}")
                     
         except Exception as e:
             print(f"Warning: Could not load existing config for repair: {e}")
     
     def check_for_updates(self):
-        """Check for updates from the website"""
-        print("Checking for updates...")
+        """Check for Windows client updates from the website"""
+        print("Checking for Windows client updates...")
         
         try:
             # Extract version number from version string (e.g., "3.0.0" -> 300)
@@ -1300,12 +1225,12 @@ class PushNotificationsInstaller:
             response = requests.post(
                 f"{self.api_url}/api/index",
                 json={
-                    'action': 'checkForUpdates',  # Updated to match API
-                    'versionNumber': version_number,  # Added version number
+                    'action': 'checkForUpdates',
+                    'versionNumber': version_number,
                     'currentVersion': INSTALLER_VERSION,
                     'clientId': getattr(self, 'device_data', {}).get('clientId', 'unknown'),
                     'macAddress': self.mac_address,
-                    'platform': f"{platform.system()} {platform.release()}",
+                    'platform': f"Windows {platform.release()}",  # Windows-specific platform
                     'timestamp': datetime.now().isoformat()
                 },
                 timeout=30
@@ -1323,7 +1248,7 @@ class PushNotificationsInstaller:
                     version_comparison = compare_versions(INSTALLER_VERSION, latest_version)
                     
                     if version_comparison > 0:  # Update available
-                        print(f"[PACKAGE] Update available: v{INSTALLER_VERSION} → v{latest_version}")
+                        print(f"[PACKAGE] Windows client update available: v{INSTALLER_VERSION} → v{latest_version}")
                         print(f"Download URL: {download_url}")
                         if update_notes:
                             print(f"Release notes: {update_notes}")
@@ -1342,12 +1267,12 @@ class PushNotificationsInstaller:
                         
                         return True  # Update available
                     elif version_comparison == 0:
-                        print(f"[OK] Already running latest version: v{INSTALLER_VERSION}")
+                        print(f"[OK] Already running latest Windows version: v{INSTALLER_VERSION}")
                         return False  # No update needed
                     else:
-                        print(f"[OK] Running newer version than latest: v{INSTALLER_VERSION} > v{latest_version}")
+                        print(f"[OK] Running newer Windows version than latest: v{INSTALLER_VERSION} > v{latest_version}")
                         return False  # Running pre-release or newer
-                        
+                    
                 else:
                     print(f"[ERR] Version check failed: {result.get('message', 'Unknown error')}")
                     return False
@@ -1797,7 +1722,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 'username': self.username,
                 'clientName': self.client_name,
                 'hostname': platform.node(),
-                'platform': f"{platform.system()} {platform.release()}",
+                'platform': "Windows",
                 'version': INSTALLER_VERSION,
                 'installPath': '', # Will be updated after directory creation
                 'macDetectionMethod': getattr(self, 'mac_detection_method', 'unknown'),
@@ -1805,7 +1730,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 'timestamp': datetime.now().isoformat(),
                 # Additional security metadata
                 'systemInfo': {
-                    'osVersion': f"{platform.system()} {platform.release()} {platform.version()}",
+                    'osVersion': "Windows",
                     'architecture': platform.machine(),
                     'processor': platform.processor(),
                     'pythonVersion': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
@@ -1944,36 +1869,28 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         
         try:
             # Generate random GUID-based path in Program Files (x86) for better 64-bit compatibility
-            if self.system == "Windows":
-                # Use Program Files (x86) for better compatibility with 64-bit systems
-                base_path = Path(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'))
-                misleading_parent = base_path / "SystemResources"
-                misleading_parent.mkdir(exist_ok=True)
-                
-                # Set misleading parent as system folder
-                subprocess.run([
-                    "attrib", "+S", "+H", str(misleading_parent)
-                ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-                
-                # Create actual install path with nested GUIDs
-                guid1 = str(uuid.uuid4())
-                guid2 = str(uuid.uuid4())
-                self.install_path = misleading_parent / guid1 / guid2
-                
-            else:
-                # Unix-like systems
-                self.install_path = Path.home() / f".{uuid.uuid4()}" / f".{uuid.uuid4()}"
+            # Use Program Files (x86) for better compatibility with 64-bit systems
+            base_path = Path(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'))
+            misleading_parent = base_path / "SystemResources"
+            misleading_parent.mkdir(exist_ok=True)
+            
+            # Set misleading parent as system folder
+            subprocess.run([
+                "attrib", "+S", "+H", str(misleading_parent)
+            ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            # Create actual install path with nested GUIDs
+            guid1 = str(uuid.uuid4())
+            guid2 = str(uuid.uuid4())
+            self.install_path = misleading_parent / guid1 / guid2
             
             self.install_path.mkdir(parents=True, exist_ok=True)
             print(f"Installation path: {self.install_path}")
             
             # Set Windows attributes and ACLs
-            if self.system == "Windows":
-                self._set_windows_hidden_attributes()
-                self._set_restrictive_acls()
-                self._disable_indexing()
-            else:
-                self._set_unix_hidden_permissions()
+            self._set_windows_hidden_attributes()
+            self._set_restrictive_acls()
+            self._disable_indexing()
             
             # Encrypt the install path and store in registry
             self._store_encrypted_path_info()
@@ -2112,19 +2029,13 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             print(f"Warning: Could not disable indexing: {e}")
 
     def _set_unix_hidden_permissions(self):
-        """Set restrictive permissions on Unix-like systems"""
-        try:
-            # Set directory permissions to 700 (owner only)
-            os.chmod(self.install_path, 0o700)
-            os.chmod(self.install_path.parent, 0o700)
-            
-        except Exception as e:
-            print(f"Warning: Could not set restrictive permissions: {e}")
+        """Unix permissions not used on Windows-only installer"""
+        print("Unix permissions skipped on Windows")
 
     def _store_encrypted_path_info(self):
         """Store encrypted installation path info in registry"""
         try:
-            if self.system == "Windows":
+            # Windows-only installer - always use registry
                 # Create/open registry key
                 with winreg.CreateKey(winreg.HKEY_CURRENT_USER, 
                                     "Software\\PushNotifications") as key:
@@ -2270,9 +2181,6 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             # Set hidden attributes
             subprocess.run(["attrib", "+S", "+H", str(client_path)], 
                           check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        else:
-            # Set executable permissions on Unix-like systems
-            os.chmod(client_path, 0o755)
         
         print("[OK] Unified cross-platform client script created")
     
@@ -2296,9 +2204,6 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 # Set hidden attributes
                 subprocess.run(["attrib", "+S", "+H", str(installer_copy_path)], 
                               check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            else:
-                # Set executable permissions on Unix-like systems
-                os.chmod(installer_copy_path, 0o755)
             
             print("[OK] Installer Python script copy created")
         
@@ -2322,9 +2227,6 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             if self.system == "Windows":
                 subprocess.run(["attrib", "+S", "+H", str(dest_icon)], 
                               check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            else:
-                # Set appropriate permissions on Unix-like systems
-                os.chmod(dest_icon, 0o644)
             
             print(f"[OK] Icon file created from embedded data: {dest_icon.name}")
             return True
@@ -2739,15 +2641,14 @@ print(f"Windows Features Available: {{WINDOWS_FEATURES_AVAILABLE}}")
 if __name__ == "__main__":
     print("This is a basic template client. Full implementation would be more complex.")
     
-    # Hide console window on Windows if available
-    if platform.system() == "Windows":
-        try:
-            import ctypes
-            console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-            if console_hwnd != 0:
-                ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
-        except Exception as e:
-            print(f"Could not hide console: {{e}}")
+    # Hide console window (Windows-only installer)
+    try:
+        import ctypes
+        console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if console_hwnd != 0:
+            ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
+    except Exception as e:
+        print(f"Could not hide console: {e}")
     
     # Basic keep-alive loop
     import time
@@ -2842,13 +2743,9 @@ if __name__ == "__main__":
                 f.write(encrypted_data)
             
             # Set Windows hidden and system attributes
-            if self.system == "Windows":
-                subprocess.run([
-                    "attrib", "+S", "+H", str(vault_path)
-                ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            else:
-                # Unix permissions
-                os.chmod(vault_path, 0o600)  # Read/write for owner only
+            subprocess.run([
+                "attrib", "+S", "+H", str(vault_path)
+            ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
             
             # Create additional security marker
             marker_path = self.install_path / ".security_marker"
@@ -2863,10 +2760,9 @@ if __name__ == "__main__":
             with open(marker_path, 'w') as f:
                 json.dump(marker_data, f, indent=2)
             
-            if self.system == "Windows":
-                subprocess.run([
-                    "attrib", "+S", "+H", str(marker_path)
-                ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.run([
+                "attrib", "+S", "+H", str(marker_path)
+            ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
             
             # Securely clear key material from memory
             derived_key = b'\x00' * len(derived_key)
@@ -2889,18 +2785,7 @@ if __name__ == "__main__":
         print("Starting PushNotifications Installation")
         print("=" * 60)
         
-        # Check admin privileges (skip on macOS since we install in user directory)
-        if self.system != "Darwin" and not self.check_admin_privileges():
-            print("Administrator privileges required for installation.")
-            if not self.restart_with_admin():
-                print("[ERR] Installation failed: Could not obtain administrator privileges")
-                return False
-            return True  # Process will restart with admin
-        
-        if self.system == "Darwin":
-            print("[OK] Running with user privileges (macOS install in user directory)")
-        else:
-            print("[OK] Running with administrator privileges")
+        # Admin privileges already checked in main() - proceed directly with installation
         
         # Validate installation key
         if not self.validate_installation_key():
@@ -3009,19 +2894,18 @@ class WindowManager:
 
 def enable_dpi_awareness():
     """Enable DPI awareness for proper scaling on high-DPI displays"""
-    if platform.system() == "Windows":
+    try:
+        # Try Windows 8.1+ API first
         try:
-            # Try Windows 8.1+ API first
-            try:
-                import ctypes
-                ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
-            except (AttributeError, OSError):
-                # Fallback to Windows 8 API
-                ctypes.windll.user32.SetProcessDPIAware()
-            return True
-        except Exception as e:
-            print(f"Warning: Could not enable DPI awareness: {e}")
-    return False
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
+        except (AttributeError, OSError):
+            # Fallback to Windows 8 API
+            ctypes.windll.user32.SetProcessDPIAware()
+        return True
+    except Exception as e:
+        print(f"Warning: Could not enable DPI awareness: {e}")
+        return False
 
 class NotificationWindow:
     """Individual notification window with website-style formatting"""
@@ -3037,12 +2921,11 @@ class NotificationWindow:
         """Create notification window with website-style formatting"""
         try:
             # Enable DPI awareness for this window
-            if platform.system() == "Windows":
-                try:
-                    import ctypes
-                    ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
-                except Exception as e:
-                    print(f"Warning: Could not set DPI awareness: {e}")
+            try:
+                import ctypes
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+            except Exception as e:
+                print(f"Warning: Could not set DPI awareness: {e}")
 
             self.window = tk.Toplevel()
             self.window.title("Push Notification")
@@ -3055,47 +2938,46 @@ class NotificationWindow:
             self.window.focus_force()  # Force focus
             self.window.lift()  # Bring to front
             
-            if platform.system() == "Windows":
-                try:
-                    import win32gui
-                    import win32con
-                    import win32api
-                    
-                    # Get window handle
-                    hwnd = self.window.winfo_id()
-                    
-                    # Set extended window styles
-                    GWL_EXSTYLE = -20
-                    WS_EX_APPWINDOW = 0x00040000
-                    WS_EX_TOOLWINDOW = 0x00000080
-                    
-                    # Get current style
-                    style = win32gui.GetWindowLong(hwnd, GWL_EXSTYLE)
-                    
-                    # Ensure notification window is visible in taskbar and on top
-                    style = (style | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW
-                    
-                    # Apply new style
-                    win32gui.SetWindowLong(hwnd, GWL_EXSTYLE, style)
-                    
-                    # Update window frame and ensure visibility
-                    win32gui.SetWindowPos(
-                        hwnd, win32con.HWND_TOPMOST,
-                        0, 0, 0, 0,
-                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | 
-                        win32con.SWP_FRAMECHANGED | win32con.SWP_SHOWWINDOW
-                    )
-                    
-                    # Force window to be active and visible
-                    win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-                    win32gui.SetActiveWindow(hwnd)
-                    win32gui.SetForegroundWindow(hwnd)
-                    
-                    # Flash window to get attention
-                    win32gui.FlashWindow(hwnd, True)
-                    
-                except Exception as e:
-                    print(f"Warning: Could not set window styles: {e}")
+            try:
+                import win32gui
+                import win32con
+                import win32api
+                
+                # Get window handle
+                hwnd = self.window.winfo_id()
+                
+                # Set extended window styles
+                GWL_EXSTYLE = -20
+                WS_EX_APPWINDOW = 0x00040000
+                WS_EX_TOOLWINDOW = 0x00000080
+                
+                # Get current style
+                style = win32gui.GetWindowLong(hwnd, GWL_EXSTYLE)
+                
+                # Ensure notification window is visible in taskbar and on top
+                style = (style | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW
+                
+                # Apply new style
+                win32gui.SetWindowLong(hwnd, GWL_EXSTYLE, style)
+                
+                # Update window frame and ensure visibility
+                win32gui.SetWindowPos(
+                    hwnd, win32con.HWND_TOPMOST,
+                    0, 0, 0, 0,
+                    win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | 
+                    win32con.SWP_FRAMECHANGED | win32con.SWP_SHOWWINDOW
+                )
+                
+                # Force window to be active and visible
+                win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+                win32gui.SetActiveWindow(hwnd)
+                win32gui.SetForegroundWindow(hwnd)
+                
+                # Flash window to get attention
+                win32gui.FlashWindow(hwnd, True)
+                
+            except Exception as e:
+                print(f"Warning: Could not set window styles: {e}")
             
             
             # Force window redraw and ensure proper DPI scaling
@@ -3421,17 +3303,16 @@ class PushNotificationsClient:
         self.root.geometry('1x1+0+0')  # Minimal size
         self.root.overrideredirect(True)  # Remove window decorations
         
-        # Hide from taskbar on Windows
-        if platform.system() == "Windows":
-            try:
-                import win32gui
-                import win32con
-                hwnd = self.root.winfo_id()
-                # Set window styles to hide from taskbar
-                win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, 
-                                     win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) | win32con.WS_EX_TOOLWINDOW)
-            except Exception as e:
-                print(f"Warning: Could not hide from taskbar: {e}")
+        # Hide from taskbar
+        try:
+            import win32gui
+            import win32con
+            hwnd = self.root.winfo_id()
+            # Set window styles to hide from taskbar
+            win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, 
+                                 win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) | win32con.WS_EX_TOOLWINDOW)
+        except Exception as e:
+            print(f"Warning: Could not hide from taskbar: {e}")
     
     def _set_process_title(self):
         """Set proper process title for Task Manager and hide console"""
@@ -3440,13 +3321,12 @@ class PushNotificationsClient:
             # Set console window title to show "Push Notifications" in Task Manager
             ctypes.windll.kernel32.SetConsoleTitleW("Push Notifications")
             
-            # Hide console window on Windows
-            if platform.system() == "Windows":
-                # Get console window handle
-                console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-                if console_hwnd != 0:
-                    # Hide the console window (SW_HIDE = 0)
-                    ctypes.windll.user32.ShowWindow(console_hwnd, 0)
+            # Hide console window
+            # Get console window handle
+            console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if console_hwnd != 0:
+                # Hide the console window (SW_HIDE = 0)
+                ctypes.windll.user32.ShowWindow(console_hwnd, 0)
                     
         except Exception as e:
             print(f"Warning: Could not set process title or hide console: {e}")
@@ -3697,7 +3577,7 @@ class PushNotificationsClient:
                 import platform
                 system_info = {
                     'clientVersion': CLIENT_VERSION,
-                    'platform': platform.platform(),
+                    'platform': f"Windows-{platform.release()}-{platform.machine()}",
                     'pythonVersion': platform.python_version(),
                     'activeNotifications': len(self.notifications),
                     'securityActive': self.security_active
@@ -3844,7 +3724,7 @@ Features:
                 
                 # Fetch notifications from server
                 try:
-                    response = requests.post(API_URL, json={
+                    response = requests.post(f"{API_URL}/api/index", json={
                         'action': 'getNotifications',
                         'clientId': CLIENT_ID,
                         'macAddress': MAC_ADDRESS
@@ -3985,18 +3865,17 @@ Features:
                     window.window.geometry(f"{window_width}x{window_height}+{x}+{y}")
                     
                     # Ensure proper z-order
-                    if platform.system() == "Windows":
-                        try:
-                            import win32gui
-                            hwnd = window.window.winfo_id()
-                            win32gui.SetWindowPos(
-                                hwnd,
-                                win32gui.HWND_TOPMOST if i == 0 else win32gui.HWND_NOTOPMOST,
-                                x, y, window_width, window_height,
-                                win32gui.SWP_SHOWWINDOW
-                            )
-                        except Exception as e:
-                            print(f"Warning: Could not set window z-order: {e}")
+                    try:
+                        import win32gui
+                        hwnd = window.window.winfo_id()
+                        win32gui.SetWindowPos(
+                            hwnd,
+                            win32gui.HWND_TOPMOST if i == 0 else win32gui.HWND_NOTOPMOST,
+                            x, y, window_width, window_height,
+                            win32gui.SWP_SHOWWINDOW
+                        )
+                    except Exception as e:
+                        print(f"Warning: Could not set window z-order: {e}")
                     
         except Exception as e:
             print(f"Error layering windows: {e}")
@@ -4231,20 +4110,17 @@ Features:
 
 if __name__ == "__main__":
     try:
-        # Ensure completely silent startup on Windows
-        if platform.system() == "Windows":
-            import ctypes
-            # Hide console window immediately on startup
-            console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-            if console_hwnd != 0:
-                ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
+        # Ensure completely silent startup - Windows-only installer
+        import ctypes
+        # Hide console window immediately on startup
+        console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if console_hwnd != 0:
+            ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
         
         client = PushNotificationsClient()
         client.run()
     except Exception as e:
-        # Only show error if we can't hide console
-        if platform.system() != "Windows":
-            print(f"Fatal error: {e}")
+        # Windows-only installer - no error output to console
         sys.exit(1)
 
 
@@ -4288,18 +4164,18 @@ class FileProtectionService:
     def restore_file_attributes(self, file_path):
         """Restore proper file attributes"""
         try:
-            if platform.system() == "Windows":
-                try:
-                    import win32file
-                    import win32con
-                    # Restore hidden and system attributes
-                    attrs = (win32con.FILE_ATTRIBUTE_HIDDEN | 
-                            win32con.FILE_ATTRIBUTE_SYSTEM)
-                    
-                    win32file.SetFileAttributes(str(file_path), attrs)
-                    print(f"[OK] Restored attributes for: {Path(file_path).name}")
-                except ImportError:
-                    print("Warning: win32file not available for attribute restoration")
+            # Windows-only installer - restore file attributes unconditionally
+            try:
+                import win32file
+                import win32con
+                # Restore hidden and system attributes
+                attrs = (win32con.FILE_ATTRIBUTE_HIDDEN | 
+                        win32con.FILE_ATTRIBUTE_SYSTEM)
+                
+                win32file.SetFileAttributes(str(file_path), attrs)
+                print(f"[OK] Restored attributes for: {Path(file_path).name}")
+            except ImportError:
+                print("Warning: win32file not available for attribute restoration")
             
         except Exception as e:
             print(f"Error restoring attributes: {e}")
@@ -4440,11 +4316,11 @@ def notify_installation_failure(installer_instance, stage, error_message):
             'stage': stage,
             'error': error_message,
             'version': INSTALLER_VERSION,
-            'platform': f"{platform.system()} {platform.release()}",
+            'platform': f"Windows {platform.release()}",
             'timestamp': datetime.now().isoformat(),
             'installPath': str(getattr(installer_instance, 'install_path', 'unknown')),
             'systemInfo': {
-                'osVersion': f"{platform.system()} {platform.release()} {platform.version()}",
+                'osVersion': f"Windows {platform.release()} {platform.version()}",
                 'architecture': platform.machine(),
                 'processor': platform.processor(),
                 'pythonVersion': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
@@ -4507,38 +4383,7 @@ def create_desktop_shortcuts(installer_instance):
             
             print("[OK] Desktop shortcuts created")
             
-        else:
-            # Unix-like systems - create .desktop files
-            desktop = Path.home() / "Desktop"
-            
-            client_desktop = desktop / "push-client.desktop"
-            with open(client_desktop, 'w') as f:
-                f.write(f"""[Desktop Entry]
-Type=Application
-Name=Push Client
-Comment=PushNotifications Client
-Exec={installer_instance.install_path / "Client.py"}
-Icon=application-default-icon
-Terminal=false
-Categories=System;
-""")
-            
-            repair_desktop = desktop / "push-repair.desktop"
-            with open(repair_desktop, 'w') as f:
-                f.write(f"""[Desktop Entry]
-Type=Application
-Name=Push Client Repair
-Comment=PushNotifications Installer/Repair
-Exec={installer_instance.install_path / "Installer.py"} --repair
-Icon=application-default-icon
-Terminal=false
-Categories=System;
-""")
-            
-            os.chmod(client_desktop, 0o755)
-            os.chmod(repair_desktop, 0o755)
-            
-            print("[OK] Desktop shortcuts created")
+        # Note: This installer is Windows-only, Unix desktop files not supported
         
         return True
         
@@ -4550,6 +4395,16 @@ def show_help():
     """Display comprehensive help information"""
     print(f"""PushNotifications Universal Installer v{INSTALLER_VERSION}
 {"=" * 60}
+
+⚠️  ADMINISTRATOR PRIVILEGES REQUIRED ⚠️
+This installer and the PushNotifications client require administrator
+privileges for ALL operations including:
+  • Installation and system setup
+  • Client operation and ongoing functionality  
+  • System integration and security features
+  • Process management and window control
+
+The installer will automatically request elevation if needed.
 
 [GLOBAL] UNIVERSAL PYTHON INSTALLER
 - Single .py file runs on Windows, macOS, Linux
@@ -4587,8 +4442,10 @@ EXAMPLES:
   python installer.py --docs                             # Show documentation menu
   python installer.py https://your-api.vercel.app        # Use custom API URL
   
-NOTE: Administrator privileges are required for installation.
-      The installer will automatically request elevation if needed.
+IMPORTANT: Administrator privileges are required for both installation
+           AND ongoing client operation. The installer will automatically
+           request elevation if needed, but the client must always run
+           with administrator privileges to function properly.
 """)
 
 def show_documentation_menu():
@@ -4681,6 +4538,35 @@ def main():
         if show_specific_doc:
             show_specific_documentation(show_specific_doc)
             return
+        
+        # CRITICAL: Administrator privileges required for ALL operations
+        # This installer and the PushNotifications client require admin privileges
+        # for installation, system integration, and ongoing operation
+        print("\nChecking administrator privileges...")
+        print("Administrator privileges are required for:")
+        print("  • Installation and setup")
+        print("  • System integration and hidden file management")
+        print("  • Ongoing client operation and security features")
+        print("  • Process management and window control")
+        
+        # Create temporary installer instance just for privilege checking
+        temp_installer = PushNotificationsInstaller()
+        
+        if not temp_installer.check_admin_privileges():
+            print("\n[REQUIRED] Administrator privileges are needed for installation and client operation.")
+            print("Restarting with administrator privileges...")
+            if not temp_installer.restart_with_admin():
+                print("\n[ERR] Installation failed: Could not obtain administrator privileges")
+                print("       Please run as administrator or contact support.")
+                print("\n       The PushNotifications client requires admin privileges for:")
+                print("         - Secure file system integration")
+                print("         - Process and window management")
+                print("         - System-level security features")
+                return
+            return  # Process will restart with admin privileges
+        
+        print("[OK] Running with administrator privileges")
+        print()
         
         # Handle special modes
         if check_only:
