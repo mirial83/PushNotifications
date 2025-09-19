@@ -3202,7 +3202,7 @@ class PushNotificationsClient:
             return icon
             
         except Exception as e:
-            print(f"Error creating tray icon: {str(e)}")
+            print(f"Error creating tray icon: {{str(e)}}")
             return None
             
     def quit(self, icon=None):
