@@ -4007,12 +4007,12 @@ class PushNotificationsClient:
                 pystray.MenuItem(
                     'Mark Complete', 
                     self.tray_mark_complete, 
-                    enabled=lambda item: self.has_active_notifications()
+                    enabled=lambda icon, item: self.has_active_notifications()
                 ),
                 pystray.MenuItem(
                     'Request Website Access', 
                     self.tray_request_website,
-                    enabled=lambda item: self.has_website_notification()
+                    enabled=lambda icon, item: self.has_website_notification()
                 ),
                 pystray.Menu.SEPARATOR,
                 
@@ -4020,17 +4020,17 @@ class PushNotificationsClient:
                 pystray.MenuItem(
                     'Snooze All (5 min)', 
                     lambda icon: self.tray_snooze_all(5),
-                    enabled=lambda item: self.can_snooze()
+                    enabled=lambda icon, item: self.can_snooze()
                 ),
                 pystray.MenuItem(
                     'Snooze All (15 min)', 
                     lambda icon: self.tray_snooze_all(15),
-                    enabled=lambda item: self.can_snooze()
+                    enabled=lambda icon, item: self.can_snooze()
                 ),
                 pystray.MenuItem(
                     'Snooze All (30 min)', 
                     lambda icon: self.tray_snooze_all(30),
-                    enabled=lambda item: self.can_snooze()
+                    enabled=lambda icon, item: self.can_snooze()
                 ),
                 pystray.Menu.SEPARATOR,
                 
@@ -4039,7 +4039,7 @@ class PushNotificationsClient:
                 pystray.MenuItem(
                     'Show All Notifications', 
                     self.show_all_notifications,
-                    enabled=lambda item: self.has_active_notifications()
+                    enabled=lambda icon, item: self.has_active_notifications()
                 ),
                 pystray.Menu.SEPARATOR,
                 
