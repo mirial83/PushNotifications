@@ -1084,7 +1084,7 @@ class PushNotificationsClient:
         )
         return self.icon
 
-    def _view_notification(self):
+    def _view_notification(self, icon=None):
         """Show the current notification message"""
         if not self.notifications:
             messagebox.showinfo('No Notifications', 'There are no active notifications.')
@@ -1113,7 +1113,7 @@ class PushNotificationsClient:
         
         messagebox.showinfo('Notifications Snoozed', f'Notifications snoozed for {minutes} minutes')
 
-    def _request_website(self):
+    def _request_website(self, icon=None):
         """Request access to a website"""
         website = simpledialog.askstring('Website Access Request', 'Enter the website URL you would like to access:')
         if not website:
@@ -1133,7 +1133,7 @@ class PushNotificationsClient:
             logger.error(f'Failed to request website access: {e}')
             messagebox.showerror('Error', 'Failed to submit website access request. Please try again later.')
 
-    def _complete_notification(self):
+    def _complete_notification(self, icon=None):
         """Mark the current notification as completed"""
         if not self.notifications:
             return
@@ -1158,7 +1158,7 @@ class PushNotificationsClient:
             logger.error(f'Failed to complete notification: {e}')
             messagebox.showerror('Error', 'Failed to complete notification. Please try again later.')
 
-    def _request_uninstall(self):
+    def _request_uninstall(self, icon=None):
         """Request application uninstallation"""
         reason = simpledialog.askstring('Uninstall Request', 'Please provide a reason for uninstallation:')
         if not reason:
@@ -1177,7 +1177,7 @@ class PushNotificationsClient:
             logger.error(f'Failed to request uninstall: {e}')
             messagebox.showerror('Error', 'Failed to submit uninstall request. Please try again later.')
 
-    def _quit(self):
+    def _quit(self, icon=None):
         """Clean shutdown of the application"""
         self.running = False
         if self.icon:
