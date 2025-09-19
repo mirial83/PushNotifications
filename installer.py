@@ -51,22 +51,103 @@ import getpass
 import random
 import base64
 import tempfile
+import logging
+import logging.handlers
+import traceback
+import platform
 from pathlib import Path
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
+
+# ========================================
+# COMPREHENSIVE LOGGING CONFIGURATION
+# ========================================
+
+# Configure logging to capture ALL errors and important events
+logger = logging.getLogger('PushNotificationsInstaller')
+logger.setLevel(logging.DEBUG)
+
+# Clear any existing handlers to avoid duplicates
+logger.handlers.clear()
+
+# Create log file path in installation directory
+try:
+    # Try to use the current directory (where installer is running) first
+    log_file_path = Path("installer.log")
+    # Test if we can write to current directory
+    test_path = Path("test_write.tmp")
+    test_path.touch()
+    test_path.unlink()
+except Exception:
+    try:
+        # Fallback to temp directory if current directory isn't writable
+        log_dir = Path(tempfile.gettempdir()) / "PushNotifications"
+        log_dir.mkdir(exist_ok=True)
+        log_file_path = log_dir / "installer.log"
+    except Exception:
+        # Final fallback to user directory
+        log_file_path = Path.home() / "installer.log"
+
+# Create rotating file handler (max 5MB, keep 3 backups)
+try:
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_file_path,
+        maxBytes=5 * 1024 * 1024,  # 5MB
+        backupCount=3,
+        encoding='utf-8'
+    )
+    file_handler.setLevel(logging.DEBUG)
+    
+    # Create detailed formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(formatter)
+    
+    # Add handler to logger
+    logger.addHandler(file_handler)
+    
+    # Also add console handler for immediate feedback
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)  # Only warnings and errors to console
+    console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
+    
+    # Log initialization success
+    logger.info(f"Logging initialized successfully - Log file: {log_file_path}")
+    logger.info(f"Installer version: {INSTALLER_VERSION if 'INSTALLER_VERSION' in locals() else 'Unknown'}")
+    logger.info(f"Python version: {sys.version}")
+    logger.info(f"Platform: {platform.platform()}")
+    
+except Exception as e:
+    # If logging setup fails, create a basic console logger
+    # If logging setup fails, create a basic console logger and still log the warning
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)
+    console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
+    logger.warning(f"Logging setup failed, using console only: {e}")
+
+# Helper function to log exceptions with full traceback
+def log_exception(message, exc_info=True):
+    """Log an exception with full traceback details"""
+    logger.error(message, exc_info=exc_info)
 
 # Essential modules that are used throughout the script
 try:
     import requests
 except ImportError:
     requests = None
-    print("Warning: requests module not available - some functionality will be limited")
+    logger.warning("requests module not available - some functionality will be limited")
 
 try:
     import psutil
 except ImportError:
     psutil = None
-    print("Warning: psutil module not available - some functionality will be limited")
+    logger.warning("psutil module not available - some functionality will be limited")
 
 # Windows-only installer - winreg is required
 import winreg
@@ -177,7 +258,7 @@ class OverlayManager:
             
             self.overlays.append(overlay)
         except Exception as e:
-            print(f"Warning: Could not create overlays: {e}")
+            logger.warning(f"Could not create overlays: {e}")
             
     def remove_overlays(self):
         """Remove all overlays"""
@@ -211,17 +292,17 @@ def check_and_install_package(package_name, pip_name=None):
     except ImportError:
         # Check if running as PyInstaller bundle (now using Python scripts)
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            print(f"Warning: {package_name} not bundled - may cause issues")
+            logger.warning(f"{package_name} not bundled - may cause issues")
             return False
         
         # Only install if not found in any Python environment
-        print(f"Installing {package_name}...")
+        logger.info(f"Installing {package_name}...")
         try:
             subprocess.check_call([sys.executable, '-m', 'pip', 'install', pip_name],
                                  creationflags=subprocess.CREATE_NO_WINDOW)
             return True
         except subprocess.CalledProcessError:
-            print(f"Warning: Failed to install {package_name}")
+            logger.warning(f"Failed to install {package_name}")
             return False
 
 # Try to import core dependencies, install if missing
@@ -332,7 +413,7 @@ class InstallationProgressDialog:
             scrollbar.config(command=self.log_text.yview)
             
         except Exception as e:
-            print(f"Warning: Could not create progress dialog: {e}")
+            logger.warning(f"Could not create progress dialog: {e}")
             self.window = None
     
     def show(self):
@@ -373,8 +454,7 @@ class InstallationProgressDialog:
             except:
                 pass
         
-        # Also print to console
-        print(f"{level}: {message}")
+        # Console logging is handled by the main logger
     
     def set_completion(self, success=True):
         """Show completion status"""
@@ -421,7 +501,7 @@ def fetch_current_version_from_api(api_url=None):
     api_url = api_url or DEFAULT_API_URL
     
     try:
-        print("Fetching current version from API...")
+        logger.info("Fetching current version from API...")
         response = requests.post(
             f"{api_url}/api/index",
             json={
@@ -435,20 +515,20 @@ def fetch_current_version_from_api(api_url=None):
             result = response.json()
             if result.get('success') and result.get('currentVersion'):
                 version = result.get('currentVersion')
-                print(f"[OK] Retrieved version from API: v{version}")
+                logger.info(f"[OK] Retrieved version from API: v{version}")
                 return version
             else:
-                print(f"[ERR] API response unsuccessful: {result.get('message', 'Unknown error')}")
+                logger.error(f"[ERR] API response unsuccessful: {result.get('message', 'Unknown error')}")
         else:
-            print(f"[ERR] API request failed: HTTP {response.status_code}")
+            logger.error(f"[ERR] API request failed: HTTP {response.status_code}")
             
     except requests.RequestException as e:
-        print(f"[ERR] Network error fetching version: {e}")
+        logger.error(f"[ERR] Network error fetching version: {e}")
     except Exception as e:
-        print(f"[ERR] Error fetching version: {e}")
+        logger.error(f"[ERR] Error fetching version: {e}")
     
     # Fallback to a default version if API fails
-    print("Warning: Using fallback version 1.0.0")
+    logger.warning("Using fallback version 1.0.0")
     return "1.0.0"
 
 # Global configuration
@@ -719,7 +799,7 @@ def extract_favicon(install_path):
             f.write(favicon_bytes)
         return favicon_path
     except Exception as e:
-        print(f"Error extracting favicon: {e}")
+        logger.error(f"Error extracting favicon: {e}")
         return None
 '''
 
@@ -904,7 +984,7 @@ class Uninstaller:
             
     def uninstall(self):
         """Complete uninstallation process"""
-        print("Starting PushNotifications uninstallation...")
+        logger.info("Starting PushNotifications uninstallation...")
         
         # Notify server
         self._notify_server_uninstall()
@@ -928,7 +1008,7 @@ class Uninstaller:
                               "PushNotifications has been successfully uninstalled.")
             
         except Exception as e:
-            print(f"Error during uninstallation: {e}")
+            logger.error(f"Error during uninstallation: {e}")
             
     def _notify_server_uninstall(self):
         """Notify server of uninstallation"""
@@ -1024,12 +1104,11 @@ class PushNotificationsInstaller:
             self.progress_dialog.add_log(f"Client Name: {self.client_name}")
             self.progress_dialog.add_log(f"API URL: {self.api_url}")
         
-        print(f"PushNotifications Installer v{INSTALLER_VERSION}")
-        print(f"Platform: {self.system}")
-        print(f"MAC Address: {self.mac_address}")
-        print(f"Client Name: {self.client_name}")
-        print(f"API URL: {self.api_url}")
-        print()
+        logger.info(f"PushNotifications Installer v{INSTALLER_VERSION}")
+        logger.info(f"Platform: {self.system}")
+        logger.info(f"MAC Address: {self.mac_address}")
+        logger.info(f"Client Name: {self.client_name}")
+        logger.info(f"API URL: {self.api_url}")
 
     def _get_real_mac_address(self):
         """Get the real primary network interface MAC address using WMI and other Windows-specific methods"""
@@ -1068,7 +1147,7 @@ class PushNotificationsInstaller:
                                 break
                                 
                 except Exception as e:
-                    print(f"WMI MAC detection failed: {e}")
+                    logger.warning(f"WMI MAC detection failed: {e}")
             
             # Method 2: Windows Management via subprocess
             if not mac_address:
@@ -1085,7 +1164,7 @@ class PushNotificationsInstaller:
                                 detection_method = "getmac"
                                 break
                 except Exception as e:
-                    print(f"getmac detection failed: {e}")
+                    logger.warning(f"getmac detection failed: {e}")
             
             # Method 3: psutil network interfaces
             if not mac_address:
@@ -1102,7 +1181,7 @@ class PushNotificationsInstaller:
                             if mac_address:
                                 break
                 except Exception as e:
-                    print(f"psutil MAC detection failed: {e}")
+                    logger.warning(f"psutil MAC detection failed: {e}")
             
             # Method 4: uuid.getnode() fallback (cross-platform)
             if not mac_address:
@@ -1113,7 +1192,7 @@ class PushNotificationsInstaller:
                         mac_address = mac_hex.replace(':', '-').upper()
                         detection_method = "uuid_getnode"
                 except Exception as e:
-                    print(f"uuid.getnode() failed: {e}")
+                    logger.warning(f"uuid.getnode() failed: {e}")
             
             # Final validation
             if mac_address:
@@ -1121,14 +1200,14 @@ class PushNotificationsInstaller:
                 if len(mac_address) == 17 and mac_address.count('-') == 5:
                     # Store detection method for telemetry
                     self.mac_detection_method = detection_method
-                    print(f"MAC Address detected via {detection_method}: {mac_address}")
+                    logger.info(f"MAC Address detected via {detection_method}: {mac_address}")
                     return mac_address
                     
         except Exception as e:
-            print(f"Critical MAC address detection error: {e}")
+            logger.error(f"Critical MAC address detection error: {e}")
         
         # Emergency fallback - generate consistent MAC based on system info
-        print("Warning: Using emergency MAC fallback")
+        logger.warning("Using emergency MAC fallback")
         try:
             system_id = f"{platform.node()}_{platform.machine()}_{os.environ.get('COMPUTERNAME', 'unknown')}"
             mac_hash = hashlib.sha256(system_id.encode()).hexdigest()[:12]
@@ -1152,20 +1231,20 @@ class PushNotificationsInstaller:
                     # Files will be overwritten during installation if needed
                     try:
                         existing_version, _ = winreg.QueryValueEx(key, "Version")
-                        print(f"[OK] Found existing installation registry entry (version: {existing_version})")
-                        print("  Installation will overwrite existing files")
+                        logger.info(f"Found existing installation registry entry (version: {existing_version})")
+                        logger.info("Installation will overwrite existing files")
                         return True
                     except:
                         # Registry exists but no version - still treat as existing
-                        print("[OK] Found existing installation registry entry")
-                        print("  Installation will overwrite existing files")
+                        logger.info("Found existing installation registry entry")
+                        logger.info("Installation will overwrite existing files")
                         return True
             except (OSError, FileNotFoundError):
                 # No registry key - new installation
                 return False
                     
         except Exception as e:
-            print(f"Warning: Error checking for existing installation: {e}")
+            logger.warning(f"Error checking for existing installation: {e}")
         
         return False
     
@@ -1199,17 +1278,17 @@ class PushNotificationsInstaller:
                     'serverManaged': True
                 }
                 
-                print(f"[OK] Loaded existing configuration for repair")
-                print(f"  Key ID: {self.key_id}")
-                print(f"  MAC Address: {self.mac_address}")
-                print(f"  Username: {self.username}")
+                logger.info(f"Loaded existing configuration for repair")
+                logger.info(f"Key ID: {self.key_id}")
+                logger.info(f"MAC Address: {self.mac_address}")
+                logger.info(f"Username: {self.username}")
                     
         except Exception as e:
-            print(f"Warning: Could not load existing config for repair: {e}")
+            logger.warning(f"Could not load existing config for repair: {e}")
     
     def check_for_updates(self):
         """Check for Windows client updates from the website"""
-        print("Checking for Windows client updates...")
+        logger.info("Checking for Windows client updates...")
         
         try:
             # Extract version number from version string (e.g., "3.0.0" -> 300)
@@ -1248,12 +1327,12 @@ class PushNotificationsInstaller:
                     version_comparison = compare_versions(INSTALLER_VERSION, latest_version)
                     
                     if version_comparison > 0:  # Update available
-                        print(f"[PACKAGE] Windows client update available: v{INSTALLER_VERSION} → v{latest_version}")
-                        print(f"Download URL: {download_url}")
+                        logger.info(f"Windows client update available: v{INSTALLER_VERSION} → v{latest_version}")
+                        logger.info(f"Download URL: {download_url}")
                         if update_notes:
-                            print(f"Release notes: {update_notes}")
+                            logger.info(f"Release notes: {update_notes}")
                         if update_installation_key:
-                            print(f"[OK] Update installation key provided")
+                            logger.info(f"Update installation key provided")
                         
                         # Store update information
                         self.update_data = {
@@ -1267,38 +1346,38 @@ class PushNotificationsInstaller:
                         
                         return True  # Update available
                     elif version_comparison == 0:
-                        print(f"[OK] Already running latest Windows version: v{INSTALLER_VERSION}")
+                        logger.info(f"Already running latest Windows version: v{INSTALLER_VERSION}")
                         return False  # No update needed
                     else:
-                        print(f"[OK] Running newer Windows version than latest: v{INSTALLER_VERSION} > v{latest_version}")
+                        logger.info(f"Running newer Windows version than latest: v{INSTALLER_VERSION} > v{latest_version}")
                         return False  # Running pre-release or newer
                     
                 else:
-                    print(f"[ERR] Version check failed: {result.get('message', 'Unknown error')}")
+                    logger.error(f"Version check failed: {result.get('message', 'Unknown error')}")
                     return False
             else:
-                print(f"[ERR] Version check server error: HTTP {response.status_code}")
+                logger.error(f"Version check server error: HTTP {response.status_code}")
                 return False
                 
         except requests.RequestException as e:
-            print(f"[ERR] Version check network error: {e}")
+            logger.error(f"Version check network error: {e}")
             return False
         except Exception as e:
-            print(f"[ERR] Version check error: {e}")
+            logger.error(f"Version check error: {e}")
             return False
     
     def download_and_apply_update(self):
         """Download and apply the latest version update"""
         if not self.update_data:
-            print("No update data available")
+            logger.warning("No update data available")
             return False
             
-        print(f"[DOWNLOAD] Downloading update v{self.update_data['latestVersion']}...")
+        logger.info(f"Downloading update v{self.update_data['latestVersion']}...")
         
         try:
             download_url = self.update_data['downloadUrl']
             if not download_url:
-                print("[ERR] No download URL provided")
+                logger.error("No download URL provided")
                 return False
             
             # Download the new installer
@@ -1314,7 +1393,7 @@ class PushNotificationsInstaller:
                 total_size = int(response.headers.get('content-length', 0))
                 downloaded = 0
                 
-                print(f"Downloading {total_size} bytes...")
+                logger.info(f"Downloading {total_size} bytes...")
                 
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
@@ -1322,13 +1401,13 @@ class PushNotificationsInstaller:
                         downloaded += len(chunk)
                         if total_size > 0:
                             progress = (downloaded / total_size) * 100
-                            print(f"\rProgress: {progress:.1f}%", end='', flush=True)
+                            logger.info(f"Progress: {progress:.1f}%")
                 
-                print("\n[OK] Download completed")
+                logger.info("Download completed")
             
             # Verify downloaded file
             if not Path(temp_installer).exists():
-                print("[ERR] Downloaded file not found")
+                logger.error("Downloaded file not found")
                 return False
             
             # Replace current installer if we're in the install directory
@@ -1341,11 +1420,11 @@ class PushNotificationsInstaller:
                 # Backup current version
                 if installer_current.exists():
                     shutil.copy2(installer_current, installer_backup)
-                    print(f"[OK] Backed up current installer to {installer_backup.name}")
+                    logger.info(f"Backed up current installer to {installer_backup.name}")
                 
                 # Replace with new version
                 shutil.copy2(temp_installer, installer_current)
-                print(f"[OK] Updated installer to v{self.update_data['latestVersion']}")
+                logger.info(f"Updated installer to v{self.update_data['latestVersion']}")
                 
                 # Update wrapper scripts
                 self._update_installer_wrappers()
@@ -1359,14 +1438,14 @@ class PushNotificationsInstaller:
             # Update registry version info
             self._update_version_registry()
             
-            print(f"[SUCCESS] Update completed! Now running v{self.update_data['latestVersion']}")
+            logger.info(f"Update completed! Now running v{self.update_data['latestVersion']}")
             return True
             
         except requests.RequestException as e:
-            print(f"[ERR] Download failed: {e}")
+            logger.error(f"Download failed: {e}")
             return False
         except Exception as e:
-            print(f"[ERR] Update failed: {e}")
+            logger.error(f"Update failed: {e}")
             return False
     
     def _update_installer_wrappers(self):
@@ -1375,10 +1454,10 @@ class PushNotificationsInstaller:
             if self.system == "Windows":
                 # We only update the main Python script now
                 installer_path = self.install_path / "Installer.py"
-                print(f"[OK] Updated installer Python script: {installer_path}")
+                logger.info(f"Updated installer Python script: {installer_path}")
                 
         except Exception as e:
-            print(f"Warning: Could not update installer script: {e}")
+            logger.warning(f"Could not update installer script: {e}")
     
     def _update_version_registry(self):
         """Update version information in Windows registry"""
@@ -1393,10 +1472,10 @@ class PushNotificationsInstaller:
                     winreg.SetValueEx(key, "PreviousVersion", 0, winreg.REG_SZ, 
                                     INSTALLER_VERSION)
                 
-                print("[OK] Updated registry version information")
+                logger.info("Updated registry version information")
                 
         except Exception as e:
-            print(f"Warning: Could not update registry version: {e}")
+            logger.warning(f"Could not update registry version: {e}")
 
     def _get_username_with_number(self):
         """Get username with number suffix for uniqueness - will be updated after key validation"""
@@ -1449,7 +1528,7 @@ class PushNotificationsInstaller:
                 return False
                 
             except Exception as e:
-                print(f"Error checking admin privileges: {e}")
+                logger.error(f"Error checking admin privileges: {e}")
                 return False
         else:
             return os.geteuid() == 0
@@ -1458,7 +1537,7 @@ class PushNotificationsInstaller:
         """Restart the installer with administrator privileges"""
         if self.system == "Windows":
             try:
-                print("Restarting with administrator privileges...")
+                logger.info("Restarting with administrator privileges...")
                 
                 # Method 1: Try PowerShell Start-Process with -Verb RunAs (most reliable on Windows 10)
                 try:
@@ -1484,32 +1563,32 @@ class PushNotificationsInstaller:
                        creationflags=subprocess.CREATE_NO_WINDOW)
                     
                     if result.returncode == 0:
-                        print("[OK] Administrator privileges requested via PowerShell")
+                        logger.info("[OK] Administrator privileges requested via PowerShell")
                         sys.exit(0)
                     else:
-                        print(f"PowerShell elevation failed: {result.stderr}")
+                        logger.error(f"PowerShell elevation failed: {result.stderr}")
                         
                 except Exception as e:
-                    print(f"PowerShell method failed: {e}")
+                    logger.error(f"PowerShell method failed: {e}")
                 
                 # Method 2: Try win32api ShellExecute (traditional method)
                 try:
                     import win32api
                     
-                    script_args = ' '.join([f'"{arg}"' for arg in sys.argv])
+                    script_args = ' '.join([f'"{{arg}}"' for arg in sys.argv])
                     
                     result = win32api.ShellExecute(
                         None, "runas", sys.executable, script_args, None, 1
                     )
                     
                     if result > 32:  # Success
-                        print("[OK] Administrator privileges requested via ShellExecute")
+                        logger.info("[OK] Administrator privileges requested via ShellExecute")
                         sys.exit(0)
                     else:
-                        print(f"ShellExecute failed with error code: {result}")
+                        logger.error(f"ShellExecute failed with error code: {{result}}")
                         
                 except Exception as e:
-                    print(f"ShellExecute method failed: {e}")
+                    logger.error(f"ShellExecute method failed: {{e}}")
                 
                 # Method 3: Try ctypes ShellExecuteW (64-bit compatible)
                 try:
@@ -2620,7 +2699,7 @@ class OverlayManager:
                 overlay.attributes('-fullscreen', True)
                 self.overlays.append(overlay)
         except Exception as e:
-            print(f"Error creating overlays: {{e}}")
+            logging.warning(f"Error creating overlays: {e}")
         
     def hide_overlays(self):
         """Hide all overlays"""
