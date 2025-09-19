@@ -1451,8 +1451,8 @@ class PushNotificationsInstaller:
             current_file = Path(__file__)
             if self.install_path and current_file.parent == self.install_path:
                 # We're running from the install directory - update the local copy
-                installer_backup = self.install_path / f"Installer_backup_{INSTALLER_VERSION}.py"
-                installer_current = self.install_path / "Installer.py"
+                installer_backup = self.install_path / f"installer_backup_{INSTALLER_VERSION}.py"
+                installer_current = self.install_path / "installer.py"
                 
                 # Backup current version
                 if installer_current.exists():
@@ -1490,7 +1490,7 @@ class PushNotificationsInstaller:
         try:
             if self.system == "Windows":
                 # We only update the main Python script now
-                installer_path = self.install_path / "Installer.py"
+                installer_path = self.install_path / "installer.py"
                 logger.info(f"Updated installer Python script: {installer_path}")
                 
         except Exception as e:
@@ -2320,7 +2320,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         try:
             # Copy the current installer script to the installation directory
             current_installer = Path(__file__).resolve()
-            installer_copy_path = self.install_path / "Installer.py"
+            installer_copy_path = self.install_path / "installer.py"
             
             # Read current installer content
             with open(current_installer, 'r', encoding='utf-8') as f:
@@ -4494,7 +4494,7 @@ def create_desktop_shortcuts(installer_instance):
             # Create Installer/Repair shortcut - Python only
             repair_shortcut = shell.CreateShortCut(str(desktop / "Push Client Repair.lnk"))
             repair_shortcut.Targetpath = "python.exe"
-            repair_shortcut.Arguments = f'"{installer_instance.install_path / "Installer.py"}" --repair'
+            repair_shortcut.Arguments = f'"{installer_instance.install_path / "installer.py"}" --repair'
             repair_shortcut.WorkingDirectory = str(installer_instance.install_path)
             repair_shortcut.Description = "PushNotifications Installer/Repair"
             repair_shortcut.save()
