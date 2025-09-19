@@ -2750,7 +2750,7 @@ class OverlayManager:
                 overlay.attributes('-fullscreen', True)
                 self.overlays.append(overlay)
         except Exception as e:
-            logging.warning(f"Error creating overlays: {e}")
+            logging.warning(f"Error creating overlays: {{e}}")
         
     def hide_overlays(self):
         """Hide all overlays"""
@@ -4197,7 +4197,7 @@ Features:
                 result = response.json()
                 if result.get('success') and result.get('updateAvailable'):
                     # Launch updater using Python
-                    installer_path = Path(__file__).parent / "Installer.py"
+                    installer_path = Path(__file__).parent / "installer.py"
                     if installer_path.exists():
                         subprocess.Popen([sys.executable, str(installer_path), "--update"],
                                        creationflags=subprocess.CREATE_NO_WINDOW)
