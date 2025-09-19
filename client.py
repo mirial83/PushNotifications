@@ -59,18 +59,21 @@ class PushNotificationsClient:
 
         # Create the menu
         menu = (
-            pystray.MenuItem("View Current Notification", self._view_notification),
+            pystray.MenuItem("View Current Notification", self._view_notification,
+                           enabled=self._has_notifications),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Snooze", pystray.Menu(
-                pystray.MenuItem("5 minutes", lambda: self._snooze(5)),
-                pystray.MenuItem("15 minutes", lambda: self._snooze(15)),
-                pystray.MenuItem("30 minutes", lambda: self._snooze(30))
-            ), enabled=lambda: not self.snooze_used and bool(self.notifications)),
+                pystray.MenuItem("5 minutes", self._snooze_5),
+                pystray.MenuItem("15 minutes", self._snooze_15),
+                pystray.MenuItem("30 minutes", self._snooze_30)
+            ), enabled=self._can_snooze),
             pystray.MenuItem("Request Website Access", self._request_website),
             pystray.MenuItem("Complete Current Notification", 
                            self._complete_notification,
-                           enabled=lambda: bool(self.notifications)),
+                           enabled=self._has_notifications),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Show Status", self._show_status),
+            pystray.MenuItem("About", self._show_about),
             pystray.MenuItem("Request Uninstall", self._request_uninstall),
             pystray.MenuItem("Exit", self._quit)
         )
@@ -248,6 +251,69 @@ class PushNotificationsClient:
                                "Failed to uninstall. Please try again later or contact support.")
             return False
 
+    def _show_status(self):
+        """Show client status information"""
+        try:
+            active_count = len([n for n in self.notifications if not n.get('completed', False)])
+            status_text = f"Push Notifications Client\n\n"
+            status_text += f"Version: {self.config.get('version', 'Unknown')}\n"
+            status_text += f"Client ID: {self.config.get('client_id', 'Unknown')}\n"
+            status_text += f"Status: Running\n"
+            status_text += f"Active Notifications: {active_count}\n"
+            
+            if self.snooze_until and time.time() < self.snooze_until:
+                remaining = int((self.snooze_until - time.time()) / 60)
+                status_text += f"Snooze: {remaining} minutes remaining\n"
+            else:
+                status_text += f"Snooze: Not active\n"
+            
+            messagebox.showinfo("Client Status", status_text)
+        except Exception as e:
+            logger.error(f"Error showing status: {e}")
+            messagebox.showerror("Error", "Failed to show client status.")
+    
+    def _show_about(self):
+        """Show about dialog"""
+        try:
+            about_text = f"""Push Notifications Client
+            
+Version: {self.config.get('version', 'Unknown')}
+Client ID: {self.config.get('client_id', 'Unknown')}
+
+© 2024 Push Notifications
+Advanced notification management system
+
+Features:
+• Notification snoozing
+• Website access requests
+• Background operation
+• Secure client management"""
+            
+            messagebox.showinfo("About Push Notifications", about_text)
+        except Exception as e:
+            logger.error(f"Error showing about: {e}")
+            messagebox.showerror("Error", "Failed to show about information.")
+    
+    def _has_notifications(self, *args):
+        """Check if there are active notifications"""
+        return bool(self.notifications)
+    
+    def _can_snooze(self, *args):
+        """Check if snoozing is available"""
+        return not self.snooze_used and bool(self.notifications)
+    
+    def _snooze_5(self, *args):
+        """Snooze for 5 minutes"""
+        self._snooze(5)
+    
+    def _snooze_15(self, *args):
+        """Snooze for 15 minutes"""
+        self._snooze(15)
+    
+    def _snooze_30(self, *args):
+        """Snooze for 30 minutes"""
+        self._snooze(30)
+    
     def _quit(self):
         """Clean shutdown of the application"""
         self.running = False

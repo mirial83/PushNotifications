@@ -890,6 +890,20 @@ class SystemTray:
     def __init__(self):
         self.icon = None
         self.running = True
+        self.notifications = []
+        self.snooze_until = None  # Timestamp when snooze expires
+        self.snooze_used = False  # Track if snooze has been used
+        self.config = self._load_config()
+        
+    def _load_config(self):
+        """Load client configuration from config.json"""
+        config_path = Path(__file__).parent / "config.json"
+        try:
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load config: {e}")
+            return {}
         
     def create_icon(self):
         """Create and configure the system tray icon"""
@@ -916,9 +930,22 @@ class SystemTray:
         
         # Create the menu
         menu = (
-            pystray.MenuItem("Request Website Access", self._request_website),
-            pystray.MenuItem("Request Uninstall", self._request_uninstall),
+            pystray.MenuItem("View Current Notification", self._view_notification,
+                           enabled=self._has_notifications),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Snooze", pystray.Menu(
+                pystray.MenuItem("5 minutes", self._snooze_5),
+                pystray.MenuItem("15 minutes", self._snooze_15),
+                pystray.MenuItem("30 minutes", self._snooze_30)
+            ), enabled=self._can_snooze),
+            pystray.MenuItem("Request Website Access", self._request_website),
+            pystray.MenuItem("Complete Current Notification", 
+                           self._complete_notification,
+                           enabled=self._has_notifications),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Show Status", self._show_status),
+            pystray.MenuItem("About", self._show_about),
+            pystray.MenuItem("Request Uninstall", self._request_uninstall),
             pystray.MenuItem("Exit", self._quit)
         )
         
@@ -948,6 +975,110 @@ class SystemTray:
         messagebox.showinfo("Request Sent",
                           "Your uninstall request has been submitted for approval.")
     
+    # Helper methods for dynamic menu item states
+    def _has_notifications(self):
+        """Check if there are any notifications"""
+        return len(self.notifications) > 0
+        
+    def _can_snooze(self):
+        """Check if snoozing is allowed"""
+        return self._has_notifications() and not self.snooze_used
+    
+    def _view_notification(self, icon=None):
+        """Show the current notification message"""
+        if not self.notifications:
+            messagebox.showinfo('No Notifications', 'There are no active notifications.')
+            return
+            
+        notif = self.notifications[0]
+        title = notif.get('title', 'Current Notification')
+        body = notif.get('message', 'No message available')
+        messagebox.showinfo(title, body)
+
+    def _snooze(self, minutes):
+        """Snooze notifications for specified minutes"""
+        if self.snooze_used:
+            messagebox.showwarning('Snooze Unavailable', 'Snooze has already been used.')
+            return
+            
+        self.snooze_until = time.time() + (minutes * 60)
+        self.snooze_used = True
+        
+        # Update menu items (if icon supports it)
+        if self.icon:
+            try:
+                self.icon.update_menu()
+            except Exception:
+                pass
+        
+        messagebox.showinfo('Notifications Snoozed', f'Notifications snoozed for {minutes} minutes')
+
+    def _snooze_5(self, icon):
+        """Snooze notifications for 5 minutes"""
+        self._snooze(5)
+        
+    def _snooze_15(self, icon):
+        """Snooze notifications for 15 minutes"""
+        self._snooze(15)
+        
+    def _snooze_30(self, icon):
+        """Snooze notifications for 30 minutes"""
+        self._snooze(30)
+    
+    def _complete_notification(self, icon=None):
+        """Mark the current notification as completed"""
+        if not self.notifications:
+            return
+        try:
+            notif = self.notifications[0]
+            # In a real implementation, this would send to server
+            # For now, just remove from local list
+            self.notifications.pop(0)
+            
+            if self.icon:
+                try:
+                    self.icon.update_menu()
+                except Exception:
+                    pass
+            messagebox.showinfo('Notification Completed', 'The notification has been marked as completed.')
+            
+        except Exception as e:
+            logger.error(f'Failed to complete notification: {e}')
+            messagebox.showerror('Error', 'Failed to complete notification. Please try again later.')
+
+    def _show_status(self, icon):
+        """Show application status"""
+        status = f"""PushNotifications Client Status
+
+Client ID: {self.config.get('clientId', 'Unknown')}
+Version: {self.config.get('version', 'Unknown')}
+Notifications: {len(self.notifications)}
+Snooze Used: {self.snooze_used}
+Status: Running"""
+        
+        try:
+            messagebox.showinfo("Client Status", status)
+        except:
+            print(status)
+    
+    def _show_about(self, icon):
+        """Show about dialog"""
+        about = f"""PushNotifications Client v{self.config.get('version', 'Unknown')}
+
+© 2024 Push Notifications System
+Advanced notification management client
+
+Features:
+• System tray integration
+• Notification management
+• Website access control
+• Auto-update capabilities"""
+        
+        try:
+            messagebox.showinfo("About PushNotifications", about)
+        except:
+            print(about)
+
     def _quit(self, icon):
         """Clean shutdown of the application"""
         self.running = False
