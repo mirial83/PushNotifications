@@ -2778,7 +2778,7 @@ if __name__ == "__main__":
         if console_hwnd != 0:
             ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
     except Exception as e:
-        print(f"Could not hide console: {e}")
+        print(f"Could not hide console: {{e}}")
     
     # Basic keep-alive loop
     import time
