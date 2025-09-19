@@ -2378,27 +2378,65 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
 
     def _store_encrypted_path_info(self):
         """Store encrypted installation path info in registry"""
+        print("Storing installation metadata in registry...")
+        
         try:
             # Windows-only installer - always use registry
-                # Create/open registry key
-                with winreg.CreateKey(winreg.HKEY_CURRENT_USER, 
-                                    "Software\\PushNotifications") as key:
-                    # Store only non-sensitive metadata
-                    winreg.SetValueEx(key, "KeyId", 0, winreg.REG_SZ, self.key_id)
-                    winreg.SetValueEx(key, "Username", 0, winreg.REG_SZ, self.username)
-                    winreg.SetValueEx(key, "MacAddress", 0, winreg.REG_SZ, self.mac_address)
-                    winreg.SetValueEx(key, "Version", 0, winreg.REG_SZ, INSTALLER_VERSION)
-                    winreg.SetValueEx(key, "ApiUrl", 0, winreg.REG_SZ, self.api_url)
-                    winreg.SetValueEx(key, "InstallDate", 0, winreg.REG_SZ, 
-                                    datetime.now().isoformat())
-                    
-                    # Store encrypted path hash (path itself encrypted server-side)
-                    path_hash = hashlib.sha256(str(self.install_path).encode()).hexdigest()
-                    winreg.SetValueEx(key, "PathHash", 0, winreg.REG_SZ, path_hash)
-                    
+            # Create/open registry key with write permissions
+            try:
+                key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\PushNotifications")
+            except WindowsError as e:
+                logger.error(f"Failed to create/open registry key: {e}")
+                if e.winerror == 5:  # Access denied
+                    logger.error("Access denied - insufficient permissions to modify registry")
+                    self.notify_installation_failure("registry", "Access denied when creating registry key")
+                    return False
+                raise
+            
+            # Store metadata with individual error handling
+            metadata = {
+                "KeyId": self.key_id,
+                "Username": self.username,
+                "MacAddress": self.mac_address,
+                "Version": INSTALLER_VERSION,
+                "ApiUrl": self.api_url,
+                "InstallDate": datetime.now().isoformat(),
+                "PathHash": hashlib.sha256(str(self.install_path).encode()).hexdigest()
+            }
+            
+            success = True
+            for name, value in metadata.items():
+                try:
+                    winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
+                    logger.debug(f"Stored {name} in registry")
+                except WindowsError as e:
+                    logger.error(f"Failed to store {name} in registry: {e}")
+                    if e.winerror == 5:  # Access denied
+                        logger.error(f"Access denied when writing {name} value")
+                    success = False
+                except ValueError as e:
+                    logger.error(f"Invalid value for {name}: {e}")
+                    success = False
+                except Exception as e:
+                    logger.error(f"Unexpected error storing {name}: {e}")
+                    success = False
+            
+            winreg.CloseKey(key)
+            
+            if success:
+                logger.info("[OK] Successfully stored all metadata in registry")
+                return True
+            else:
+                logger.error("Failed to store some registry values")
+                self.notify_installation_failure("registry", "Failed to store required registry values")
+                return False
+                
         except Exception as e:
-            print(f"Warning: Could not store registry information: {e}")
-    
+            logger.error(f"Critical error accessing registry: {str(e)}")
+            import traceback
+            logger.error(f"Registry error details:\n{traceback.format_exc()}")
+            self.notify_installation_failure("registry", f"Critical registry error: {str(e)}")
+            return False
     def _update_install_path_in_database(self):
         """Update the install path in the database after directory creation"""
         try:
@@ -2580,10 +2618,58 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             return False  # Not a critical failure
     
     
-    def notify_installation_failure(self, stage, error_message):
-        """Notify the server that the installation has failed"""
-        # Get the existing standalone function's code
-        return notify_installation_failure(self, stage, error_message)
+    def notify_installation_failure(
+        self,
+        stage: str,
+        error_message: str,
+        correlation_id: Optional[str] = None
+    ) -> bool:
+        """Notify the server that the installation has failed.
+        
+        This method logs the failure with rich context and forwards to the standalone
+        implementation for processing.
+        
+        Args:
+            stage: The installation stage where failure occurred
+            error_message: Detailed error message/traceback
+            correlation_id: Optional ID to correlate related errors
+            
+        Returns:
+            bool: True if notification was successful
+        """
+        correlation_id = correlation_id or str(uuid.uuid4())
+        
+        # Debug log with rich context before forwarding
+        logger.debug(f"Installation failure received for stage {stage!r}", extra={
+            'correlation_id': correlation_id,
+            'stage': stage,
+            'error_summary': str(error_message)[:100] + '...' if len(str(error_message)) > 100 else str(error_message),
+            'installer_state': {
+                'version': getattr(self, 'version', 'UNKNOWN'),
+                'install_path': str(getattr(self, 'install_path', None)),
+                'device_registered': bool(getattr(self, 'device_data', None)),
+                'has_config': bool(getattr(self, 'config', None))
+            }
+        })
+        # Forward to the standalone implementation with proper error handling
+        try:
+            return notify_installation_failure(
+                installer_instance=self,
+                stage=stage,
+                error_message=error_message,
+                correlation_id=correlation_id
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to forward installation failure notification",
+                extra={
+                    'correlation_id': correlation_id,
+                    'stage': stage,
+                    'error': str(e)
+                },
+                exc_info=True
+            )
+            return False
     
     def cleanup_failed_installation_files(self):
         """Disabled - no cleanup during installation to prevent crashes"""
@@ -3115,7 +3201,7 @@ class PushNotificationsClient:
             return icon
             
         except Exception as e:
-            print(f"Error creating tray icon: {e}")
+            print(f"Error creating tray icon: {str(e)}")
             return None
             
     def quit(self, icon=None):
@@ -3946,9 +4032,11 @@ class PushNotificationsClient:
             
             return pystray.Icon("PushNotifications", create_image(), "PushNotifications Client", menu)
         except Exception as e:
-            print(f"Error creating tray icon: {e}")
+            print("Error creating tray icon")
+            import traceback
+            traceback.print_exc()
             return None
-    
+            
     def show_status(self, icon=None, item=None):
         """Show client status"""
         try:
@@ -4201,43 +4289,135 @@ Features:
             self.tray_icon.stop()
     
     def check_notifications(self):
-        """Main notification checking loop with heartbeat functionality"""
-        # Add startup delay to ensure client is fully initialized
+        """Main notification checking loop with robust error handling and retries"""
         print("Starting notification checker...")
-        time.sleep(5)  # Wait 5 seconds before starting network operations
+        
+        # Exponential backoff constants
+        MIN_RETRY_DELAY = 5      # Initial retry delay in seconds
+        MAX_RETRY_DELAY = 300    # Maximum retry delay (5 minutes)
+        RETRY_MULTIPLIER = 2     # Multiply delay by this after each failure
+        
+        retry_delay = MIN_RETRY_DELAY
+        consecutive_failures = 0
+        last_success_time = None
+        
+        # Wait for startup before initiating network operations
+        time.sleep(MIN_RETRY_DELAY)
         
         while self.running:
             try:
-                # Check if snooze period has ended
+                # Handle snooze expiration
                 if self.snooze_end_time and datetime.now() > self.snooze_end_time:
                     self.snooze_end_time = None
                     self.evaluate_security_state()
                 
-                # Only send heartbeat if client is fully operational
-                if hasattr(self, 'client_operational') and self.client_operational:
-                    self._send_heartbeat()
+                # Prepare request data
+                req_data = {
+                    'action': 'getNotifications',
+                    'clientId': CLIENT_ID,
+                    'macAddress': MAC_ADDRESS,
+                    'version': CLIENT_VERSION,
+                    'heartbeat': {
+                        'uptime': int((datetime.now() - self.start_time).total_seconds()),
+                        'activeNotifications': len(self.notifications),
+                        'securityActive': self.security_active,
+                        'lastSuccess': last_success_time.isoformat() if last_success_time else None,
+                        'consecutiveFailures': consecutive_failures
+                    } if hasattr(self, 'client_operational') and self.client_operational else None
+                }
                 
-                # Fetch notifications from server
-                try:
-                    response = requests.post(f"{API_URL}/api/index", json={
-                        'action': 'getNotifications',
-                        'clientId': CLIENT_ID,
-                        'macAddress': MAC_ADDRESS
-                    }, timeout=10)
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        if result.get('success'):
-                            server_notifications = result.get('notifications', [])
-                            self.process_notifications(server_notifications)
-                            # Mark client as operational after first successful API call
-                            self.client_operational = True
-                    else:
-                        print(f"API response error: {response.status_code}")
+                # Make API request with retry logic
+                for attempt in range(3):  # Try up to 3 times per iteration
+                    try:
+                        response = requests.post(
+                            f"{API_URL}/api/index",
+                            json=req_data,
+                            timeout=10 * (attempt + 1)  # Increase timeout with each retry
+                        )
                         
-                except requests.exceptions.RequestException as e:
-                    print(f"Network error in notification check: {e}")
-                    # Continue loop but don't crash
+                        if response.status_code == 200:
+                            result = response.json()
+                            if result.get('success'):
+                                # Process notifications
+                                server_notifications = result.get('notifications', [])
+                                self.process_notifications(server_notifications)
+                                
+                                # Process server commands if any
+                                if result.get('commands'):
+                                    self._process_server_commands(result['commands'])
+                                
+                                # Update operational state
+                                self.client_operational = True
+                                last_success_time = datetime.now()
+                                consecutive_failures = 0
+                                retry_delay = MIN_RETRY_DELAY
+                                
+                                # Break out of retry loop on success
+                                break
+                                
+                            else:
+                                logger.warning(f"API error: {result.get('message', 'Unknown error')}")
+                                if attempt == 2:  # Log details on final attempt
+                                    logger.error(f"API error details: {result}")
+                        else:
+                            logger.warning(f"HTTP {response.status_code} on attempt {attempt + 1}")
+                            if attempt == 2:
+                                logger.error(f"Response content: {response.text[:1000]}")
+                    
+                    except requests.exceptions.Timeout:
+                        logger.warning(f"Timeout on attempt {attempt + 1}")
+                        continue
+                    except requests.exceptions.ConnectionError:
+                        logger.warning(f"Connection error on attempt {attempt + 1}")
+                        continue
+                    except Exception as e:
+                        logger.error(f"Unexpected error on attempt {attempt + 1}: {e}")
+                        if attempt == 2:
+                            import traceback
+                            logger.error(f"Error details:\n{traceback.format_exc()}")
+                        continue
+                    
+                    # Brief pause between retries
+                    if attempt < 2:
+                        time.sleep(1)
+                
+                # If we get here and haven't broken out, all retries failed
+                else:
+                    consecutive_failures += 1
+                    retry_delay = min(retry_delay * RETRY_MULTIPLIER, MAX_RETRY_DELAY)
+                    
+                    # Log failure with diagnostic info
+                    logger.error(f"All retries failed. Stats:")
+                    logger.error(f"  Consecutive failures: {consecutive_failures}")
+                    logger.error(f"  Next retry delay: {retry_delay}s")
+                    logger.error(f"  Last success: {last_success_time or 'Never'}")
+                    logger.error(f"  Client state: {self.client_operational=}, {self.security_active=}")
+                    
+                    # Check if we need to notify user of connection issues
+                    if consecutive_failures >= 3:
+                        if USE_GUI_DIALOGS:
+                            messagebox.showwarning(
+                                "Connection Issues",
+                                "Having trouble connecting to notification server.\n\n" +
+                                "The client will continue trying to reconnect in the background."
+                            )
+                        else:
+                            print("[WARNING] Connection issues detected - will retry in background")
+                    
+                # Sleep between iterations, using exponential backoff on failures
+                time.sleep(retry_delay if consecutive_failures > 0 else MIN_RETRY_DELAY)
+                
+            except requests.exceptions.RequestException as e:
+                print(f"Network error in notification check: {e}")
+                # Log additional error context
+                try:
+                    logger.error(f"Error details: {str(e.__cause__ or e.__context__ or e)}")
+                    import traceback
+                    logger.error(f"Stack trace:\n{traceback.format_exc()}")
+                except:
+                    pass
+                # Continue loop but don't crash
+                time.sleep(5)  # Brief delay before retry
                 
                 # Periodic update check (every hour)
                 if not hasattr(self, '_last_update_check'):
@@ -4783,53 +4963,236 @@ class FileProtectionService:
 # Standalone functions outside the class
 # Unix functionality removed - Windows-only installer
 
-def notify_installation_failure(installer_instance, stage, error_message):
-    """Notify the server that the installation has failed"""
-    print(f"Reporting installation failure at stage: {stage}")
+from typing import Optional, Dict, Any
+import uuid
+
+def notify_installation_failure(
+    installer_instance: "PushNotificationsInstaller",
+    stage: str,
+    error_message: str,
+    correlation_id: Optional[str] = None,
+    context: Optional[Dict[str, Any]] = None
+) -> bool:
+    """Notify the server that the installation has failed with detailed error tracking.
+    
+    Records rich diagnostic information and error context with correlation IDs for request
+    tracing and causal analysis. Handles error notifications with retries and detailed
+    logging of system state.
+    
+    Args:
+        installer_instance: The PushNotificationsInstaller instance containing device info
+        stage: The specific installation stage where failure occurred (e.g. "registry", "files")
+        error_message: Detailed error message/traceback for diagnostics
+        correlation_id: Optional UUID to correlate related errors. Auto-generated if not provided
+        context: Optional dict of additional error context (e.g. file paths, states)
+    
+    Returns:
+        bool: True if notification was successfully sent and acknowledged by server
+    
+    Example:
+        >>> corr_id = str(uuid.uuid4())
+        >>> notify_installation_failure(
+        ...     installer,
+        ...     "registry", 
+        ...     "Access denied when creating registry key",
+        ...     correlation_id=corr_id,
+        ...     context={'reg_key': 'HKCU\\Software\\PushNotifications'}
+        ... )
+        True
+    
+    Raises:
+        No exceptions are raised - all errors are caught and logged
+    """
+    # Generate or use correlation ID
+    correlation_id = correlation_id or str(uuid.uuid4())
+    logger.info("Beginning installation failure notification processing", extra={
+        'correlation_id': correlation_id,
+        'stage': stage,
+        'has_installer': bool(installer_instance),
+        'installer_version': getattr(installer_instance, 'version', 'UNKNOWN'),
+        'installer_state': {
+            'initialized': hasattr(installer_instance, 'device_data'),
+            'has_config': bool(getattr(installer_instance, 'config', None)),
+            'install_path': str(getattr(installer_instance, 'install_path', None))
+        }
+    })
+    
+    # Validate required parameters with detailed logs
+    validation_errors = []
+    if not installer_instance:
+        validation_errors.append("Missing installer instance")
+    if not stage:
+        validation_errors.append("Missing failure stage")
+    if not error_message:
+        validation_errors.append("Missing error message")
+    
+    if validation_errors:
+        logger.error("Validation failed for failure notification", extra={
+            'validation_errors': validation_errors,
+            'stage': stage or 'UNKNOWN'
+        })
+        return False
+    
+    # Log detailed failure report
+    logger.info("Valid failure notification received", extra={
+        'stage': stage,
+        'error_summary': str(error_message)[:100] + '...' if len(str(error_message)) > 100 else str(error_message),
+        'installer_version': getattr(installer_instance, 'version', 'UNKNOWN')
+    })
+    
+    # Convert error message to string and truncate with length check
+    orig_length = len(str(error_message))
+    error_message = str(error_message)[:2000]
+    if orig_length > 2000:
+        logger.warning(f"Error message truncated from {orig_length} to 2000 characters")
     
     try:
-        failure_data = {
-            'action': 'reportInstallationFailure',
-            'macAddress': installer_instance.mac_address,
-            'username': installer_instance.username,
-            'clientName': installer_instance.client_name,
-            'keyId': getattr(installer_instance, 'key_id', None),
-            'deviceId': installer_instance.device_data.get('deviceId') if hasattr(installer_instance, 'device_data') else None,
-            'clientId': installer_instance.device_data.get('clientId') if hasattr(installer_instance, 'device_data') else None,
-            'stage': stage,
-            'error': error_message,
-            'version': INSTALLER_VERSION,
-            'platform': f"Windows {platform.release()}",
-            'timestamp': datetime.now().isoformat(),
-            'installPath': str(getattr(installer_instance, 'install_path', 'unknown')),
-            'systemInfo': {
+        # Get device data with fallback
+        device_data = {}
+        try:
+            device_data = getattr(installer_instance, 'device_data', {}) or {}
+        except AttributeError:
+            logger.warning("Could not access device data")
+        
+        # Gather system info with comprehensive error handling 
+        system_info = {}
+        try:
+            system_info = {
                 'osVersion': f"Windows {platform.release()} {platform.version()}",
                 'architecture': platform.machine(),
                 'processor': platform.processor(),
                 'pythonVersion': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-                'isAdmin': installer_instance.check_admin_privileges(),
-                'timezone': str(datetime.now().astimezone().tzinfo)
+                'isAdmin': False,  # Default to False
+                'timezone': str(datetime.now().astimezone().tzinfo),
+                'memory': None,
+                'diskSpace': None
             }
+            
+            # Try to get admin status
+            try:
+                system_info['isAdmin'] = bool(installer_instance.check_admin_privileges())
+            except AttributeError:
+                pass
+                
+            # Try to get additional metrics if psutil available
+            try:
+                import psutil
+                memory = psutil.virtual_memory()
+                system_info['memory'] = {
+                    'total': memory.total,
+                    'available': memory.available,
+                    'percent': memory.percent
+                }
+                disk = psutil.disk_usage('/')
+                system_info['diskSpace'] = {
+                    'total': disk.total,
+                    'free': disk.free,
+                    'percent': disk.percent
+                }
+            except ImportError:
+                pass  # psutil not available
+            
+        except Exception as e:
+            logger.warning(f"Error gathering system info: {e}")
+            system_info = {
+                'error': f"Failed to gather system info: {str(e)}",
+                'partial': True,
+                'osVersion': 'Windows (version unknown)',
+                'pythonVersion': f"{sys.version_info.major}.{sys.version_info.minor}"
+            }
+        
+        # Safely build notification data
+        failure_data = {
+            'action': 'reportInstallationFailure',
+            'macAddress': getattr(installer_instance, 'mac_address', None),
+            'username': getattr(installer_instance, 'username', None),
+            'clientName': getattr(installer_instance, 'client_name', None),
+            'keyId': getattr(installer_instance, 'key_id', None),
+            'deviceId': device_data.get('deviceId'),
+            'clientId': device_data.get('clientId'),
+            'stage': stage,
+            'error': error_message,
+            'version': getattr(installer_instance, 'version', INSTALLER_VERSION),
+            'platform': f"Windows {platform.release()}",
+            'timestamp': datetime.now().isoformat(),
+            'installPath': str(getattr(installer_instance, 'install_path', 'unknown')),
+            'systemInfo': system_info,
+            'installation_mode': getattr(installer_instance, 'repair_mode', False) and 'repair' or 'fresh',
+            'is_update': getattr(installer_instance, 'update_mode', False)
         }
         
-        response = requests.post(
-            f"{installer_instance.api_url}/api/index",
-            json=failure_data,
-            timeout=30
-        )
+        # Validate required fields
+        required_fields = ['macAddress', 'username', 'stage', 'error']
+        missing_fields = [field for field in required_fields if not failure_data.get(field)]
+        if missing_fields:
+            logger.warning(f"Missing required fields: {', '.join(missing_fields)}")
+            return False
+            
+        # Ensure we have a valid API URL
+        api_url = getattr(installer_instance, 'api_url', None)
+        if not api_url:
+            logger.error("Missing API URL")
+            return False
+            
+        # URL validation
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(api_url)
+            if not all([parsed.scheme, parsed.netloc]):
+                logger.error("Invalid API URL format")
+                return False
+        except Exception as e:
+            logger.error(f"API URL validation failed: {e}")
+            return False
         
-        if response.status_code == 200:
-            result = response.json()
-            if result.get('success'):
-                print("[OK] Installation failure reported to server")
-                return True
-            else:
-                print(f"Warning: Server failed to log failure: {result.get('message')}")
-        else:
-            print(f"Warning: Failed to report installation failure: HTTP {response.status_code}")
+        # Send notification with retry
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    f"{api_url}/api/index",
+                    json=failure_data,
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('success'):
+                        logger.info("Installation failure reported successfully")
+                        return True
+                    else:
+                        logger.warning(f"Server rejected failure report: {result.get('message')}")
+                        # Only retry on server errors, not validation failures
+                        if 'error' in result.get('message', '').lower():
+                            continue
+                        return False
+                elif response.status_code >= 500:
+                    logger.warning(f"Server error (HTTP {response.status_code}), retrying...")
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    logger.error(f"Failed to report failure: HTTP {response.status_code}")
+                    return False
+                    
+            except requests.Timeout:
+                logger.warning(f"Request timeout, attempt {attempt + 1}/{max_retries}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    continue
+            except requests.RequestException as e:
+                logger.error(f"Network error: {e}")
+                return False
+            except Exception as e:
+                logger.error(f"Unexpected error sending notification: {e}")
+                return False
             
     except Exception as e:
-        print(f"Warning: Could not report installation failure: {e}")
+        logger.error(f"Critical error in failure notification: {e}")
+        # Log the full traceback for debugging
+        import traceback
+        logger.debug("Full error details:\n%s", traceback.format_exc())
     
     return False
 
