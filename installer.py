@@ -70,23 +70,42 @@ logger.setLevel(logging.DEBUG)
 # Clear any existing handlers to avoid duplicates
 logger.handlers.clear()
 
-# Create log file path in installation directory
+# Create log file path in user's Documents folder
 try:
-    # Try to use the current directory (where installer is running) first
-    log_file_path = Path("installer.log")
-    # Test if we can write to current directory
-    test_path = Path("test_write.tmp")
+    # Get the user's Documents folder path
+    import ctypes.wintypes
+    CSIDL_PERSONAL = 5  # Documents folder
+    _SHGetFolderPath = ctypes.windll.shell32.SHGetFolderPathW
+    _SHGetFolderPath.argtypes = [ctypes.wintypes.HWND,
+                                 ctypes.c_int,
+                                 ctypes.wintypes.HANDLE,
+                                 ctypes.wintypes.DWORD,
+                                 ctypes.wintypes.LPCWSTR]
+    path_buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+    result = _SHGetFolderPath(0, CSIDL_PERSONAL, 0, 0, path_buf)
+    if result == 0:
+        documents_path = Path(path_buf.value)
+    else:
+        # Fallback to Path.home() / "Documents" if SHGetFolderPath fails
+        documents_path = Path.home() / "Documents"
+    
+    # Create the log file in Documents with the specified name
+    log_file_path = documents_path / "Push Notifications Log.log"
+    
+    # Test if we can write to the Documents folder
+    test_path = documents_path / "test_write.tmp"
     test_path.touch()
     test_path.unlink()
+    
 except Exception:
     try:
-        # Fallback to temp directory if current directory isn't writable
+        # Fallback to temp directory if Documents isn't writable
         log_dir = Path(tempfile.gettempdir()) / "PushNotifications"
         log_dir.mkdir(exist_ok=True)
-        log_file_path = log_dir / "installer.log"
+        log_file_path = log_dir / "Push Notifications Log.log"
     except Exception:
         # Final fallback to user directory
-        log_file_path = Path.home() / "installer.log"
+        log_file_path = Path.home() / "Push Notifications Log.log"
 
 # Create rotating file handler (max 5MB, keep 3 backups)
 try:
