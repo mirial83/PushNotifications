@@ -58,6 +58,7 @@ import platform
 from pathlib import Path
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
+from typing import Optional, Dict, Any
 
 # ========================================
 # COMPREHENSIVE LOGGING CONFIGURATION
@@ -4962,9 +4963,6 @@ class FileProtectionService:
 
 # Standalone functions outside the class
 # Unix functionality removed - Windows-only installer
-
-from typing import Optional, Dict, Any
-import uuid
 
 def notify_installation_failure(
     installer_instance: "PushNotificationsInstaller",
