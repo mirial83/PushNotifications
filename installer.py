@@ -3222,7 +3222,7 @@ if __name__ == "__main__":
         if console_hwnd != 0:
             ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
     except Exception as e:
-        print(f"Could not hide console: {e}")
+        print(f"Could not hide console: {{e}}")
     
     # Create and run system tray icon
     try:
@@ -3230,7 +3230,7 @@ if __name__ == "__main__":
         if icon:
             icon.run()
     except Exception as e:
-        print(f"Could not create tray icon: {e}")
+        print(f"Could not create tray icon: {{e}}")
         
     # Run the main loop if no tray icon
     import time
