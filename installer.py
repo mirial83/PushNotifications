@@ -317,11 +317,29 @@ def check_and_install_package(package_name, pip_name=None):
         # Only install if not found in any Python environment
         logger.info(f"Installing {package_name}...")
         try:
-            subprocess.check_call([sys.executable, '-m', 'pip', 'install', pip_name],
-                                 creationflags=subprocess.CREATE_NO_WINDOW)
-            return True
-        except subprocess.CalledProcessError:
-            logger.warning(f"Failed to install {package_name}")
+            # Use more robust subprocess call with proper encoding and timeout
+            result = subprocess.run(
+                [sys.executable, '-m', 'pip', 'install', pip_name, '--quiet', '--disable-pip-version-check'],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=300,  # 5 minute timeout
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            
+            if result.returncode == 0:
+                logger.info(f"Successfully installed {package_name}")
+                return True
+            else:
+                logger.warning(f"Failed to install {package_name}: {result.stderr}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            logger.error(f"Installation of {package_name} timed out after 5 minutes")
+            return False
+        except Exception as e:
+            logger.warning(f"Failed to install {package_name}: {e}")
             return False
 
 # Try to import core dependencies, install if missing
@@ -1538,7 +1556,11 @@ class PushNotificationsInstaller:
                 # Third method: Try net session command
                 try:
                     result = subprocess.run(['net', 'session'], 
-                                          capture_output=True, text=True,
+                                          capture_output=True, 
+                                          text=True,
+                                          encoding='utf-8',
+                                          errors='replace',
+                                          timeout=10,
                                           creationflags=subprocess.CREATE_NO_WINDOW)
                     return result.returncode == 0
                 except:
@@ -1578,7 +1600,11 @@ class PushNotificationsInstaller:
                     
                     result = subprocess.run([
                         'powershell.exe', '-Command', powershell_cmd
-                    ], capture_output=True, text=True, timeout=30,
+                    ], capture_output=True, 
+                       text=True, 
+                       encoding='utf-8',
+                       errors='replace',
+                       timeout=30,
                        creationflags=subprocess.CREATE_NO_WINDOW)
                     
                     if result.returncode == 0:
@@ -1656,7 +1682,13 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                         f.write(batch_content)
                         temp_batch = f.name
                     
-                    subprocess.run([temp_batch], creationflags=subprocess.CREATE_NO_WINDOW)
+                    subprocess.run([temp_batch], 
+                                 capture_output=True,
+                                 text=True,
+                                 encoding='utf-8',
+                                 errors='replace',
+                                 timeout=30,
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
                     
                     # Clean up temp file after a delay
                     try:
