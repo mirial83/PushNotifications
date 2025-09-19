@@ -1007,6 +1007,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import pystray
 from tkinter import messagebox, simpledialog
+import webbrowser
 
 logger = logging.getLogger(__name__)
 
@@ -1035,50 +1036,50 @@ class PushNotificationsClient:
     def create_tray_icon(self):
         """Create and configure the system tray icon"""
         # Create a teal circular icon with "PN" text
-        image = Image.new('RGBA', (64, 64), color=(0, 128, 128, 0))
+        image = Image.new('RGB', (64, 64), color='teal')
         dc = ImageDraw.Draw(image)
-        dc.ellipse([2, 2, 62, 62], fill=(0, 128, 128, 255))
+        dc.ellipse([2, 2, 62, 62], fill='teal')
         
         try:
             # Try to add "PN" text
-            try:
-                font = ImageFont.truetype('arial.ttf', 24)
-            except Exception:
-                font = ImageFont.load_default()
-            text = 'PN'
-            # textbbox may not exist on older Pillow; fall back to getsize
-            if hasattr(dc, 'textbbox'):
-                bbox = dc.textbbox((0, 0), text, font=font)
-                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            if os.name == 'nt':  # Windows
+                font = ImageFont.truetype("arial.ttf", 24)
             else:
-                tw, th = dc.textsize(text, font=font)
-            x = (64 - tw) // 2
-            y = (64 - th) // 2
+                font = ImageFont.load_default()
+            text = "PN"
+            text_bbox = dc.textbbox((0, 0), text, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+            x = (64 - text_width) // 2
+            y = (64 - text_height) // 2
             dc.text((x, y), text, fill='white', font=font)
         except Exception as e:
-            logger.warning(f'Could not add text to icon: {e}')
+            logger.warning(f"Could not add text to icon: {e}")
 
         # Create the menu
         menu = (
-            pystray.MenuItem('View Current Notification', self._view_notification),
+            pystray.MenuItem("View Current Notification", self._view_notification,
+                           enabled=self._has_notifications),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem('Snooze', pystray.Menu(
-                pystray.MenuItem('5 minutes', lambda icon: self._snooze(5)),
-                pystray.MenuItem('15 minutes', lambda icon: self._snooze(15)),
-                pystray.MenuItem('30 minutes', lambda icon: self._snooze(30))
-            ), enabled=lambda icon: not self.snooze_used and bool(self.notifications)),
-            pystray.MenuItem('Request Website Access', self._request_website),
-            pystray.MenuItem('Complete Current Notification', 
+            pystray.MenuItem("Snooze", pystray.Menu(
+                pystray.MenuItem("5 minutes", self._snooze_5),
+                pystray.MenuItem("15 minutes", self._snooze_15),
+                pystray.MenuItem("30 minutes", self._snooze_30)
+            ), enabled=self._can_snooze),
+            pystray.MenuItem("Request Website Access", self._request_website),
+            pystray.MenuItem("Complete Current Notification", 
                            self._complete_notification,
-                           enabled=lambda icon: bool(self.notifications)),
+                           enabled=self._has_notifications),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem('Request Uninstall', self._request_uninstall),
-            pystray.MenuItem('Exit', self._quit)
+            pystray.MenuItem("Show Status", self._show_status),
+            pystray.MenuItem("About", self._show_about),
+            pystray.MenuItem("Request Uninstall", self._request_uninstall),
+            pystray.MenuItem("Exit", self._quit)
         )
 
         # Create and return the icon
         self.icon = pystray.Icon(
-            'PushNotifications',
+            "PushNotifications",
             image,
             menu=menu
         )
@@ -1176,6 +1177,65 @@ class PushNotificationsClient:
         except Exception as e:
             logger.error(f'Failed to request uninstall: {e}')
             messagebox.showerror('Error', 'Failed to submit uninstall request. Please try again later.')
+
+    def _has_notifications(self):
+        """Check if there are any notifications"""
+        return len(self.notifications) > 0
+        
+    def _can_snooze(self):
+        """Check if snoozing is allowed"""
+        return not self.snooze_used and len(self.notifications) > 0
+    
+    def _snooze_5(self, icon):
+        """Snooze notifications for 5 minutes"""
+        self._snooze(5)
+        
+    def _snooze_15(self, icon):
+        """Snooze notifications for 15 minutes"""
+        self._snooze(15)
+        
+    def _snooze_30(self, icon):
+        """Snooze notifications for 30 minutes"""
+        self._snooze(30)
+    
+    def _show_status(self, icon):
+        """Show application status"""
+        import tkinter as tk
+        from tkinter import messagebox
+        
+        status = f"""PushNotifications Client Status
+
+Client ID: {CLIENT_ID}
+Version: {CLIENT_VERSION}
+Notifications: {len(self.notifications)}
+Snooze Used: {self.snooze_used}
+Status: Running"""
+        
+        try:
+            messagebox.showinfo("Client Status", status)
+        except:
+            print(status)
+    
+    def _show_about(self, icon):
+        """Show about dialog"""
+        import tkinter as tk
+        from tkinter import messagebox
+        
+        about = f"""PushNotifications Client v{CLIENT_VERSION}
+
+© 2024 Push Notifications System
+Advanced notification management client
+
+Features:
+• System tray integration
+• Notification management
+• Website access control
+• Auto-update capabilities"""
+        
+        try:
+            messagebox.showinfo("About PushNotifications", about)
+        except:
+            print(about)
 
     def _quit(self, icon=None):
         """Clean shutdown of the application"""
