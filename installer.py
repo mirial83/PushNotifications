@@ -2859,16 +2859,120 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                         check=False, creationflags=subprocess.CREATE_NO_WINDOW)
         print("[OK] Uninstaller created")
     def _create_client_script(self):
-        """Create unified cross-platform Client Python script"""
+        """Create unified cross-platform Client Python script with Windows admin manifest"""
         client_script = self._get_unified_client_code()
         client_path = self.install_path / "Client.py"
         with open(client_path, 'w', encoding='utf-8') as f:
             f.write(client_script)
+        
         if self.system == "Windows":
+            # Create Windows Application Manifest for automatic admin privileges
+            self._create_windows_manifest()
+            # Create batch wrapper that uses the manifest
+            self._create_admin_batch_wrapper()
             # Set hidden attributes
             subprocess.run(["attrib", "+S", "+H", str(client_path)], 
                           check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        
         print("[OK] Unified cross-platform client script created")
+    
+    def _create_windows_manifest(self):
+        """Create Windows Application Manifest for automatic admin privileges"""
+        try:
+            manifest_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity
+    version="1.0.0.0"
+    processorArchitecture="*"
+    name="PushNotifications.Client"
+    type="win32"
+  />
+  <description>Push Notifications Client</description>
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+    </dependentAssembly>
+  </dependency>
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+      <!-- Windows 8.1 -->
+      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
+      <!-- Windows 8 -->
+      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
+      <!-- Windows 7 -->
+      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
+    </application>
+  </compatibility>
+  <asmv3:application xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
+    <asmv3:windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </asmv3:windowsSettings>
+  </asmv3:application>
+</assembly>'''
+            
+            manifest_path = self.install_path / "Client.exe.manifest"
+            with open(manifest_path, 'w', encoding='utf-8') as f:
+                f.write(manifest_content)
+            
+            # Set hidden attributes
+            subprocess.run(["attrib", "+S", "+H", str(manifest_path)], 
+                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            print("[OK] Windows Application Manifest created")
+            return True
+            
+        except Exception as e:
+            print(f"Warning: Could not create Windows manifest: {e}")
+            return False
+    
+    def _create_admin_batch_wrapper(self):
+        """Create batch wrapper that launches the client with admin privileges using the manifest"""
+        try:
+            # Create a batch file that launches the Python client with the manifest
+            batch_content = f'''@echo off
+REM PushNotifications Client Launcher with Admin Privileges
+REM This batch file ensures the client runs with administrator privileges
+
+REM Change to the client directory
+cd /d "{self.install_path}"
+
+REM Launch Python client with the manifest (which requests admin privileges)
+start "PushNotifications" /min "{sys.executable}" "{self.install_path / 'Client.py'}"
+
+REM Exit the batch file
+exit'''
+            
+            batch_path = self.install_path / "Client.bat"
+            with open(batch_path, 'w', encoding='utf-8') as f:
+                f.write(batch_content)
+            
+            # Set hidden attributes
+            subprocess.run(["attrib", "+S", "+H", str(batch_path)], 
+                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            print("[OK] Admin batch wrapper created")
+            return True
+            
+        except Exception as e:
+            print(f"Warning: Could not create admin batch wrapper: {e}")
+            return False
     def _create_installer_copy(self):
         """Create a copy of the installer for repair/maintenance functionality"""
         try:
@@ -3350,6 +3454,8 @@ Supported Platforms:
 - Windows 10/11 (Full feature set with overlays, tray icon, window management)
 - macOS (Adapted features with system notifications and menu bar)
 - Linux (Basic notifications with desktop integration)
+
+REQUIRES ADMINISTRATOR PRIVILEGES ON WINDOWS
 """
 import os
 import sys
@@ -3359,6 +3465,56 @@ import logging
 import subprocess
 from pathlib import Path
 import webbrowser
+import ctypes
+
+# CRITICAL: Check admin privileges before proceeding
+if os.name == 'nt':  # Windows only
+    def check_admin_privileges():
+        """Check if running with administrator privileges"""
+        try:
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except:
+            return False
+    
+    def restart_with_admin():
+        """Restart the client with administrator privileges"""
+        try:
+            print("[INFO] Administrator privileges required for PushNotifications Client")
+            print("[INFO] Restarting with elevated privileges...")
+            
+            # Method 1: PowerShell Start-Process with -Verb RunAs
+            script_path = os.path.abspath(sys.argv[0])
+            powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList "\"{script_path}\"" -Verb RunAs -WindowStyle Hidden'
+            
+            result = subprocess.run([
+                'powershell.exe', 
+                '-ExecutionPolicy', 'Bypass',
+                '-NoProfile',
+                '-WindowStyle', 'Hidden',
+                '-Command', powershell_cmd
+            ], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            if result.returncode == 0:
+                print("[OK] Client restarted with administrator privileges")
+                sys.exit(0)
+            else:
+                print(f"[ERROR] Failed to restart with admin privileges: {{result.stderr}}")
+                return False
+        except Exception as e:
+            print(f"[ERROR] Could not restart with admin privileges: {{e}}")
+            return False
+    
+    # Check admin privileges and restart if needed
+    if not check_admin_privileges():
+        if '--admin-restart' not in sys.argv:
+            restart_with_admin()
+        else:
+            print("[ERROR] Still not running as administrator after restart")
+            print("[ERROR] Please run the client as administrator manually")
+            input("Press Enter to exit...")
+            sys.exit(1)
+    else:
+        print("[OK] Running with administrator privileges")
 
 # Import dependencies with fallbacks
 try:
