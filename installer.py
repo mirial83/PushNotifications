@@ -4712,32 +4712,7 @@ class PushNotificationsClient:
         if icon:
             icon.stop()
 
-if __name__ == "__main__":
-    # Create the client instance
-    client = PushNotificationsClient()
-    
-    # Hide console window (Windows-only installer)
-    try:
-        import ctypes
-        console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if console_hwnd != 0:
-            ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
-    except Exception as e:
-        print(f"Could not hide console: {{e}}")
-    
-    # Create and run system tray icon
-    try:
-        icon = client.create_tray_icon()
-        if icon:
-            icon.run()
-    except Exception as e:
-        print(f"Could not create tray icon: {{e}}")
-        
-    # Run the main loop if no tray icon
-    import time
-    while client.running:
-        time.sleep(30)  # Keep running
-'''
+        # End of client code template
     
     def create_encrypted_vault(self):
         """Create AES-256-GCM encrypted configuration vault"""
