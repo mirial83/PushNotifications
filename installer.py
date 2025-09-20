@@ -1448,7 +1448,7 @@ class PushNotificationsInstaller:
         self.installation_finalized = False  # Track if installation completed successfully
         self.cleanup_performed = False  # Track if cleanup was already performed
         self.device_registered = False  # Track if device was registered with server
-    # Initialize progress dialog only if GUI dialogs are enabled
+        # Initialize progress dialog only if GUI dialogs are enabled
         self.progress_dialog = None
         if USE_GUI_DIALOGS:
             try:
@@ -1458,10 +1458,11 @@ class PushNotificationsInstaller:
             except Exception as e:
                 logger.warning(f"Could not initialize progress dialog: {e}")
                 self.progress_dialog = None
-            self.progress_dialog.add_log(f"Platform: {self.system}")
-            self.progress_dialog.add_log(f"MAC Address: {self.mac_address}")
-            self.progress_dialog.add_log(f"Client Name: {self.client_name}")
-            self.progress_dialog.add_log(f"API URL: {self.api_url}")
+            if self.progress_dialog:
+                self.progress_dialog.add_log(f"Platform: {self.system}")
+                self.progress_dialog.add_log(f"MAC Address: {self.mac_address}")
+                self.progress_dialog.add_log(f"Client Name: {self.client_name}")
+                self.progress_dialog.add_log(f"API URL: {self.api_url}")
         logger.info(f"PushNotifications Installer v{INSTALLER_VERSION}")
         logger.info(f"Platform: {self.system}")
         logger.info(f"MAC Address: {self.mac_address}")
