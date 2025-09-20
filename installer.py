@@ -4327,7 +4327,7 @@ if __name__ == "__main__":
         return True
     def create_desktop_shortcuts(self):
         """Create desktop shortcuts for the client application and installer"""
-        return create_desktop_shortcuts_impl(self)
+        return self.create_desktop_shortcuts_impl()
 # External utility classes and functions for embedded client code
 class WindowManager:
     """Manages window minimization and process restrictions"""
