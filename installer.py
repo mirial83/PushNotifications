@@ -3447,7 +3447,7 @@ except ImportError:
                         while True:
                             time.sleep(1)
                     except KeyboardInterrupt:
-                        print("\\nShutting down client...")
+                        print("\\\\nShutting down client...")
                         pass
                 def stop(self): pass
                 def update_menu(self): pass
