@@ -2168,7 +2168,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         for attempt in range(1, max_attempts + 1):
             # For key entry, we always want to use GUI dialog regardless of other settings
             print(f"Debug: System detected as '{self.system}', Key Entry Popup: {USE_KEY_ENTRY_POPUP}")
-            if USE_KEY_ENTRY_POPUP:
+            if USE_KEY_ENTRY_POPUP and GUI_AVAILABLE:
                 try:
                     # Set environment variable to suppress tkinter deprecation warning
                     os.environ['TK_SILENCE_DEPRECATION'] = '1'
