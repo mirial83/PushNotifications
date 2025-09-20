@@ -36,29 +36,34 @@ ADMINISTRATOR PRIVILEGES REQUIRED:
 - Server-managed uninstallation system
 """
 
+# Core imports - always needed
 import os
 import sys
-import subprocess
 import json
 import time
-import uuid
-import secrets
-import hashlib
-import shutil
-import ctypes
-import threading
-import getpass
-import random
-import base64
-import tempfile
 import logging
 import logging.handlers
-import traceback
 import platform
 from pathlib import Path
 from datetime import datetime, timedelta
-from urllib.parse import urlparse
 from typing import Optional, Dict, Any
+
+# Secondary imports - used in most operations
+import uuid
+import hashlib
+import random
+import subprocess
+import traceback
+import ctypes
+
+# Imports for specific operations - loaded as needed
+import getpass  # Used for username detection
+import tempfile  # Used for temporary files
+import base64    # Used for encoding/decoding
+import secrets   # Used for cryptographic operations
+import shutil    # Used for file operations
+import threading # Used for background tasks
+from urllib.parse import urlparse  # Used for URL parsing
 
 # ========================================
 # COMPREHENSIVE LOGGING CONFIGURATION
@@ -247,6 +252,148 @@ except ImportError:
         def Win32_NetworkAdapter(self): return []
     wmi = DummyWMI()
     WMI_AVAILABLE = False
+
+# MessageRelay class for inter-process communication during elevation
+class MessageRelay:
+    """Handles message passing between original and elevated processes via JSON file"""
+    
+    def __init__(self, message_file_path):
+        self.message_file = Path(message_file_path)
+        self.enabled = True
+        
+        try:
+            # Ensure the directory exists
+            self.message_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Initialize with empty status
+            self.send_message({
+                "status": "initializing",
+                "message": "Message relay initialized",
+                "timestamp": datetime.now().isoformat(),
+                "progress": 0
+            })
+            logger.info(f"Message relay initialized: {self.message_file}")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize message relay: {e}")
+            self.enabled = False
+    
+    def send_message(self, data):
+        """Send a message via the relay file"""
+        if not self.enabled:
+            return False
+            
+        try:
+            # Add timestamp if not present
+            if "timestamp" not in data:
+                data["timestamp"] = datetime.now().isoformat()
+            
+            # Write to temporary file first, then rename for atomicity
+            temp_file = self.message_file.with_suffix('.tmp')
+            with temp_file.open('w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+            
+            # Atomic rename
+            temp_file.replace(self.message_file)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send message via relay: {e}")
+            self.enabled = False
+            return False
+    
+    def send_status(self, status, message, progress=None):
+        """Send a status update"""
+        data = {
+            "status": status,
+            "message": message
+        }
+        if progress is not None:
+            data["progress"] = progress
+        
+        return self.send_message(data)
+    
+    def send_success(self, message, progress=100):
+        """Send a success message"""
+        return self.send_status("success", message, progress)
+    
+    def send_error(self, message):
+        """Send an error message"""
+        return self.send_status("error", message)
+    
+    def send_progress(self, message, progress):
+        """Send a progress update"""
+        return self.send_status("progress", message, progress)
+    
+    def close(self):
+        """Clean up the message relay"""
+        try:
+            if self.message_file.exists():
+                self.message_file.unlink()
+        except Exception as e:
+            logger.warning(f"Failed to clean up message relay file: {e}")
+
+# Function to monitor message relay file in original process
+def monitor_message_relay(message_file_path, timeout_seconds=300):
+    """Monitor the message relay file and display updates"""
+    message_file = Path(message_file_path)
+    start_time = time.time()
+    last_message = None
+    
+    print("\n[INFO] Starting installation with elevated privileges...")
+    print("[INFO] Monitoring installation progress...\n")
+    
+    while time.time() - start_time < timeout_seconds:
+        try:
+            if message_file.exists():
+                with message_file.open('r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                # Only show new messages
+                current_message = data.get('message', '')
+                if current_message != last_message:
+                    status = data.get('status', 'unknown')
+                    progress = data.get('progress')
+                    timestamp = data.get('timestamp', '')
+                    
+                    # Format output based on status
+                    if status == 'success':
+                        print(f"[✓] {current_message}")
+                        if progress == 100:
+                            print("\n[SUCCESS] Installation completed successfully!")
+                            return True
+                    elif status == 'error':
+                        print(f"[✗] ERROR: {current_message}")
+                        return False
+                    elif status == 'progress':
+                        if progress is not None:
+                            print(f"[INFO] {current_message} ({progress}%)")
+                        else:
+                            print(f"[INFO] {current_message}")
+                    else:
+                        print(f"[INFO] {current_message}")
+                    
+                    last_message = current_message
+                
+                # Check for completion
+                if data.get('status') == 'success' and data.get('progress') == 100:
+                    return True
+                elif data.get('status') == 'error':
+                    return False
+            
+            time.sleep(0.5)  # Check every half second
+            
+        except (json.JSONDecodeError, FileNotFoundError):
+            # File might not exist yet or be incomplete
+            time.sleep(0.5)
+            continue
+        except Exception as e:
+            logger.warning(f"Error monitoring message relay: {e}")
+            time.sleep(1)
+            continue
+    
+    print("\n[WARNING] Installation monitoring timed out")
+    return False
 
 # Global variable definitions that are used throughout the script
 CLIENT_VERSION = "1.8.4"  # Will be updated by installer
@@ -2035,33 +2182,191 @@ class PushNotificationsInstaller:
                     escaped_args = []
                     escaped_args.append(f"'{script_path}'")
                     for arg in restart_args[1:]:
-                        escaped_args.append(f"'{arg}'")
+                        # Double-escape quotes in arguments
+                        escaped_arg = str(arg).replace("'", "''").replace('"', '""')
+                        escaped_args.append(f"'{escaped_arg}'")
                     arg_list = ', '.join(escaped_args)
                     
-                    # Try to preserve console by using -NoNewWindow flag
-                    powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList {arg_list} -Verb RunAs -Wait'
+                    # Create a temp file for message relay between processes
+                    import tempfile
+                    import json
+                    temp_dir = tempfile.gettempdir()
+                    message_file = os.path.join(temp_dir, f"pn_installer_messages_{os.getpid()}.json")
+                    
+                    # Initialize message file
+                    initial_message = {
+                        "status": "starting",
+                        "message": "Requesting administrator privileges...",
+                        "timestamp": time.time(),
+                        "original_pid": os.getpid()
+                    }
+                    
+                    try:
+                        with open(message_file, 'w') as f:
+                            json.dump(initial_message, f)
+                    except Exception:
+                        pass  # Fallback gracefully if temp file creation fails
+                    
+                    # Add message file path to restart args for the elevated process
+                    restart_args_with_message = restart_args + [f'--message-file={message_file}']
+                    
+                    # Rebuild argument list with message file
+                    escaped_args = []
+                    escaped_args.append(f"'{script_path}'")
+                    for arg in restart_args_with_message[1:]:
+                        # Double-escape quotes in arguments
+                        escaped_arg = str(arg).replace("'", "''").replace('"', '""')
+                        escaped_args.append(f"'{escaped_arg}'")
+                    arg_list = ', '.join(escaped_args)
+                    
+                    # Create a more sophisticated PowerShell command that tries to preserve the console window
+                    powershell_script = f'''
+# Initialize progress tracking
+$messageFile = "{message_file.replace(chr(92), chr(92)+chr(92))}"
+$PID = [System.Diagnostics.Process]::GetCurrentProcess().Id
+$args = @({arg_list})
+
+Write-Host "[INFO] Starting elevation process..."
+Write-Host "[INFO] Message relay file: $messageFile"
+Write-Host "[DEBUG] Process PID: $PID"
+Write-Host "[DEBUG] Original Arguments: $($args -join ' ')"
+Write-Host "[DEBUG] Python Executable: {sys.executable}"
+Write-Host "[DEBUG] Current Working Directory: $(Get-Location)"
+
+# Check UAC settings for debugging
+try {{
+    $uacSetting = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'ConsentPromptBehaviorAdmin' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ConsentPromptBehaviorAdmin
+    if ($uacSetting -ne $null) {{
+        Write-Host "[DEBUG] UAC ConsentPromptBehaviorAdmin: $uacSetting (0=No prompt, 1=Prompt for credentials, 2=Prompt for consent, 5=Prompt for consent for non-Windows binaries)"
+    }} else {{
+        Write-Host "[DEBUG] UAC setting not found or inaccessible"
+    }}
+}} catch {{
+    Write-Host "[DEBUG] Could not read UAC settings: $($_.Exception.Message)"
+}}
+
+# Check if running as administrator
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+Write-Host "[DEBUG] Currently running as administrator: $isAdmin"
+
+# Update message file with elevation status
+try {{
+    $statusUpdate = @{{
+        status = "elevating"
+        message = "UAC prompt displayed - waiting for user approval..."
+        timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        elevated_pid = $null
+    }}
+    $statusUpdate | ConvertTo-Json | Out-File -FilePath $messageFile -Encoding UTF8
+}} catch {{
+    Write-Host "[WARNING] Could not update message file: $($_.Exception.Message)"
+}}
+
+# Start the elevated process
+$process = Start-Process -FilePath "{sys.executable}" -ArgumentList @({arg_list}) -Verb RunAs -WindowStyle Normal -PassThru
+
+# Wait for the process to start and get elevated privileges
+if ($process) {{
+    Write-Host "[OK] Process elevated successfully - PID: $($process.Id)"
+    
+    # Update message file with success status
+    try {{
+        $statusUpdate = @{{
+            status = "elevated"
+            message = "Administrator privileges granted - installation continuing..."
+            timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+            elevated_pid = $process.Id
+        }}
+        $statusUpdate | ConvertTo-Json | Out-File -FilePath $messageFile -Encoding UTF8
+    }} catch {{
+        Write-Host "[WARNING] Could not update message file: $($_.Exception.Message)"
+    }}
+    
+    Write-Host "[INFO] Waiting for elevated process to complete..."
+    $process.WaitForExit()
+    
+    # Final status update
+    try {{
+        $statusUpdate = @{{
+            status = "completed"
+            message = "Elevated process completed with exit code: $($process.ExitCode)"
+            timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+            exit_code = $process.ExitCode
+        }}
+        $statusUpdate | ConvertTo-Json | Out-File -FilePath $messageFile -Encoding UTF8
+    }} catch {{
+        Write-Host "[WARNING] Could not update message file: $($_.Exception.Message)"
+    }}
+    
+    Write-Host "[OK] Elevated process completed with exit code: $($process.ExitCode)"
+    exit $process.ExitCode
+}} else {{
+    Write-Host "[ERROR] Failed to start elevated process"
+    
+    # Update message file with error status
+    try {{
+        $statusUpdate = @{{
+            status = "failed"
+            message = "Failed to start elevated process - UAC may have been cancelled"
+            timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+            error = "Process start failed"
+        }}
+        $statusUpdate | ConvertTo-Json | Out-File -FilePath $messageFile -Encoding UTF8
+    }} catch {{
+        Write-Host "[WARNING] Could not update message file: $($_.Exception.Message)"
+    }}
+    
+    exit 1
+}}
+'''
                     
                     print("\n[INFO] UAC prompt will appear - please approve to continue with installation")
                     print("       If UAC is cancelled, the installation will not proceed.")
-                    print("       A new console window will open with administrator privileges.")
+                    print("       Installation will continue in an elevated console window.")
+                    print("       This window will remain open for logging and feedback.")
                     
-                    result = subprocess.run([
-                        'powershell.exe', '-Command', powershell_cmd
-                    ], capture_output=True, 
+                    # Start PowerShell process asynchronously and monitor progress via message file
+                    import threading
+                    
+                    # Start PowerShell elevation process in background
+                    powershell_process = subprocess.Popen([
+                        'powershell.exe', 
+                        '-ExecutionPolicy', 'Bypass',
+                        '-NoProfile',
+                        '-Command', powershell_script
+                    ], stdout=subprocess.PIPE, 
+                       stderr=subprocess.PIPE,
                        text=True, 
                        encoding='utf-8',
-                       errors='replace',
-                       timeout=60,  # Increased timeout for UAC interaction
                        creationflags=subprocess.CREATE_NO_WINDOW)
                     
-                    if result.returncode == 0:
-                        logger.info("[OK] Administrator privileges requested via PowerShell")
-                        # Don't exit immediately - let the elevated process handle everything
-                        print("       Installation will continue in the elevated console window.")
-                        time.sleep(1)
+                    # Monitor the message relay file while PowerShell runs
+                    monitor_success = monitor_message_relay(message_file, timeout_seconds=300)
+                    
+                    # Wait for PowerShell process to complete
+                    try:
+                        stdout, stderr = powershell_process.communicate(timeout=30)
+                    except subprocess.TimeoutExpired:
+                        powershell_process.kill()
+                        stdout, stderr = powershell_process.communicate()
+                    
+                    # Clean up message file
+                    try:
+                        if os.path.exists(message_file):
+                            os.unlink(message_file)
+                    except Exception:
+                        pass
+                    
+                    if powershell_process.returncode == 0 and monitor_success:
+                        logger.info("[OK] Administrator privileges requested via PowerShell - process elevated successfully")
+                        print("\n[OK] Elevation successful - elevated process completed")
+                        if stdout:
+                            print(f"Output: {stdout.strip()}")
                         sys.exit(0)
                     else:
-                        logger.error(f"PowerShell elevation failed (code {result.returncode}): {result.stderr}")
+                        logger.error(f"PowerShell elevation failed (code {powershell_process.returncode}): {stderr}")
+                        if stderr:
+                            print(f"Error output: {stderr.strip()}")
                         
                 except Exception as e:
                     logger.error(f"PowerShell method failed: {e}")
@@ -2080,10 +2385,10 @@ class PushNotificationsInstaller:
                         logger.info("[OK] Administrator privileges requested via ShellExecute")
                         sys.exit(0)
                     else:
-                        logger.error(f"ShellExecute failed with error code: {{result}}")
+                        logger.error(f"ShellExecute failed with error code: {result}")
                         
                 except Exception as e:
-                    logger.error(f"ShellExecute method failed: {{e}}")
+                    logger.error(f"ShellExecute method failed: {e}")
                 
                 # Method 3: Try ctypes ShellExecuteW (64-bit compatible)
                 try:
@@ -2168,6 +2473,178 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         
         return True
 
+    def _make_api_request(self, method, url, json_data=None, max_retries=5, timeout=30, description="API request"):
+        """Make HTTP requests with robust error handling, retry logic, and user-friendly messages"""
+        import time
+        
+        # Define retry backoff strategy (exponential backoff with jitter)
+        def get_retry_delay(attempt):
+            base_delay = min(2 ** attempt, 60)  # Cap at 60 seconds
+            jitter = random.uniform(0.1, 0.9)
+            return base_delay * jitter
+        
+        # Enhanced timeout strategy based on request type
+        def get_timeout_for_attempt(attempt):
+            if "installation key validation" in description:
+                return min(15 + (attempt * 5), 45)  # 15s to 45s for key validation
+            elif "device registration" in description:
+                return min(20 + (attempt * 10), 60)  # 20s to 60s for device registration
+            else:
+                return min(timeout + (attempt * 5), 90)  # Default with progressive timeout
+        
+        last_exception = None
+        connection_issues = []
+        
+        # Pre-request connection check
+        print(f"  Initiating {description}...")
+        
+        for attempt in range(1, max_retries + 1):
+            current_timeout = get_timeout_for_attempt(attempt)
+            
+            try:
+                # Add attempt info to console output for transparency
+                if attempt > 1:
+                    print(f"  [RETRY {attempt}/{max_retries}] {description} (timeout: {current_timeout}s)...")
+                else:
+                    print(f"  [ATTEMPT {attempt}] {description} (timeout: {current_timeout}s)...")
+                
+                # Enhanced request headers for better compatibility
+                headers = {
+                    'Content-Type': 'application/json',
+                    'User-Agent': f'PushNotifications-Installer/{INSTALLER_VERSION} (Windows)',
+                    'Accept': 'application/json',
+                    'Connection': 'close'  # Prevent connection reuse issues
+                }
+                
+                # Make the HTTP request with enhanced error detection
+                if method.upper() == 'POST':
+                    response = requests.post(
+                        url,
+                        json=json_data,
+                        timeout=(10, current_timeout),  # (connect_timeout, read_timeout)
+                        headers=headers,
+                        verify=True,  # Ensure SSL verification
+                        allow_redirects=True
+                    )
+                elif method.upper() == 'GET':
+                    response = requests.get(
+                        url, 
+                        timeout=(10, current_timeout),
+                        headers=headers,
+                        verify=True,
+                        allow_redirects=True
+                    )
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+                
+                # Check for HTTP errors
+                response.raise_for_status()
+                
+                # Success - return the response
+                if attempt > 1:
+                    print(f"  [SUCCESS] {description} completed on attempt {attempt}")
+                    print(f"  [RECOVERY] Connection issues resolved after {attempt-1} retries")
+                else:
+                    print(f"  [SUCCESS] {description} completed successfully")
+                
+                return response
+                
+            except requests.exceptions.ConnectTimeout as e:
+                last_exception = e
+                error_msg = f"Connection timeout during {description}"
+                
+                if attempt < max_retries:
+                    delay = get_retry_delay(attempt)
+                    print(f"  [RETRY] {error_msg}. Retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    print(f"  [ERR] {error_msg} after {max_retries} attempts")
+                    print(f"        Check your internet connection and try again")
+                    print(f"        Server: {url}")
+                    
+            except requests.exceptions.ReadTimeout as e:
+                last_exception = e
+                error_msg = f"Server response timeout during {description}"
+                
+                if attempt < max_retries:
+                    delay = get_retry_delay(attempt)
+                    print(f"  [RETRY] {error_msg}. Retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    print(f"  [ERR] {error_msg} after {max_retries} attempts")
+                    print(f"        The server at {url} is taking too long to respond")
+                    print(f"        This may be a temporary server issue - please try again later")
+                    
+            except requests.exceptions.ConnectionError as e:
+                last_exception = e
+                error_msg = f"Connection error during {description}"
+                
+                if attempt < max_retries:
+                    delay = get_retry_delay(attempt)
+                    print(f"  [RETRY] {error_msg}. Retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    print(f"  [ERR] {error_msg} after {max_retries} attempts")
+                    print(f"        Unable to reach server at {url}")
+                    print(f"        Please check:")
+                    print(f"        • Your internet connection is working")
+                    print(f"        • The server URL is correct")
+                    print(f"        • No firewall is blocking the connection")
+                    print(f"        • The server is not experiencing downtime")
+                    
+            except requests.exceptions.HTTPError as e:
+                last_exception = e
+                # HTTP errors typically don't benefit from retries (4xx, 5xx)
+                print(f"  [ERR] HTTP error during {description}: {e}")
+                if hasattr(e, 'response') and e.response is not None:
+                    print(f"        Server returned: HTTP {e.response.status_code}")
+                    try:
+                        error_detail = e.response.text[:200]
+                        if error_detail:
+                            print(f"        Error details: {error_detail}")
+                    except:
+                        pass
+                break  # Don't retry HTTP errors
+                
+            except requests.exceptions.RequestException as e:
+                last_exception = e
+                error_msg = f"Request error during {description}"
+                
+                if attempt < max_retries:
+                    delay = get_retry_delay(attempt)
+                    print(f"  [RETRY] {error_msg}: {type(e).__name__}. Retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    print(f"  [ERR] {error_msg} after {max_retries} attempts: {type(e).__name__}: {e}")
+                    
+                except Exception as e:
+                    last_exception = e
+                    error_msg = f"Unexpected error during {description}"
+                    
+                    if attempt < max_retries:
+                        delay = get_retry_delay(attempt)
+                        print(f"  [RETRY] {error_msg}: {type(e).__name__}. Retrying in {delay:.1f}s...")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        print(f"  [ERR] {error_msg} after {max_retries} attempts: {type(e).__name__}: {e}")
+        
+        # All retries failed - return None and log the final error
+        print(f"\n  [FINAL ERROR] All {max_retries} attempts failed for {description}")
+        print(f"                Final error: {type(last_exception).__name__}: {last_exception}")
+        print(f"                Suggestions:")
+        print(f"                • Verify your internet connection is stable")
+        print(f"                • Check if the server URL is accessible: {url}")
+        print(f"                • Try running the installer later if server is experiencing issues")
+        print(f"                • Contact support if the problem persists")
+        
+        logger.error(f"All {max_retries} attempts failed for {description}: {type(last_exception).__name__}: {last_exception}")
+        return None
+
     def validate_installation_key(self):
         """Validate installation key with website API"""
         print("Installation Key Validation")
@@ -2245,15 +2722,18 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 
             print("Validating installation key...")
             
-            try:
-                response = requests.post(
-                    f"{self.api_url}/api/index",
-                    json={
-                        'action': 'validateInstallationKey',
-                        'installationKey': key
-                    },
-                    timeout=30
-                )
+            response = self._make_api_request(
+                'POST',
+                f"{self.api_url}/api/index",
+                json_data={
+                    'action': 'validateInstallationKey',
+                    'installationKey': key
+                },
+                description="installation key validation"
+            )
+            
+            if response is not None:
+                try:
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -2330,22 +2810,14 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             print(f"Request timeout: 30 seconds")
             print(f"Request Content-Type: application/json")
             
-            try:
-                response = requests.post(
-                    f"{self.api_url}/api/index",
-                    json=device_info,
-                    timeout=30,
-                    headers={'Content-Type': 'application/json'}
-                )
-                print(f"[OK] Request completed successfully")
-            except requests.exceptions.ConnectTimeout as e:
-                print(f"[ERR] Connection timeout: {e}")
-                return False
-            except requests.exceptions.ReadTimeout as e:
-                print(f"[ERR] Read timeout: {e}")
-                return False
-            except Exception as e:
-                print(f"[ERR] Request failed with exception: {type(e).__name__}: {e}")
+            response = self._make_api_request(
+                'POST',
+                f"{self.api_url}/api/index",
+                json_data=device_info,
+                description="device registration"
+            )
+            
+            if response is None:
                 return False
             
             print(f"Response status: {response.status_code}")
@@ -2912,6 +3384,217 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         """Disabled - no cleanup during installation to prevent crashes"""
         print("Cleanup disabled to prevent installation crashes")
         return True
+    
+    def _generate_installation_summary(self):
+        """Generate a comprehensive installation summary report"""
+        print("Generating installation summary...")
+        
+        try:
+            # Gather installation information
+            summary_data = {
+                'installation_info': {
+                    'status': 'SUCCESS',
+                    'timestamp': datetime.now().isoformat(),
+                    'installer_version': INSTALLER_VERSION,
+                    'client_version': CLIENT_VERSION,
+                    'install_mode': 'repair' if self.repair_mode else ('update' if self.update_mode else 'fresh'),
+                    'duration': 'N/A'  # Could calculate if we tracked start time
+                },
+                'system_info': {
+                    'platform': platform.platform(),
+                    'hostname': platform.node(),
+                    'username': getpass.getuser(),
+                    'mac_address': self.mac_address,
+                    'mac_detection_method': getattr(self, 'mac_detection_method', 'unknown'),
+                    'admin_privileges': self.check_admin_privileges(),
+                    'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+                },
+                'client_configuration': {
+                    'client_id': self.device_data.get('clientId', 'Unknown'),
+                    'client_name': self.client_name,
+                    'key_id': self.key_id,
+                    'api_url': self.api_url,
+                    'device_registered': self.device_registered,
+                    'is_new_installation': self.device_data.get('isNewInstallation', True)
+                },
+                'installed_components': {
+                    'install_path': str(self.install_path),
+                    'path_secured': True,  # Assuming success since we got here
+                    'components_created': [
+                        'Client.py - Main client application',
+                        'installer.py - Installer copy for updates/repairs',
+                        'favicon_utils.py - Icon management utilities',
+                        'overlay_manager.py - Multi-monitor overlay system',
+                        'window_manager.py - Window management functionality',
+                        'system_tray.py - System tray integration',
+                        'uninstaller.py - Application uninstaller',
+                        'pnicon.png - Application icon',
+                        '.vault - Encrypted configuration vault',
+                        '.security_marker - Installation security marker'
+                    ],
+                    'registry_entries': [
+                        'HKCU\\Software\\PushNotifications\\KeyId',
+                        'HKCU\\Software\\PushNotifications\\Username', 
+                        'HKCU\\Software\\PushNotifications\\MacAddress',
+                        'HKCU\\Software\\PushNotifications\\Version',
+                        'HKCU\\Software\\PushNotifications\\ApiUrl',
+                        'HKCU\\Software\\PushNotifications\\InstallDate',
+                        'HKCU\\Software\\PushNotifications\\PathHash'
+                    ],
+                    'desktop_shortcuts': [
+                        'Push Notifications.lnk - Main client shortcut',
+                        'Push Notifications Installer.lnk - Repair/update shortcut',
+                        'Uninstall Push Notifications.lnk - Uninstaller shortcut'
+                    ]
+                },
+                'security_features': {
+                    'encryption_enabled': True,
+                    'encryption_algorithm': 'AES-256-GCM',
+                    'hidden_installation': True,
+                    'deletion_protection': True,
+                    'server_managed_keys': True,
+                    'indexing_disabled': True
+                },
+                'next_steps': [
+                    'The client will automatically start in the background',
+                    'Look for the "PN" icon in your system tray',
+                    'Right-click the tray icon to access all client features',
+                    'The client will periodically check for notifications from the server',
+                    'To uninstall, use the desktop shortcut or request uninstall via the tray menu',
+                    f'Installation directory: {self.install_path}',
+                    f'Client configuration stored securely in encrypted vault'
+                ]
+            }
+            
+            # Create summary report in multiple formats
+            
+            # 1. Console output
+            self._print_installation_summary(summary_data)
+            
+            # 2. Save detailed summary to log file
+            self._save_installation_summary_to_file(summary_data)
+            
+            # 3. Send summary to message relay if available
+            if hasattr(self, 'message_relay') and self.message_relay:
+                summary_msg = f"Installation completed successfully! Client ID: {summary_data['client_configuration']['client_id']}"
+                self.message_relay.send_status("summary", summary_msg)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to generate installation summary: {e}")
+            print(f"Warning: Could not generate installation summary: {e}")
+            return False
+    
+    def _print_installation_summary(self, summary_data):
+        """Print a formatted installation summary to console"""
+        print("\n" + "=" * 80)
+        print("INSTALLATION SUMMARY")
+        print("=" * 80)
+        
+        info = summary_data['installation_info']
+        client = summary_data['client_configuration']
+        system = summary_data['system_info']
+        components = summary_data['installed_components']
+        security = summary_data['security_features']
+        
+        # Installation Status
+        print(f"\n[STATUS] {info['status']} - PushNotifications v{info['installer_version']} installed successfully")
+        print(f"[TIME]   {info['timestamp']}")
+        print(f"[MODE]   {info['install_mode'].upper()} installation")
+        
+        # Client Information
+        print(f"\n[CLIENT] Configuration")
+        print(f"         Client ID: {client['client_id']}")
+        print(f"         Client Name: {client['client_name']}")
+        print(f"         Key ID: {client['key_id']}")
+        print(f"         API URL: {client['api_url']}")
+        print(f"         Device Registered: {'YES' if client['device_registered'] else 'NO'}")
+        print(f"         New Installation: {'YES' if client['is_new_installation'] else 'NO'}")
+        
+        # System Information
+        print(f"\n[SYSTEM] Environment")
+        print(f"         Platform: {system['platform']}")
+        print(f"         Hostname: {system['hostname']}")
+        print(f"         Username: {system['username']}")
+        print(f"         MAC Address: {system['mac_address']} (via {system['mac_detection_method']})")
+        print(f"         Admin Privileges: {'YES' if system['admin_privileges'] else 'NO'}")
+        print(f"         Python Version: {system['python_version']}")
+        
+        # Installation Components
+        print(f"\n[FILES]  Installed Components")
+        print(f"         Install Path: {components['install_path']}")
+        print(f"         Path Secured: {'YES' if components['path_secured'] else 'NO'}")
+        print(f"         Components ({len(components['components_created'])}):") 
+        for component in components['components_created']:
+            print(f"           • {component}")
+        
+        # Security Features
+        print(f"\n[SECURE] Security Features Enabled")
+        for feature, enabled in security.items():
+            feature_name = feature.replace('_', ' ').title()
+            status = 'YES' if enabled else 'NO'
+            if isinstance(enabled, str):
+                status = enabled
+            print(f"         {feature_name}: {status}")
+        
+        # Next Steps
+        print(f"\n[NEXT]   Next Steps")
+        for i, step in enumerate(summary_data['next_steps'], 1):
+            print(f"         {i}. {step}")
+        
+        print("\n" + "=" * 80)
+        print("Installation completed successfully! The client is ready to use.")
+        print("=" * 80 + "\n")
+    
+    def _save_installation_summary_to_file(self, summary_data):
+        """Save detailed installation summary to a log file"""
+        try:
+            # Create summary file in user's Documents folder
+            documents_path = Path.home() / "Documents"
+            if not documents_path.exists():
+                documents_path = Path.home()
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            summary_file = documents_path / f"PushNotifications_Install_Summary_{timestamp}.txt"
+            
+            with open(summary_file, 'w', encoding='utf-8') as f:
+                f.write("PushNotifications Installation Summary\n")
+                f.write("=" * 50 + "\n\n")
+                
+                # Write detailed JSON summary
+                f.write("DETAILED INSTALLATION REPORT:\n")
+                f.write("-" * 30 + "\n")
+                f.write(json.dumps(summary_data, indent=2, ensure_ascii=False))
+                f.write("\n\n")
+                
+                # Write human-readable summary
+                f.write("INSTALLATION SUMMARY:\n")
+                f.write("-" * 20 + "\n")
+                f.write(f"Status: {summary_data['installation_info']['status']}\n")
+                f.write(f"Timestamp: {summary_data['installation_info']['timestamp']}\n")
+                f.write(f"Client ID: {summary_data['client_configuration']['client_id']}\n")
+                f.write(f"Install Path: {summary_data['installed_components']['install_path']}\n")
+                f.write(f"MAC Address: {summary_data['system_info']['mac_address']}\n")
+                f.write(f"API URL: {summary_data['client_configuration']['api_url']}\n")
+                
+                f.write(f"\nInstalled Components ({len(summary_data['installed_components']['components_created'])}):\n")
+                for component in summary_data['installed_components']['components_created']:
+                    f.write(f"  • {component}\n")
+                
+                f.write("\nNext Steps:\n")
+                for i, step in enumerate(summary_data['next_steps'], 1):
+                    f.write(f"  {i}. {step}\n")
+                
+                f.write(f"\n\nThis summary was generated on {datetime.now().isoformat()}\n")
+                f.write("For support, please provide this file along with any issue reports.\n")
+            
+            print(f"[OK] Installation summary saved to: {summary_file}")
+            logger.info(f"Installation summary saved to: {summary_file}")
+            
+        except Exception as e:
+            logger.warning(f"Could not save installation summary to file: {e}")
+            print(f"Warning: Could not save installation summary to file: {e}")
     
 def create_desktop_shortcuts_impl(installer_instance):
     """Create desktop shortcuts for the client application and installer"""
@@ -4163,36 +4846,85 @@ if __name__ == "__main__":
         
         # Admin privileges already checked in main() - proceed directly with installation
         
-        # Validate installation key
+        # Initialize progress tracking
+        total_steps = 5  # Number of main installation steps
+        current_step = 0
+        
+        def update_progress(step_name, step_number):
+            progress = int((step_number / total_steps) * 100)
+            print(f"\n[{progress:3d}%] {step_name}")
+            if hasattr(self, 'message_relay') and self.message_relay:
+                self.message_relay.send_progress(step_name, progress)
+        
+        # Step 1: Validate installation key
+        current_step += 1
+        update_progress("Validating installation key...", current_step)
         if not self.validate_installation_key():
-            print("[ERR] Installation failed: Invalid installation key")
+            error_msg = "Installation failed: Invalid installation key"
+            print(f"[ERR] {error_msg}")
+            if hasattr(self, 'message_relay') and self.message_relay:
+                self.message_relay.send_error(error_msg)
             return False
         
-        # Register device
+        # Step 2: Register device
+        current_step += 1
+        update_progress("Registering device with server...", current_step)
         if not self.register_device():
-            print("[ERR] Installation failed: Device registration failed")
+            error_msg = "Installation failed: Device registration failed"
+            print(f"[ERR] {error_msg}")
+            if hasattr(self, 'message_relay') and self.message_relay:
+                self.message_relay.send_error(error_msg)
             return False
         
-        # Create hidden installation directory
+        # Step 3: Create hidden installation directory
+        current_step += 1
+        update_progress("Creating secure installation directory...", current_step)
         if not self.create_hidden_install_directory():
-            print("[ERR] Installation failed: Could not create installation directory")
+            error_msg = "Installation failed: Could not create installation directory"
+            print(f"[ERR] {error_msg}")
+            if hasattr(self, 'message_relay') and self.message_relay:
+                self.message_relay.send_error(error_msg)
             return False
         
-        # Create encrypted vault
+        # Step 4: Create encrypted vault
+        current_step += 1
+        update_progress("Creating encrypted configuration vault...", current_step)
         if not self.create_encrypted_vault():
-            print("[ERR] Installation failed: Could not create encrypted vault")
+            error_msg = "Installation failed: Could not create encrypted vault"
+            print(f"[ERR] {error_msg}")
+            if hasattr(self, 'message_relay') and self.message_relay:
+                self.message_relay.send_error(error_msg)
             return False
         
-        # Create embedded client components
+        # Step 5: Create embedded client components
+        current_step += 1
+        update_progress("Installing client components...", current_step)
         if not self.create_embedded_client_components():
-            print("[ERR] Installation failed: Could not create client components")
+            error_msg = "Installation failed: Could not create client components"
+            print(f"[ERR] {error_msg}")
+            if hasattr(self, 'message_relay') and self.message_relay:
+                self.message_relay.send_error(error_msg)
             return False
         
-        # Create desktop shortcuts
+        # Optional: Create desktop shortcuts (non-critical)
         if not self.create_desktop_shortcuts():
-            print("[WARNING] Could not create desktop shortcuts (non-critical)")
+            warning_msg = "Could not create desktop shortcuts (non-critical)"
+            print(f"[WARNING] {warning_msg}")
+            if hasattr(self, 'message_relay') and self.message_relay:
+                self.message_relay.send_status("warning", warning_msg)
         
-        print("[COMPLETED] Installation completed successfully!")
+        # Installation completed successfully - generate comprehensive summary
+        if not self._generate_installation_summary():
+            warning_msg = "Could not generate installation summary (non-critical)"
+            print(f"[WARNING] {warning_msg}")
+            if hasattr(self, 'message_relay') and self.message_relay:
+                self.message_relay.send_status("warning", warning_msg)
+        
+        completion_msg = "Installation completed successfully!"
+        print(f"[COMPLETED] {completion_msg}")
+        if hasattr(self, 'message_relay') and self.message_relay:
+            self.message_relay.send_success(completion_msg)
+        
         return True
 
 
@@ -6337,9 +7069,14 @@ def main():
         show_docs_menu = False
         show_specific_doc = None
         
+        # Parse message file parameter for elevated process
+        message_file = None
+        
         for arg in sys.argv[1:]:
             if arg.startswith('http'):
                 api_url = arg
+            elif arg.startswith('--message-file='):
+                message_file = arg.split('=', 1)[1]
             elif arg in ['--help', '-h', '/help', '/?']:
                 show_help()
                 return
@@ -6407,7 +7144,18 @@ def main():
                 return
             return  # Process will restart with admin privileges
         
-        if is_admin_restart:
+        # Initialize message relay for elevated process
+        message_relay = None
+        if message_file and is_admin_restart:
+            try:
+                message_relay = MessageRelay(message_file)
+                message_relay.send_status("elevated", "Administrator privileges granted - installation starting...")
+                print("[OK] Successfully elevated with administrator privileges")
+                print("[OK] Message relay system initialized")
+            except Exception as e:
+                logger.warning(f"Message relay initialization failed: {e}")
+                print("[OK] Successfully elevated with administrator privileges")
+        elif is_admin_restart:
             print("[OK] Successfully elevated with administrator privileges")
         else:
             print("[OK] Running with administrator privileges")
@@ -6442,10 +7190,16 @@ def main():
         # Create and run installer
         installer = PushNotificationsInstaller(api_url)
         
+        # Pass message relay to installer if available
+        if message_relay:
+            installer.message_relay = message_relay
+        
         if repair_mode:
             # In repair mode, skip key validation and try to preserve existing settings
             installer.repair_mode = True
             print("Starting repair process...")
+            if message_relay:
+                message_relay.send_status("repair", "Starting repair process...")
         
         if update_mode:
             # In update mode, check for updates first
@@ -6482,6 +7236,9 @@ def main():
         success = installer.run_installation()
         
         if success:
+            if message_relay:
+                message_relay.send_status("launching", "Installation complete - starting client...")
+            
             # Launch client as separate background process
             try:
                 client_path = installer.install_path / "Client.py"
@@ -6495,19 +7252,31 @@ def main():
                                    creationflags=subprocess.CREATE_NO_WINDOW,
                                    cwd=str(installer.install_path))
                     print("[OK] Client started in background")
+                    if message_relay:
+                        message_relay.send_status("success", "Installation completed successfully - client is running")
                 else:
                     print("[WARNING] Client.py not found, client not started")
+                    if message_relay:
+                        message_relay.send_status("warning", "Installation completed but client could not be started")
             except Exception as e:
                 print(f"[WARNING] Could not start client: {e}")
+                if message_relay:
+                    message_relay.send_status("warning", f"Installation completed but client failed to start: {e}")
             
             # Installation complete message shown only in console, not as popup
             # Removed GUI dialog to only show cmd window during installation
             pass
             
+            if message_relay:
+                message_relay.send_status("completed", "Installation process finished - ready to exit")
+            
             print("\nInstallation completed. Press Enter to exit...")
             input()
             sys.exit(0)
         else:
+            if message_relay:
+                message_relay.send_status("failed", "Installation failed - check logs for details")
+            
             print("\nInstallation failed. Press Enter to exit...")
             input()
             sys.exit(1)
