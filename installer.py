@@ -2621,17 +2621,17 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 else:
                     print(f"  [ERR] {error_msg} after {max_retries} attempts: {type(e).__name__}: {e}")
                     
-                except Exception as e:
-                    last_exception = e
-                    error_msg = f"Unexpected error during {description}"
-                    
-                    if attempt < max_retries:
-                        delay = get_retry_delay(attempt)
-                        print(f"  [RETRY] {error_msg}: {type(e).__name__}. Retrying in {delay:.1f}s...")
-                        time.sleep(delay)
-                        continue
-                    else:
-                        print(f"  [ERR] {error_msg} after {max_retries} attempts: {type(e).__name__}: {e}")
+            except Exception as e:
+                last_exception = e
+                error_msg = f"Unexpected error during {description}"
+                
+                if attempt < max_retries:
+                    delay = get_retry_delay(attempt)
+                    print(f"  [RETRY] {error_msg}: {type(e).__name__}. Retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    print(f"  [ERR] {error_msg} after {max_retries} attempts: {type(e).__name__}: {e}")
         
         # All retries failed - return None and log the final error
         print(f"\n  [FINAL ERROR] All {max_retries} attempts failed for {description}")
@@ -2734,8 +2734,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             
             if response is not None:
                 try:
-                
-                if response.status_code == 200:
+                    if response.status_code == 200:
                     result = response.json()
                     if result.get('success'):
                         self.installation_key = key
