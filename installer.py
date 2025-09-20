@@ -3818,14 +3818,14 @@ class PushNotificationsClient:
                 if result.get('autoApproved'):
                     # Request was auto-approved (client not found in database)
                     if messagebox.askyesno("Uninstall Approved",
-                                         "Your uninstall request has been automatically approved.\\n\\nWould you like to uninstall now?"):
+                                         "Your uninstall request has been automatically approved.\n\nWould you like to uninstall now?"):
                         self._perform_uninstall()
                 else:
                     # Request needs admin approval
                     messagebox.showinfo(
                         "Request Sent",
-                        "Your uninstall request has been submitted for approval.\n\n" 
-                        "The application will continue running until the request is approved.\n\n" 
+                        "Your uninstall request has been submitted for approval.\n\n" +
+                        "The application will continue running until the request is approved.\n\n" +
                         "You will be notified when a decision is made."
                     )
             else:
