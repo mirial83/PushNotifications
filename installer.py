@@ -3483,7 +3483,6 @@ if os.name == 'nt':  # Windows only
             print("[INFO] Restarting with elevated privileges...")
             
             # Method 1: PowerShell Start-Process with -Verb RunAs
-            script_path = os.path.abspath(sys.argv[0])
             powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList "\"{os.path.abspath(sys.argv[0])}\"" -Verb RunAs -WindowStyle Hidden'
             
             result = subprocess.run([
@@ -3495,24 +3494,26 @@ if os.name == 'nt':  # Windows only
             ], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
             
             if result.returncode == 0:
-                print("[OK] Client restarted with administrator privileges")
-                sys.exit(0)
+                print("[OK] Client elevation request sent successfully")
+                return True
             else:
-                print(f"[ERROR] Failed to restart with admin privileges: {{result.stderr}}")
+                print(f"[ERROR] Failed to request elevation: {{result.stderr}}")
                 return False
         except Exception as e:
-            print(f"[ERROR] Could not restart with admin privileges: {{e}}")
+            print(f"[ERROR] Could not request admin privileges: {{e}}")
             return False
     
     # Check admin privileges and restart if needed
     if not check_admin_privileges():
         if '--admin-restart' not in sys.argv:
-            restart_with_admin()
+            if restart_with_admin():
+                sys.exit(0)  # Exit after requesting elevation
+            else:
+                print("[ERROR] Failed to request administrator privileges")
+                print("[INFO] Client will run with limited functionality")
         else:
             print("[ERROR] Still not running as administrator after restart")
-            print("[ERROR] Please run the client as administrator manually")
-            input("Press Enter to exit...")
-            sys.exit(1)
+            print("[ERROR] Some features may not work properly")
     else:
         print("[OK] Running with administrator privileges")
 
