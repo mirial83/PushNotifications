@@ -4958,7 +4958,7 @@ if __name__ == "__main__":
 
     def create_desktop_shortcuts(self):
         """Create desktop shortcuts for the client application and installer"""
-        return create_desktop_shortcuts_impl(self)
+        return create_desktop_shortcuts(self)
 
 
 # External utility classes and functions for embedded client code
