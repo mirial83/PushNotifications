@@ -3356,12 +3356,122 @@ import sys
 import json
 import time
 import logging
-import requests
+import subprocess
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
-import pystray
-from tkinter import messagebox, simpledialog
 import webbrowser
+
+# Import dependencies with fallbacks
+try:
+    import requests
+except ImportError:
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'requests'],
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        import requests
+    except Exception as e:
+        print(f"Warning: Could not install/import requests: {{e}}")
+        class DummyRequests:
+            def post(self, *args, **kwargs):
+                class DummyResponse:
+                    status_code = 200
+                    ok = True
+                    def json(self): return {{'success': False, 'message': 'requests not available'}}
+                return DummyResponse()
+        requests = DummyRequests()
+
+# Import PIL with fallback
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'Pillow>=10.0.0'],
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        from PIL import Image, ImageDraw, ImageFont
+    except Exception as e:
+        print(f"Warning: Could not install/import PIL: {{e}}")
+        # Create dummy PIL classes
+        class DummyImage:
+            def new(self, mode, size, color=None): return self
+            def open(self, path): return self
+            def resize(self, size, resample=None): return self
+            def convert(self, mode): return self
+            @property
+            def size(self): return (64, 64)
+            @property
+            def mode(self): return 'RGBA'
+            class Resampling:
+                LANCZOS = 'lanczos'
+        Image = DummyImage()
+        class DummyImageDraw:
+            def Draw(self, image): return self
+            def ellipse(self, coords, **kwargs): pass
+            def text(self, pos, text, **kwargs): pass
+            def textbbox(self, pos, text, **kwargs): return (0, 0, 20, 20)
+        ImageDraw = DummyImageDraw()
+        class DummyImageFont:
+            def truetype(self, font, size): return self
+            def load_default(self): return self
+        ImageFont = DummyImageFont()
+
+# Import pystray with fallback
+try:
+    import pystray
+except ImportError:
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'pystray>=0.19.4'],
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        import pystray
+    except Exception as e:
+        print(f"Warning: Could not install/import pystray: {{e}}")
+        # Create comprehensive dummy pystray
+        class DummyPystray:
+            class Menu:
+                SEPARATOR = 'separator'
+                def __init__(self, *items): pass
+            class MenuItem:
+                def __init__(self, text, action=None, **kwargs): 
+                    self.text = text
+                    self.action = action
+            class Icon:
+                def __init__(self, name, image, title=None, menu=None): 
+                    self.name = name
+                    self.image = image
+                    self.title = title
+                    self.menu = menu
+                    print(f"Created system tray icon: {{name}} (pystray not available - running in console mode)")
+                def run(self): 
+                    print("Running client in console mode (system tray not available)")
+                    print("Press Ctrl+C to exit")
+                    import time
+                    try:
+                        while True:
+                            time.sleep(1)
+                    except KeyboardInterrupt:
+                        print("\nShutting down client...")
+                        pass
+                def stop(self): pass
+                def update_menu(self): pass
+        pystray = DummyPystray()
+
+# Import tkinter with fallback
+try:
+    from tkinter import messagebox, simpledialog
+except ImportError:
+    print("Warning: tkinter not available")
+    class DummyMessagebox:
+        def showinfo(self, title, message): print(f"INFO: {{title}} - {{message}}")
+        def showwarning(self, title, message): print(f"WARNING: {{title}} - {{message}}")
+        def showerror(self, title, message): print(f"ERROR: {{title}} - {{message}}")
+        def askyesno(self, title, message): 
+            print(f"QUESTION: {{title}} - {{message}}")
+            return input("Enter y/n: ").lower().startswith('y')
+    messagebox = DummyMessagebox()
+    class DummySimpledialog:
+        def askstring(self, title, prompt, **kwargs): 
+            print(f"{{title}}: {{prompt}}")
+            return input("Enter value: ") or None
+    simpledialog = DummySimpledialog()
+
 logger = logging.getLogger(__name__)
 class PushNotificationsClient:
     def __init__(self):
@@ -3551,7 +3661,7 @@ class PushNotificationsClient:
                 if result.get('autoApproved'):
                     # Request was auto-approved (client not found in database)
                     if messagebox.askyesno("Uninstall Approved",
-                                         "Your uninstall request has been automatically approved. \n\nWould you like to uninstall now?"):
+                                         "Your uninstall request has been automatically approved.\\n\\nWould you like to uninstall now?"):
                         self._perform_uninstall()
                 else:
                     # Request needs admin approval
