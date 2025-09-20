@@ -3484,7 +3484,7 @@ if os.name == 'nt':  # Windows only
             
             # Method 1: PowerShell Start-Process with -Verb RunAs
             script_path = os.path.abspath(sys.argv[0])
-            powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList "\"{script_path}\"" -Verb RunAs -WindowStyle Hidden'
+            powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList "\"{os.path.abspath(sys.argv[0])}\"" -Verb RunAs -WindowStyle Hidden'
             
             result = subprocess.run([
                 'powershell.exe', 
