@@ -264,6 +264,13 @@ class OverlayManager:
     def create_overlays(self):
         """Create grey overlays on all monitors"""
         try:
+            # Import tkinter at runtime to avoid import errors before setup is complete
+            try:
+                import tkinter as tk
+            except ImportError:
+                logger.warning("tkinter not available, cannot create overlays")
+                return
+                
             root = tk.Tk()
             screen_width = root.winfo_screenwidth()
             screen_height = root.winfo_screenheight()
