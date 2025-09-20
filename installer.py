@@ -3894,7 +3894,7 @@ class PushNotificationsClient:
         # Default configuration values (embedded from config.json)
         default_config = {
             'version': '{INSTALLER_VERSION}',
-            'client_id': '{self.device_data.get('clientId', 'test-client-123')}', 
+            'client_id': '{self.device_data.get("clientId", "test-client-123")}',
             'mac_address': '{self.mac_address}',
             'api_url': '{self.api_url}',
             'install_path': str(Path(__file__).parent),
