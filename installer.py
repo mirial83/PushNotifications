@@ -2101,13 +2101,13 @@ class PushNotificationsInstaller:
                     result_int = ctypes.cast(result, ctypes.c_void_p).value or 0
                     
                     if result_int > 32:
-                        print("[OK] Administrator privileges requested via ShellExecuteW")
+                        logger.info("[OK] Administrator privileges requested via ShellExecuteW")
                         sys.exit(0)
                     else:
-                        print(f"ShellExecuteW failed with error code: {result_int}")
+                        logger.error(f"ShellExecuteW failed with error code: {result_int}")
                         
                 except Exception as e:
-                    print(f"ShellExecuteW method failed: {e}")
+                    logger.error(f"ShellExecuteW method failed: {e}")
                 
                 # Method 4: Final fallback - create a batch file to request elevation
                 try:
@@ -2137,13 +2137,13 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     except:
                         pass
                     
-                    print("[OK] Administrator privileges requested via batch file")
+                    logger.info("[OK] Administrator privileges requested via batch file")
                     sys.exit(0)
                     
                 except Exception as e:
-                    print(f"Batch file method failed: {e}")
+                    logger.error(f"Batch file method failed: {e}")
                 
-                print("[ERR] All elevation methods failed")
+                logger.error("[ERR] All elevation methods failed")
                 return False
                 
             except Exception as e:
