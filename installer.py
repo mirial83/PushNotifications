@@ -360,8 +360,12 @@ try:
 except ImportError:
     GUI_AVAILABLE = False
 
-# Global flag to control GUI dialog usage - always enabled for Windows installer
-USE_GUI_DIALOGS = True
+# Global flag to control GUI dialog usage - only enabled for key entry popup
+# Set to False to disable most GUI dialogs except key entry popup
+USE_GUI_DIALOGS = False
+
+# Separate flag for key entry popup which should remain enabled
+USE_KEY_ENTRY_POPUP = True
 
 # Cross-platform system tray support - deferred loading to prevent crashes during help
 TRAY_AVAILABLE = False  # Will be set during actual installation
@@ -375,8 +379,10 @@ class InstallationProgressDialog:
         self.status_label = None
         self.log_text = None
         
-        if USE_GUI_DIALOGS:
-            self._create_dialog()
+        # Progress dialog is disabled to only show cmd window
+        # if USE_GUI_DIALOGS:
+        #     self._create_dialog()
+        pass
     
     def _create_dialog(self):
         """Create the progress dialog window"""
@@ -642,7 +648,9 @@ This guide will walk you through deploying the PushNotifications application to 
 ## Prerequisites
 
 - [Vercel CLI](https://vercel.com/cli) installed globally
+- [Node.js](https://nodejs.org/) version 18.0.0 or higher
 - [MongoDB Atlas](https://www.mongodb.com/atlas) account (or self-hosted MongoDB instance)
+  - MongoDB version 6.3.0 or higher required
 - [Git](https://git-scm.com/) for version control
 - A GitHub, GitLab, or Bitbucket account (for Vercel integration)
 
@@ -896,14 +904,27 @@ class SystemTray:
         self.config = self._load_config()
         
     def _load_config(self):
-        """Load client configuration from config.json"""
+        """Load configuration with embedded defaults"""
+        # Default configuration values (embedded from config.json)
+        default_config = {
+            'version': '1.8.4',
+            'client_id': 'test-client-123',
+            'mac_address': '00:11:22:33:44:55', 
+            'api_url': 'https://example.com/api',
+            'install_path': 'C:\\Program Files (x86)\\PushNotifications'
+        }
+        
+        # Try to load from config.json if it exists, otherwise use defaults
         config_path = Path(__file__).parent / "config.json"
         try:
             with open(config_path, 'r') as f:
-                return json.load(f)
+                config = json.load(f)
+                # Merge with defaults to ensure all keys are present
+                default_config.update(config)
+                return default_config
         except Exception as e:
-            logger.error(f"Failed to load config: {e}")
-            return {}
+            logger.debug(f"No config file found, using embedded defaults: {e}")
+            return default_config
         
     def create_icon(self):
         """Create and configure the system tray icon"""
@@ -1155,14 +1176,27 @@ class PushNotificationsClient:
         self.config = self._load_config()
         
     def _load_config(self):
-        """Load client configuration from config.json"""
+        """Load configuration with embedded defaults"""
+        # Default configuration values (embedded from config.json)
+        default_config = {
+            'version': '1.8.4',
+            'client_id': 'test-client-123', 
+            'mac_address': '00:11:22:33:44:55',
+            'api_url': 'https://example.com/api',
+            'install_path': 'C:\\Program Files (x86)\\PushNotifications'
+        }
+        
+        # Try to load from config.json if it exists, otherwise use defaults
         config_path = Path(__file__).parent / "config.json"
         try:
             with open(config_path, 'r') as f:
-                return json.load(f)
+                config = json.load(f)
+                # Merge with defaults to ensure all keys are present
+                default_config.update(config)
+                return default_config
         except Exception as e:
-            logger.error(f"Failed to load config: {e}")
-            return {}
+            logger.debug(f"No config file found, using embedded defaults: {e}")
+            return default_config
             
     def create_tray_icon(self):
         """Create and configure the system tray icon"""
@@ -2132,8 +2166,9 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
-            print(f"Debug: System detected as '{self.system}', GUI dialogs: {USE_GUI_DIALOGS}")
-            if USE_GUI_DIALOGS:
+            # For key entry, we always want to use GUI dialog regardless of other settings
+            print(f"Debug: System detected as '{self.system}', Key Entry Popup: {USE_KEY_ENTRY_POPUP}")
+            if USE_KEY_ENTRY_POPUP:
                 try:
                     # Set environment variable to suppress tkinter deprecation warning
                     os.environ['TK_SILENCE_DEPRECATION'] = '1'
@@ -2868,10 +2903,145 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         print("Cleanup disabled to prevent installation crashes")
         return True
     
-    def create_desktop_shortcuts(self):
-        """Create desktop shortcuts for client and installer"""
-        # Get the existing standalone function's code
-        return create_desktop_shortcuts(self)
+def create_desktop_shortcuts_impl(installer_instance):
+    """Create desktop shortcuts for the client application and installer"""
+    try:
+        import os
+        import pythoncom  # Import for Windows COM support
+        from win32com.shell import shell, shellcon
+        from pathlib import Path
+        
+        logger.info("Creating desktop shortcuts...")
+        
+        # Get desktop path
+        desktop_path = Path.home() / "Desktop"
+        if not desktop_path.exists():
+            # Fallback to public desktop
+            try:
+                import ctypes.wintypes
+                CSIDL_DESKTOP = 0
+                _SHGetFolderPath = ctypes.windll.shell32.SHGetFolderPathW
+                path_buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+                result = _SHGetFolderPath(0, CSIDL_DESKTOP, 0, 0, path_buf)
+                if result == 0:
+                    desktop_path = Path(path_buf.value)
+                else:
+                    desktop_path = Path.home() / "Desktop"
+            except Exception:
+                desktop_path = Path.home() / "Desktop"
+        
+        # Create shortcuts
+        shortcuts_created = 0
+        
+        # 1. Client shortcut
+        try:
+            client_path = installer_instance.install_path / "Client.py"
+            if client_path.exists():
+                shortcut_path = desktop_path / "Push Notifications.lnk"
+                
+                # Create shortcut using COM
+                pythoncom.CoInitialize()  # Initialize COM
+                shortcut = pythoncom.CoCreateInstance(
+                    shell.CLSID_ShellLink, None,
+                    pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
+                )
+                
+                # Set shortcut properties
+                shortcut.SetPath(str(sys.executable))
+                shortcut.SetArguments(f'"{client_path}"')
+                shortcut.SetWorkingDirectory(str(installer_instance.install_path))
+                shortcut.SetDescription("Push Notifications Client")
+                
+                # Try to set icon
+                icon_path = installer_instance.install_path / "pnicon.png"
+                if icon_path.exists():
+                    # Convert PNG to ICO if possible, otherwise use Python icon
+                    try:
+                        shortcut.SetIconLocation(str(sys.executable), 0)
+                    except:
+                        pass
+                
+                # Save shortcut
+                persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
+                persist_file.Save(str(shortcut_path), 0)
+                
+                shortcuts_created += 1
+                logger.info(f"Created client shortcut: {shortcut_path}")
+        
+        except Exception as e:
+            logger.warning(f"Failed to create client shortcut: {e}")
+        
+        # 2. Installer shortcut (for repair/reinstall)
+        try:
+            installer_path = installer_instance.install_path / "installer.py"
+            if installer_path.exists():
+                shortcut_path = desktop_path / "Push Notifications Installer.lnk"
+                
+                # Create shortcut using COM
+                pythoncom.CoInitialize()  # Initialize COM
+                shortcut = pythoncom.CoCreateInstance(
+                    shell.CLSID_ShellLink, None,
+                    pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
+                )
+                
+                # Set shortcut properties
+                shortcut.SetPath(str(sys.executable))
+                shortcut.SetArguments(f'"{installer_path}"')
+                shortcut.SetWorkingDirectory(str(installer_instance.install_path))
+                shortcut.SetDescription("Push Notifications Installer (Repair/Update)")
+                
+                # Save shortcut
+                persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
+                persist_file.Save(str(shortcut_path), 0)
+                
+                shortcuts_created += 1
+                logger.info(f"Created installer shortcut: {shortcut_path}")
+        
+        except Exception as e:
+            logger.warning(f"Failed to create installer shortcut: {e}")
+        
+        # 3. Uninstall shortcut
+        try:
+            uninstaller_path = installer_instance.install_path / "uninstaller.py"
+            if uninstaller_path.exists():
+                shortcut_path = desktop_path / "Uninstall Push Notifications.lnk"
+                
+                # Create shortcut using COM
+                pythoncom.CoInitialize()  # Initialize COM
+                shortcut = pythoncom.CoCreateInstance(
+                    shell.CLSID_ShellLink, None,
+                    pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
+                )
+                
+                # Set shortcut properties
+                shortcut.SetPath(str(sys.executable))
+                shortcut.SetArguments(f'"{uninstaller_path}"')
+                shortcut.SetWorkingDirectory(str(installer_instance.install_path))
+                shortcut.SetDescription("Uninstall Push Notifications")
+                
+                # Save shortcut
+                persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
+                persist_file.Save(str(shortcut_path), 0)
+                
+                shortcuts_created += 1
+                logger.info(f"Created uninstaller shortcut: {shortcut_path}")
+        
+        except Exception as e:
+            logger.warning(f"Failed to create uninstaller shortcut: {e}")
+        
+        if shortcuts_created > 0:
+            logger.info(f"[OK] Created {shortcuts_created} desktop shortcuts")
+            return True
+        else:
+            logger.warning("[WARNING] No desktop shortcuts were created")
+            return False
+    
+    except ImportError as e:
+        logger.warning(f"Desktop shortcuts require pywin32: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Failed to create desktop shortcuts: {e}")
+        return False
     
     def create_installation_directory(self):
         """Create secure, hidden installation directory"""
@@ -2980,23 +3150,392 @@ import os
 import sys
 import json
 import time
-import threading
-import subprocess
-import platform
-import uuid
-import secrets
+import logging
+import requests
 from pathlib import Path
-from datetime import datetime, timedelta
-import hashlib
-import queue
-import re
-import ctypes
+from PIL import Image, ImageDraw, ImageFont
+import pystray
+from tkinter import messagebox, simpledialog
+import webbrowser
 
-# Configuration variables (will be populated by installer)
-CLIENT_VERSION = "{INSTALLER_VERSION}"
-CLIENT_ID = "{self.device_data.get('clientId', 'placeholder')}"
-MAC_ADDRESS = "{self.mac_address}"
-API_URL = "{self.api_url}"
+logger = logging.getLogger(__name__)
+
+class PushNotificationsClient:
+    def __init__(self):
+        self.running = True
+        self.notifications = []
+        self.icon = None
+        self.snooze_until = None  # Timestamp when snooze expires
+        self.snooze_used = False  # Track if snooze has been used
+        self.active_notification = None
+        
+        # Load config
+        self.config = self._load_config()
+        
+    def _load_config(self):
+        """Load configuration with embedded defaults"""
+        # Default configuration values (embedded from config.json)
+        default_config = {
+            'version': '{INSTALLER_VERSION}',
+            'client_id': '{self.device_data.get('clientId', 'test-client-123')}', 
+            'mac_address': '{self.mac_address}',
+            'api_url': '{self.api_url}',
+            'install_path': str(Path(__file__).parent),
+            'allowed_websites': []
+        }
+        
+        # Try to load from config.json if it exists, otherwise use defaults
+        config_path = Path(__file__).parent / "config.json"
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+                # Merge with defaults to ensure all keys are present
+                default_config.update(config)
+                return default_config
+        except Exception as e:
+            logger.debug(f"No config file found, using embedded defaults: {{e}}")
+            return default_config
+            
+    def create_tray_icon(self):
+        """Create and configure the system tray icon"""
+        # Create a teal circular icon with "PN" text
+        image = Image.new('RGB', (64, 64), color='teal')
+        dc = ImageDraw.Draw(image)
+        dc.ellipse([2, 2, 62, 62], fill='teal')
+        
+        try:
+            # Try to add "PN" text
+            if os.name == 'nt':  # Windows
+                font = ImageFont.truetype("arial.ttf", 24)
+            else:
+                font = ImageFont.load_default()
+            text = "PN"
+            text_bbox = dc.textbbox((0, 0), text, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+            x = (64 - text_width) // 2
+            y = (64 - text_height) // 2
+            dc.text((x, y), text, fill='white', font=font)
+        except Exception as e:
+            logger.warning(f"Could not add text to icon: {{e}}")
+
+        # Create the menu
+        menu = (
+            pystray.MenuItem("View Current Notification", self._view_notification,
+                           enabled=self._has_notifications),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Snooze", pystray.Menu(
+                pystray.MenuItem("5 minutes", self._snooze_5),
+                pystray.MenuItem("15 minutes", self._snooze_15),
+                pystray.MenuItem("30 minutes", self._snooze_30)
+            ), enabled=self._can_snooze),
+            pystray.MenuItem("Request Website Access", self._request_website),
+            pystray.MenuItem("Complete Current Notification", 
+                           self._complete_notification,
+                           enabled=self._has_notifications),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Show Status", self._show_status),
+            pystray.MenuItem("About", self._show_about),
+            pystray.MenuItem("Request Uninstall", self._request_uninstall),
+            pystray.MenuItem("Exit", self._quit)
+        )
+
+        # Create and return the icon
+        self.icon = pystray.Icon(
+            "PushNotifications",
+            image,
+            menu=menu
+        )
+        return self.icon
+
+    def _view_notification(self, icon=None):
+        """Show the current notification message"""
+        if not self.notifications:
+            messagebox.showinfo("No Notifications", 
+                              "There are no active notifications.")
+            return
+            
+        notif = self.notifications[0]
+        title = notif.get('title', 'Current Notification')
+        body = notif.get('message', 'No message available')
+        messagebox.showinfo(title, body)
+
+    def _snooze(self, minutes, icon=None):
+        """Snooze notifications for specified minutes"""
+        if self.snooze_used:
+            messagebox.showwarning("Snooze Unavailable",
+                                 "Snooze has already been used.")
+            return
+            
+        self.snooze_until = time.time() + (minutes * 60)
+        self.snooze_used = True
+        
+        # Update menu items
+        if self.icon:
+            try:
+                self.icon.update_menu()
+            except Exception as e:
+                logger.error(f"Failed to update menu: {e}")
+                pass
+        
+        messagebox.showinfo("Notifications Snoozed",
+                          f"Notifications snoozed for {minutes} minutes")
+
+    def _request_website(self):
+        """Request access to a website"""
+        website = simpledialog.askstring("Website Access Request",
+                                       "Enter the website URL you would like to access:")
+        if not website:
+            return
+            
+        try:
+            response = requests.post(
+                f"{{self.config['api_url']}}/api/request-website",
+                json={{
+                    'client_id': self.config['client_id'],
+                    'website': website
+                }},
+                timeout=10
+            )
+            
+            if response.ok:
+                messagebox.showinfo("Request Sent",
+                                  "Website access request has been submitted for approval.")
+            else:
+                messagebox.showerror("Request Failed",
+                                   "Failed to submit website access request.")
+                                   
+        except Exception as e:
+            logger.error(f"Failed to request website access: {{e}}")
+            messagebox.showerror("Error",
+                               "Failed to submit website access request. Please try again later.")
+
+    def _complete_notification(self):
+        """Mark the current notification as completed"""
+        if not self.notifications:
+            return
+            
+        try:
+            notif = self.notifications[0]
+            response = requests.post(
+                f"{{self.config['api_url']}}/api/complete-notification",
+                json={{
+                    'client_id': self.config['client_id'],
+                    'notification_id': notif['id']
+                }},
+                timeout=10
+            )
+            
+            if response.ok:
+                self.notifications.pop(0)
+                self.icon.update_menu()
+                messagebox.showinfo("Notification Completed",
+                                  "The notification has been marked as completed.")
+            else:
+                messagebox.showerror("Error",
+                                   "Failed to complete notification. Please try again.")
+                                   
+        except Exception as e:
+            logger.error(f"Failed to complete notification: {{e}}")
+            messagebox.showerror("Error",
+                               "Failed to complete notification. Please try again later.")
+
+    def _request_uninstall(self):
+        """Request application uninstallation"""
+        # Get reason
+        reason = simpledialog.askstring("Uninstall Request",
+                                      "Please provide a reason for uninstallation:")
+        if not reason:
+            return
+        
+        # Get detailed explanation
+        explanation = simpledialog.askstring("Uninstall Request",
+                                          "Please provide a detailed explanation:")
+        if explanation is None:  # User clicked Cancel
+            return
+            
+        try:
+            response = requests.post(
+                f"{{self.config['api_url']}}/api/request-uninstall",
+                json={{
+                    'client_id': self.config['client_id'],
+                    'mac_address': self.config.get('mac_address', ''),
+                    'install_path': self.config.get('install_path', ''),
+                    'key_id': self.config.get('key_id', ''),
+                    'reason': reason,
+                    'explanation': explanation
+                }},
+                timeout=10
+            )
+            
+            if response.ok:
+                result = response.json()
+                if result.get('autoApproved'):
+                    # Request was auto-approved (client not found in database)
+                    if messagebox.askyesno("Uninstall Approved",
+                                         "Your uninstall request has been automatically approved. \n\nWould you like to uninstall now?"):
+                        self._perform_uninstall()
+                else:
+                    # Request needs admin approval
+                    messagebox.showinfo(
+                        "Request Sent",
+                        "Your uninstall request has been submitted for approval.\n\n" 
+                        "The application will continue running until the request is approved.\n\n" 
+                        "You will be notified when a decision is made."
+                    )
+            else:
+                messagebox.showerror("Request Failed",
+                                   "Failed to submit uninstall request.")
+                                   
+        except Exception as e:
+            logger.error(f"Failed to request uninstall: {{e}}")
+            messagebox.showerror("Error",
+                               "Failed to submit uninstall request. Please try again later.")
+                               
+    def _perform_uninstall(self):
+        """Perform the actual uninstall process"""
+        try:
+            # Stop the tray icon
+            self.icon.stop()
+            
+            # Create and execute uninstall script
+            uninstall_script = (
+                f"@echo off\n"
+                f"timeout /t 2 /nobreak\n"
+                f"rmdir /s /q \"{{self.config.get('install_path', '')}}\"\n"
+            )
+            
+            script_path = os.path.join(os.environ['TEMP'], 'uninstall.bat')
+            with open(script_path, 'w') as f:
+                f.write(uninstall_script)
+                
+            # Execute uninstall script and exit
+            os.startfile(script_path)
+            sys.exit(0)
+            
+        except Exception as e:
+            logger.error(f"Failed to perform uninstall: {{e}}")
+            messagebox.showerror("Error",
+                               "Failed to uninstall. Please try again later or contact support.")
+            return False
+
+    def _show_status(self):
+        """Show client status information"""
+        try:
+            active_count = len([n for n in self.notifications if not n.get('completed', False)])
+            status_text = f"Push Notifications Client\n\n"
+            status_text += f"Version: {{self.config.get('version', 'Unknown')}}\n"
+            status_text += f"Client ID: {{self.config.get('client_id', 'Unknown')}}\n"
+            status_text += f"Status: Running\n"
+            status_text += f"Active Notifications: {{active_count}}\n"
+            
+            if self.snooze_until and time.time() < self.snooze_until:
+                remaining = int((self.snooze_until - time.time()) / 60)
+                status_text += f"Snooze: {{remaining}} minutes remaining\n"
+            else:
+                status_text += f"Snooze: Not active\n"
+            
+            messagebox.showinfo("Client Status", status_text)
+        except Exception as e:
+            logger.error(f"Error showing status: {{e}}")
+            messagebox.showerror("Error", "Failed to show client status.")
+    
+    def _show_about(self):
+        """Show about dialog"""
+        try:
+            about_text = f"""Push Notifications Client
+            
+Version: {{self.config.get('version', 'Unknown')}}
+Client ID: {{self.config.get('client_id', 'Unknown')}}
+
+© 2024 Push Notifications
+Advanced notification management system
+
+Features:
+• Notification snoozing
+• Website access requests
+• Background operation
+• Secure client management"""
+            
+            messagebox.showinfo("About Push Notifications", about_text)
+        except Exception as e:
+            logger.error(f"Error showing about: {{e}}")
+            messagebox.showerror("Error", "Failed to show about information.")
+    
+    def _has_notifications(self, *args):
+        """Check if there are active notifications"""
+        return bool(self.notifications)
+    
+    def _can_snooze(self, *args):
+        """Check if snoozing is available"""
+        return not self.snooze_used and bool(self.notifications)
+    
+    def _snooze_5(self, *args):
+        """Snooze for 5 minutes"""
+        self._snooze(5)
+    
+    def _snooze_15(self, *args):
+        """Snooze for 15 minutes"""
+        self._snooze(15)
+    
+    def _snooze_30(self, *args):
+        """Snooze for 30 minutes"""
+        self._snooze(30)
+    
+    def _quit(self, icon=None):
+        """Clean shutdown of the application"""
+        self.running = False
+        if icon:
+            icon.stop()
+        elif self.icon:
+            self.icon.stop()
+
+    def run(self):
+        """Main client run loop"""
+        try:
+            # Create and run system tray icon
+            icon = self.create_tray_icon()
+            icon.run()
+        except Exception as e:
+            logger.error(f"Client error: {{e}}")
+            sys.exit(1)
+
+if __name__ == '__main__':
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(Path(os.path.expanduser("~")) / "Documents" / "push_notifications.log", encoding='utf-8'),
+            logging.StreamHandler()
+        ]
+    )
+    
+    # Hide console window (Windows only)
+    try:
+        import ctypes
+        console_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if console_hwnd != 0:
+            ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
+    except Exception as e:
+        logger.debug(f"Could not hide console window: {e}")
+        pass  # Ignore errors on non-Windows platforms
+    
+    # Set process title for better task manager visibility
+    try:
+        if os.name == 'nt':
+            import ctypes
+            ctypes.windll.kernel32.SetConsoleTitleW("PushNotifications Client")
+        else:
+            import setproctitle
+            setproctitle.setproctitle("PushNotifications Client")
+    except Exception as e:
+        logger.debug(f"Could not set process title: {e}")
+        pass
+    
+    # Start client
+    client = PushNotificationsClient()
+    client.run()
 
 # Initialize global variables to prevent NameError
 requests = None
@@ -5889,19 +6428,8 @@ def main():
                     print("\n[WARNING] This is a required security update.")
                     proceed = True
                 else:
-                    if USE_GUI_DIALOGS:
-                        try:
-                            import tkinter.messagebox as mb
-                            proceed = mb.askyesno(
-                                "Update Available",
-                                f"Update available: v{installer.update_data['latestVersion']}\n\n"
-                                f"Release notes: {installer.update_data.get('updateNotes', 'No notes')}\n\n"
-                                "Would you like to install this update?"
-                            )
-                        except:
-                            proceed = input("\nInstall update? (y/N): ").lower().startswith('y')
-                    else:
-                        proceed = input("\nInstall update? (y/N): ").lower().startswith('y')
+                    # Use console input for update confirmation
+                    proceed = input("\nInstall update? (y/N): ").lower().startswith('y')
                 
                 if proceed:
                     if installer.download_and_apply_update():
@@ -5939,18 +6467,9 @@ def main():
             except Exception as e:
                 print(f"[WARNING] Could not start client: {e}")
             
-            if USE_GUI_DIALOGS:
-                try:
-                    root = tk.Tk()
-                    root.withdraw()
-                    messagebox.showinfo(
-                        "Installation Complete",
-                        "PushNotifications has been installed successfully!\n\n"
-                        "The client is now running in the background."
-                    )
-                    root.destroy()
-                except:
-                    pass
+            # Installation complete message shown only in console, not as popup
+            # Removed GUI dialog to only show cmd window during installation
+            pass
             
             print("\nInstallation completed. Press Enter to exit...")
             input()
