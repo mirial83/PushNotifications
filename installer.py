@@ -151,6 +151,61 @@ except ImportError:
     logger.warning("psutil module not available - some functionality will be limited")
 # Windows-only installer - winreg is required
 import winreg
+# Tkinter imports with fallbacks - needed throughout the application
+try:
+    import tkinter as tk
+    from tkinter import ttk, messagebox, simpledialog
+    TKINTER_AVAILABLE = True
+except ImportError:
+    # Define dummy classes to prevent crashes
+    class DummyTk:
+        def __init__(self): pass
+        def Tk(self): return self
+        def Toplevel(self): return self
+        def Label(self, *args, **kwargs): return self
+        def Frame(self, *args, **kwargs): return self
+        def Text(self, *args, **kwargs): return self
+        def Scrollbar(self, *args, **kwargs): return self
+        def configure(self, *args, **kwargs): pass
+        def attributes(self, *args, **kwargs): pass
+        def geometry(self, *args): pass
+        def overrideredirect(self, *args): pass
+        def destroy(self): pass
+        def withdraw(self): pass
+        def deiconify(self): pass
+        def focus_force(self): pass
+        def update(self): pass
+        def update_idletasks(self): pass
+        def pack(self, *args, **kwargs): pass
+        def config(self, *args, **kwargs): pass
+        def winfo_screenwidth(self): return 1920
+        def winfo_screenheight(self): return 1080
+        def title(self, *args): pass
+        def resizable(self, *args): pass
+        def mainloop(self): pass
+        # Constants
+        DISABLED = 'disabled'
+        NORMAL = 'normal'
+        RIGHT = 'right'
+        LEFT = 'left'
+        BOTH = 'both'
+        X = 'x'
+        Y = 'y'
+        W = 'w'
+    class DummyTtk:
+        def Progressbar(self, *args, **kwargs): return DummyTk()
+    class DummyMessagebox:
+        def showinfo(self, *args, **kwargs): pass
+        def showerror(self, *args, **kwargs): pass
+        def askyesno(self, *args, **kwargs): return True
+    class DummySimpledialog:
+        def askstring(self, *args, **kwargs): return None
+    tk = DummyTk()
+    ttk = DummyTtk()
+    messagebox = DummyMessagebox()
+    simpledialog = DummySimpledialog()
+    TKINTER_AVAILABLE = False
+    logger.warning("tkinter not available - GUI functionality will be limited")
 # Cryptography imports with fallbacks
 try:
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -204,6 +259,46 @@ import win32process
 import win32security
 import ntsecuritycon
 import win32file
+# Windows COM imports with fallbacks
+try:
+    import pythoncom  # Import for Windows COM support
+    from win32com.shell import shell, shellcon
+    from win32com.client import Dispatch
+    WIN32COM_AVAILABLE = True
+except ImportError:
+    # Define dummy classes to prevent crashes
+    class DummyPythoncom:
+        def CoInitialize(self): pass
+        def CoCreateInstance(self, *args): return self
+        def QueryInterface(self, iid): return self
+        def Save(self, *args): pass
+        # Common constants
+        CLSCTX_INPROC_SERVER = 1
+        IID_IPersistFile = "dummy_iid"
+    class DummyShell:
+        def __getattr__(self, name): return "dummy_shell_attr"
+        CLSID_ShellLink = "dummy_clsid"
+        IID_IShellLink = "dummy_iid"
+    class DummyShellcon:
+        def __getattr__(self, name): return 0
+    class DummyDispatch:
+        def __init__(self, *args): pass
+        def __call__(self, *args): return self
+        def CreateShortCut(self, *args): return self
+        def __getattr__(self, name): return self
+        def __setattr__(self, name, value): pass
+        def save(self): pass
+        def SetPath(self, *args): pass
+        def SetArguments(self, *args): pass
+        def SetWorkingDirectory(self, *args): pass
+        def SetDescription(self, *args): pass
+        def SetIconLocation(self, *args): pass
+    pythoncom = DummyPythoncom()
+    shell = DummyShell()
+    shellcon = DummyShellcon()
+    Dispatch = DummyDispatch
+    WIN32COM_AVAILABLE = False
+    logger.warning("win32com not available - desktop shortcut functionality will be limited")
 # Screen info imports with fallbacks
 try:
     import screeninfo
@@ -351,10 +446,8 @@ class OverlayManager:
     def create_overlays(self):
         """Create grey overlays on all monitors"""
         try:
-            # Import tkinter at runtime to avoid import errors before setup is complete
-            try:
-                import tkinter as tk
-            except ImportError:
+            # Use global tkinter import - already handled at module level
+            if not TKINTER_AVAILABLE:
                 logger.warning("tkinter not available, cannot create overlays")
                 return
             root = tk.Tk()
@@ -452,18 +545,19 @@ class InstallationProgressDialog:
         self.status_label = None
         self.log_text = None
         # Progress dialog is disabled to only show cmd window
-        # Import tkinter at runtime if needed
+        # Use global tkinter import - already handled at module level
         try:
-            import tkinter as tk
-            from tkinter import ttk, messagebox, simpledialog
-            if USE_GUI_DIALOGS:
+            if USE_GUI_DIALOGS and TKINTER_AVAILABLE:
                 self._create_dialog()
-        except ImportError:
-            logger.warning("tkinter not available, progress dialog disabled")
+        except Exception as e:
+            logger.warning(f"Could not create progress dialog: {e}")
         pass
     def _create_dialog(self):
         """Create the progress dialog window"""
         try:
+            if not TKINTER_AVAILABLE:
+                logger.warning("tkinter not available for dialog creation")
+                return
             self.window = tk.Tk()
             self.window.title("PushNotifications Installer")
             self.window.geometry("600x400")
@@ -3196,58 +3290,58 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         except Exception as e:
             print(f"[ERR] Failed to create installation directory: {e}")
             return False
-def create_client_script(self):
-    """Create the Python client script in the installation directory"""
-    try:
-        # Get the client code template
-        client_code = self._get_unified_client_code()
-        # Write client script
-        client_path = self.install_path / "client.py"
-        with open(client_path, 'w', encoding='utf-8') as f:
-            f.write(client_code)
-        # Make client script hidden
-        subprocess.run([
-            "attrib", "+H", str(client_path)
-        ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        print(f"[OK] Created client script: {client_path}")
-        return True
-    except Exception as e:
-        print(f"[ERR] Failed to create client script: {e}")
-        return False
-def create_config_file(self):
-    """Create client configuration file"""
-    try:
-        # Build config data
-        config = {
-            'clientId': self.device_data.get('clientId'),
-            'macAddress': self.mac_address,
-            'username': self.username,
-            'apiUrl': self.api_url,
-            'version': CLIENT_VERSION,
-            'installPath': str(self.install_path),
-            'keyId': self.key_id,
-            'encryptionMetadata': self.encryption_metadata,
-            'clientPolicy': getattr(self, 'client_policy', {}),
-            'allowedWebsites': [],
-            'installDate': datetime.now().isoformat(),
-            'lastUpdated': datetime.now().isoformat()
-        }
-        # Write config file
-        config_path = self.install_path / "config.json"
-        with open(config_path, 'w') as f:
-            json.dump(config, f, indent=4)
-        # Make config file hidden
-        subprocess.run([
-            "attrib", "+H", str(config_path)
-        ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        print(f"[OK] Created config file: {config_path}")
-        return True
-    except Exception as e:
-        print(f"[ERR] Failed to create config file: {e}")
-        return False
-def _get_unified_client_code(self):
-    """Get the unified cross-platform client code with complete functionality"""
-    return f'''#!/usr/bin/env python3
+    def create_client_script(self):
+        """Create the Python client script in the installation directory"""
+        try:
+            # Get the client code template
+            client_code = self._get_unified_client_code()
+            # Write client script
+            client_path = self.install_path / "client.py"
+            with open(client_path, 'w', encoding='utf-8') as f:
+                f.write(client_code)
+            # Make client script hidden
+            subprocess.run([
+                "attrib", "+H", str(client_path)
+            ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            print(f"[OK] Created client script: {client_path}")
+            return True
+        except Exception as e:
+            print(f"[ERR] Failed to create client script: {e}")
+            return False
+    def create_config_file(self):
+        """Create client configuration file"""
+        try:
+            # Build config data
+            config = {
+                'clientId': self.device_data.get('clientId'),
+                'macAddress': self.mac_address,
+                'username': self.username,
+                'apiUrl': self.api_url,
+                'version': CLIENT_VERSION,
+                'installPath': str(self.install_path),
+                'keyId': self.key_id,
+                'encryptionMetadata': self.encryption_metadata,
+                'clientPolicy': getattr(self, 'client_policy', {}),
+                'allowedWebsites': [],
+                'installDate': datetime.now().isoformat(),
+                'lastUpdated': datetime.now().isoformat()
+            }
+            # Write config file
+            config_path = self.install_path / "config.json"
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=4)
+            # Make config file hidden
+            subprocess.run([
+                "attrib", "+H", str(config_path)
+            ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            print(f"[OK] Created config file: {config_path}")
+            return True
+        except Exception as e:
+            print(f"[ERR] Failed to create config file: {e}")
+            return False
+    def _get_unified_client_code(self):
+        """Get the unified cross-platform client code with complete functionality"""
+        return f'''#!/usr/bin/env python3
 """
 PushNotifications Unified Cross-Platform Client
 Complete system with multi-monitor overlay, notification management, and security controls
