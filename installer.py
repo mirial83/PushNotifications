@@ -4738,7 +4738,7 @@ if __name__ == "__main__":
     while client.running:
         time.sleep(30)  # Keep running
 '''
-    
+
     def create_encrypted_vault(self):
         """Create AES-256-GCM encrypted configuration vault"""
         print("Creating encrypted configuration vault...")
