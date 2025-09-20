@@ -3206,7 +3206,7 @@ if os.name == "nt":
             except Exception as install_e:
                 print(f"Warning: Could not install {{pkg}}: {{install_e}}")
         
-        # Create dummy classes even if installation failed
+        # Try importing again after installation attempt
         try:
             import pystray
             import win32gui
@@ -3225,57 +3225,80 @@ if os.name == "nt":
                     def __init__(self, text, action=None, **kwargs): pass
                 class Icon:
                     def __init__(self, name, image, title=None, menu=None): pass
-                    def run(self): pass
+                    def run(self): 
+                        print("Running in console mode (pystray not available)")
+                        import time
+                        try:
+                            while True:
+                                time.sleep(1)
+                        except KeyboardInterrupt:
+                            pass
                     def stop(self): pass
             pystray = DummyPystray()
             
-            class DummyWin32Gui:
-                HWND_TOPMOST = -1
-                HWND_NOTOPMOST = -2
-                SWP_NOMOVE = 0x0002
-                SWP_NOSIZE = 0x0001
-                SWP_FRAMECHANGED = 0x0020
-                SWP_SHOWWINDOW = 0x0040
-                def EnumWindows(self, callback, data): return True
-                def IsWindowVisible(self, hwnd): return True
-                def GetWindowText(self, hwnd): return "Dummy Window"
-                def ShowWindow(self, hwnd, cmd): return True
-                def SetWindowPos(self, hwnd, after, x, y, w, h, flags): return True
-                def GetWindowLong(self, hwnd, index): return 0
-                def SetWindowLong(self, hwnd, index, value): return 0
-                def SetActiveWindow(self, hwnd): return True
-                def SetForegroundWindow(self, hwnd): return True
-                def FlashWindow(self, hwnd, invert): return True
-            win32gui = DummyWin32Gui()
+            # Create dummy win32 modules
+            class DummyWin32:
+                def __getattr__(self, name): return lambda *args, **kwargs: None
+            win32gui = DummyWin32()
+            win32con = DummyWin32()
+            win32api = DummyWin32()
+            win32process = DummyWin32()
             
-            class DummyWin32Con:
-                SW_MINIMIZE = 6
-                SW_RESTORE = 9
-                SW_SHOW = 5
-                SW_HIDE = 0
-                GWL_EXSTYLE = -20
-                WS_EX_TOOLWINDOW = 0x00000080
-                HWND_TOPMOST = -1
-            win32con = DummyWin32Con()
+            # Create dummy screeninfo
+            class DummyScreeninfo:
+                def get_monitors(self): return []
+            screeninfo = DummyScreeninfo()
+        # Install missing packages silently if needed
+        missing_packages = ['pystray>=0.19.4', 'pywin32>=306', 'screeninfo>=0.8.1']
+        for pkg in missing_packages:
+            try:
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg],
+                                    creationflags=subprocess.CREATE_NO_WINDOW)
+            except Exception as install_e:
+                print(f"Warning: Could not install {{pkg}}: {{install_e}}")
+        
+        # Try importing again after installation
+        try:
+            import pystray
+            import win32gui
+            import win32con
+            import win32api
+            import win32process
+            import screeninfo
+            WINDOWS_FEATURES_AVAILABLE = True
+        except ImportError:
+            # Create comprehensive dummy classes as fallback
+            class DummyPystray:
+                class Menu:
+                    SEPARATOR = 'separator'
+                    def __init__(self, *items): pass
+                class MenuItem:
+                    def __init__(self, text, action=None, **kwargs): pass
+                class Icon:
+                    def __init__(self, name, image, title=None, menu=None): pass
+                    def run(self): 
+                        print("Running in console mode (pystray not available)")
+                        import time
+                        try:
+                            while True:
+                                time.sleep(1)
+                        except KeyboardInterrupt:
+                            pass
+                    def stop(self): pass
+            pystray = DummyPystray()
             
-            class DummyWin32Api:
-                def GetCurrentProcess(self): return 0
-                def CloseHandle(self, handle): return True
-            win32api = DummyWin32Api()
+            # Create dummy win32 modules
+            class DummyWin32:
+                def __getattr__(self, name): return lambda *args, **kwargs: None
+            win32gui = DummyWin32()
+            win32con = DummyWin32()
+            win32api = DummyWin32()
+            win32process = DummyWin32()
             
-            win32process = type('win32process', (), {{
-                'GetCurrentProcess': lambda: 0
-            }})()
-            
-            class DummyScreenInfo:
-                def get_monitors(self):
-                    class DummyMonitor:
-                        width = 1920
-                        height = 1080
-                        x = 0
-                        y = 0
-                    return [DummyMonitor()]
-            screeninfo = DummyScreenInfo()
+            # Create dummy screeninfo
+            class DummyScreeninfo:
+                def get_monitors(self): return []
+            screeninfo = DummyScreeninfo()
             
             WINDOWS_FEATURES_AVAILABLE = False
 else:
