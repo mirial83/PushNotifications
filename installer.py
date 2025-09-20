@@ -2028,18 +2028,22 @@ class PushNotificationsInstaller:
                     # Build PowerShell command with proper escaping
                     script_path = os.path.abspath(sys.argv[0])
                     
-                    # Create argument list for PowerShell
-                    if len(sys.argv) > 1:
-                        # Escape each argument properly
-                        escaped_args = []
-                        escaped_args.append(f"'{script_path}'")
-                        for arg in sys.argv[1:]:
-                            escaped_args.append(f"'{arg}'")
-                        arg_list = ', '.join(escaped_args)
-                    else:
-                        arg_list = f"'{script_path}'"
+                    # Add a debug flag to help track the restarted process
+                    restart_args = sys.argv + ['--admin-restart']
                     
-                    powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList {arg_list} -Verb RunAs'
+                    # Create argument list for PowerShell
+                    escaped_args = []
+                    escaped_args.append(f"'{script_path}'")
+                    for arg in restart_args[1:]:
+                        escaped_args.append(f"'{arg}'")
+                    arg_list = ', '.join(escaped_args)
+                    
+                    # Try to preserve console by using -NoNewWindow flag
+                    powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList {arg_list} -Verb RunAs -Wait'
+                    
+                    print("\n[INFO] UAC prompt will appear - please approve to continue with installation")
+                    print("       If UAC is cancelled, the installation will not proceed.")
+                    print("       A new console window will open with administrator privileges.")
                     
                     result = subprocess.run([
                         'powershell.exe', '-Command', powershell_cmd
@@ -2047,18 +2051,17 @@ class PushNotificationsInstaller:
                        text=True, 
                        encoding='utf-8',
                        errors='replace',
-                       timeout=30,
+                       timeout=60,  # Increased timeout for UAC interaction
                        creationflags=subprocess.CREATE_NO_WINDOW)
                     
                     if result.returncode == 0:
                         logger.info("[OK] Administrator privileges requested via PowerShell")
-                        print("\n[INFO] UAC prompt should appear - please approve to continue with installation")
-                        print("       If UAC is cancelled, the installation will not proceed.")
-                        # Small delay to allow UAC dialog to appear before exiting
-                        time.sleep(2)
+                        # Don't exit immediately - let the elevated process handle everything
+                        print("       Installation will continue in the elevated console window.")
+                        time.sleep(1)
                         sys.exit(0)
                     else:
-                        logger.error(f"PowerShell elevation failed: {result.stderr}")
+                        logger.error(f"PowerShell elevation failed (code {result.returncode}): {result.stderr}")
                         
                 except Exception as e:
                     logger.error(f"PowerShell method failed: {e}")
@@ -6316,9 +6319,15 @@ def show_specific_documentation(doc_type):
 def main():
     """Main installer entry point"""
     try:
+        # Check if this is an admin restart (elevated process)
+        is_admin_restart = '--admin-restart' in sys.argv
+        
         print(f"PushNotifications Installer v{INSTALLER_VERSION}")
         print("=" * 50)
-        print("Starting installation process...")
+        if is_admin_restart:
+            print("Elevated installation process started...")
+        else:
+            print("Starting installation process...")
         
         # Parse command line arguments first to handle help/docs before admin check
         api_url = None
@@ -6348,6 +6357,7 @@ def main():
                 show_specific_doc = 'mongodb_setup'
             elif arg in ['--installer-guide', '/installer-guide']:
                 show_specific_doc = 'installer_improvements'
+            # Note: --admin-restart is processed above and not included in normal arg processing
         
         # Handle documentation requests
         if show_docs_menu:
@@ -6372,6 +6382,18 @@ def main():
         temp_installer = PushNotificationsInstaller()
         
         if not temp_installer.check_admin_privileges():
+            if is_admin_restart:
+                # This should not happen - admin restart failed to gain privileges
+                print("\n[CRITICAL ERROR] Admin restart failed to obtain privileges")
+                print("                 The elevated process does not have administrator access.")
+                print("                 This indicates a system or UAC configuration issue.")
+                print("\n[SOLUTION] Please try one of the following:")
+                print("           • Right-click the installer and select 'Run as administrator'")
+                print("           • Check UAC settings in Windows Security")
+                print("           • Verify your account has administrator permissions")
+                input("\nPress Enter to exit...")
+                sys.exit(1)
+            
             print("\n[REQUIRED] Administrator privileges are needed for installation and client operation.")
             print("Restarting with administrator privileges...")
             if not temp_installer.restart_with_admin():
@@ -6381,10 +6403,14 @@ def main():
                 print("         - Secure file system integration")
                 print("         - Process and window management")
                 print("         - System-level security features")
+                input("\nPress Enter to exit...")
                 return
             return  # Process will restart with admin privileges
         
-        print("[OK] Running with administrator privileges")
+        if is_admin_restart:
+            print("[OK] Successfully elevated with administrator privileges")
+        else:
+            print("[OK] Running with administrator privileges")
         print()
         
         # Handle special modes
