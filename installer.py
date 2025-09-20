@@ -2735,7 +2735,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
             if response is not None:
                 try:
                     if response.status_code == 200:
-                    result = response.json()
+                        result = response.json()
                     if result.get('success'):
                         self.installation_key = key
                         user_info = result.get('user', {})
