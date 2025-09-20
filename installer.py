@@ -7080,15 +7080,24 @@ def show_specific_documentation(doc_type):
 def main():
     """Main installer entry point"""
     try:
+        # EARLY DEBUG: Log process start immediately
+        print("[DEBUG] Main function started")
+        print(f"[DEBUG] Command line args: {sys.argv}")
+        print(f"[DEBUG] Python executable: {sys.executable}")
+        print(f"[DEBUG] Current working directory: {os.getcwd()}")
+        
         # Check if this is an admin restart (elevated process)
         is_admin_restart = '--admin-restart' in sys.argv
+        print(f"[DEBUG] Is admin restart: {is_admin_restart}")
         
         print(f"PushNotifications Installer v{INSTALLER_VERSION}")
         print("=" * 50)
         if is_admin_restart:
             print("Elevated installation process started...")
+            print("[DEBUG] Elevated process initialization successful")
         else:
             print("Starting installation process...")
+            print("[DEBUG] Normal process initialization successful")
         
         # Parse command line arguments first to handle help/docs before admin check
         api_url = None
@@ -7312,9 +7321,16 @@ def main():
             
     except KeyboardInterrupt:
         print("\n\nInstallation cancelled by user.")
+        input("\nPress Enter to exit...")
         sys.exit(1)
     except Exception as e:
         print(f"\n\nInstallation failed with error: {e}")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error details: {str(e)}")
+        import traceback
+        print("\nFull traceback:")
+        traceback.print_exc()
+        input("\nPress Enter to exit...")
         sys.exit(1)
 
 
