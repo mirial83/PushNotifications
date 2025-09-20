@@ -4880,10 +4880,15 @@ if __name__ == "__main__":
             if hasattr(self, 'message_relay') and self.message_relay:
                 self.message_relay.send_progress(step_name, progress)
         
-        # Step 1: Validate installation key
+    # Step 1: Validate installation key (skip in repair mode)
         current_step += 1
         update_progress("Validating installation key...", current_step)
-        if not self.validate_installation_key():
+        if self.repair_mode:
+            print("[REPAIR] Skipping installation key validation in repair mode")
+            # In repair mode, we already loaded the existing config with a dummy key
+            if not self.installation_key:
+                self.installation_key = "REPAIR_MODE"
+        elif not self.validate_installation_key():
             error_msg = "Installation failed: Invalid installation key"
             print(f"[ERR] {error_msg}")
             if hasattr(self, 'message_relay') and self.message_relay:
