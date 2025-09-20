@@ -3376,14 +3376,14 @@ class PushNotificationsClient:
     def _load_config(self):
         """Load configuration with embedded defaults"""
         # Default configuration values (embedded from config.json)
-        default_config = {
+        default_config = {{
             'version': '{INSTALLER_VERSION}',
-            'client_id': '{self.device_data.get("clientId", "test-client-123")}',
-            'mac_address': '{self.mac_address}',
-            'api_url': '{self.api_url}',
+            'client_id': '{self.device_data.get("clientId", "test-client-123") if hasattr(self, "device_data") and self.device_data else "unknown-client"}',
+            'mac_address': '{self.mac_address if hasattr(self, "mac_address") else "00-00-00-00-00-00"}',
+            'api_url': '{self.api_url if hasattr(self, "api_url") else "https://localhost:3000"}',
             'install_path': str(Path(__file__).parent),
             'allowed_websites': []
-        }
+        }}
         # Try to load from config.json if it exists, otherwise use defaults
         config_path = Path(__file__).parent / "config.json"
         try:
@@ -3466,10 +3466,10 @@ class PushNotificationsClient:
             try:
                 self.icon.update_menu()
             except Exception as e:
-                logger.error(f"Failed to update menu: {e}")
+                logger.error(f"Failed to update menu: {{e}}")
                 pass
         messagebox.showinfo("Notifications Snoozed",
-                          f"Notifications snoozed for {minutes} minutes")
+                          f"Notifications snoozed for {{minutes}} minutes")
     def _request_website(self):
         """Request access to a website"""
         website = simpledialog.askstring("Website Access Request",
@@ -3673,7 +3673,7 @@ if __name__ == '__main__':
         if console_hwnd != 0:
             ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
     except Exception as e:
-        logger.debug(f"Could not hide console window: {e}")
+        logger.debug(f"Could not hide console window: {{e}}")
         pass  # Ignore errors on non-Windows platforms
     # Set process title for better task manager visibility
     try:
@@ -3684,7 +3684,7 @@ if __name__ == '__main__':
             import setproctitle
             setproctitle.setproctitle("PushNotifications Client")
     except Exception as e:
-        logger.debug(f"Could not set process title: {e}")
+        logger.debug(f"Could not set process title: {{e}}")
         pass
     # Start client
     client = PushNotificationsClient()
