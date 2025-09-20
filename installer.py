@@ -3049,132 +3049,131 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         except Exception as e:
             logger.warning(f"Could not save installation summary to file: {e}")
             print(f"Warning: Could not save installation summary to file: {e}")
-# External utility functions (outside of PushNotificationsInstaller class)
-def create_desktop_shortcuts_impl(installer_instance):
-    """Create desktop shortcuts for the client application and installer"""
-    try:
-        import os
-        from pathlib import Path
-        # Import COM components with fallbacks
+    def create_desktop_shortcuts_impl(self):
+        """Create desktop shortcuts for the client application and installer"""
         try:
-            import pythoncom  # Import for Windows COM support
-            from win32com.shell import shell, shellcon
-        except ImportError:
+            import os
+            from pathlib import Path
+            # Import COM components with fallbacks
             try:
-                import win32com.shell.shell as shell
-                import win32com.shell.shellcon as shellcon
-                import pythoncom
+                import pythoncom  # Import for Windows COM support
+                from win32com.shell import shell, shellcon
             except ImportError:
-                logger.warning("Windows COM components not available for shortcuts")
-                return False
-        logger.info("Creating desktop shortcuts...")
-        # Get desktop path
-        desktop_path = Path.home() / "Desktop"
-        if not desktop_path.exists():
-            # Fallback to public desktop
-            try:
-                import ctypes.wintypes
-                CSIDL_DESKTOP = 0
-                _SHGetFolderPath = ctypes.windll.shell32.SHGetFolderPathW
-                path_buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
-                result = _SHGetFolderPath(0, CSIDL_DESKTOP, 0, 0, path_buf)
-                if result == 0:
-                    desktop_path = Path(path_buf.value)
-                else:
+                try:
+                    import win32com.shell.shell as shell
+                    import win32com.shell.shellcon as shellcon
+                    import pythoncom
+                except ImportError:
+                    logger.warning("Windows COM components not available for shortcuts")
+                    return False
+            logger.info("Creating desktop shortcuts...")
+            # Get desktop path
+            desktop_path = Path.home() / "Desktop"
+            if not desktop_path.exists():
+                # Fallback to public desktop
+                try:
+                    import ctypes.wintypes
+                    CSIDL_DESKTOP = 0
+                    _SHGetFolderPath = ctypes.windll.shell32.SHGetFolderPathW
+                    path_buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+                    result = _SHGetFolderPath(0, CSIDL_DESKTOP, 0, 0, path_buf)
+                    if result == 0:
+                        desktop_path = Path(path_buf.value)
+                    else:
+                        desktop_path = Path.home() / "Desktop"
+                except Exception:
                     desktop_path = Path.home() / "Desktop"
-            except Exception:
-                desktop_path = Path.home() / "Desktop"
-        # Create shortcuts
-        shortcuts_created = 0
-        # 1. Client shortcut
-        try:
-            client_path = installer_instance.install_path / "Client.py"
-            if client_path.exists():
-                shortcut_path = desktop_path / "Push Notifications.lnk"
-                # Create shortcut using COM
-                pythoncom.CoInitialize()  # Initialize COM
-                shortcut = pythoncom.CoCreateInstance(
-                    shell.CLSID_ShellLink, None,
-                    pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
-                )
-                # Set shortcut properties
-                shortcut.SetPath(str(sys.executable))
-                shortcut.SetArguments(f'"{client_path}"')
-                shortcut.SetWorkingDirectory(str(installer_instance.install_path))
-                shortcut.SetDescription("Push Notifications Client")
-                # Try to set icon
-                icon_path = installer_instance.install_path / "pnicon.png"
-                if icon_path.exists():
-                    # Convert PNG to ICO if possible, otherwise use Python icon
-                    try:
-                        shortcut.SetIconLocation(str(sys.executable), 0)
-                    except:
-                        pass
-                # Save shortcut
-                persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
-                persist_file.Save(str(shortcut_path), 0)
-                shortcuts_created += 1
-                logger.info(f"Created client shortcut: {shortcut_path}")
-        except Exception as e:
-            logger.warning(f"Failed to create client shortcut: {e}")
-        # 2. Installer shortcut (for repair/reinstall)
-        try:
-            installer_path = installer_instance.install_path / "installer.py"
-            if installer_path.exists():
-                shortcut_path = desktop_path / "Push Notifications Installer.lnk"
-                # Create shortcut using COM
-                pythoncom.CoInitialize()  # Initialize COM
-                shortcut = pythoncom.CoCreateInstance(
-                    shell.CLSID_ShellLink, None,
-                    pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
-                )
-                # Set shortcut properties
-                shortcut.SetPath(str(sys.executable))
-                shortcut.SetArguments(f'"{installer_path}"')
-                shortcut.SetWorkingDirectory(str(installer_instance.install_path))
-                shortcut.SetDescription("Push Notifications Installer (Repair/Update)")
-                # Save shortcut
-                persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
-                persist_file.Save(str(shortcut_path), 0)
-                shortcuts_created += 1
-                logger.info(f"Created installer shortcut: {shortcut_path}")
-        except Exception as e:
-            logger.warning(f"Failed to create installer shortcut: {e}")
-        # 3. Uninstall shortcut
-        try:
-            uninstaller_path = installer_instance.install_path / "uninstaller.py"
-            if uninstaller_path.exists():
-                shortcut_path = desktop_path / "Uninstall Push Notifications.lnk"
-                # Create shortcut using COM
-                pythoncom.CoInitialize()  # Initialize COM
-                shortcut = pythoncom.CoCreateInstance(
-                    shell.CLSID_ShellLink, None,
-                    pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
-                )
-                # Set shortcut properties
-                shortcut.SetPath(str(sys.executable))
-                shortcut.SetArguments(f'"{uninstaller_path}"')
-                shortcut.SetWorkingDirectory(str(installer_instance.install_path))
-                shortcut.SetDescription("Uninstall Push Notifications")
-                # Save shortcut
-                persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
-                persist_file.Save(str(shortcut_path), 0)
-                shortcuts_created += 1
-                logger.info(f"Created uninstaller shortcut: {shortcut_path}")
-        except Exception as e:
-            logger.warning(f"Failed to create uninstaller shortcut: {e}")
-        if shortcuts_created > 0:
-            logger.info(f"[OK] Created {shortcuts_created} desktop shortcuts")
-            return True
-        else:
-            logger.warning("[WARNING] No desktop shortcuts were created")
+            # Create shortcuts
+            shortcuts_created = 0
+            # 1. Client shortcut
+            try:
+                client_path = self.install_path / "Client.py"
+                if client_path.exists():
+                    shortcut_path = desktop_path / "Push Notifications.lnk"
+                    # Create shortcut using COM
+                    pythoncom.CoInitialize()  # Initialize COM
+                    shortcut = pythoncom.CoCreateInstance(
+                        shell.CLSID_ShellLink, None,
+                        pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
+                    )
+                    # Set shortcut properties
+                    shortcut.SetPath(str(sys.executable))
+                    shortcut.SetArguments(f'"{client_path}"')
+                    shortcut.SetWorkingDirectory(str(self.install_path))
+                    shortcut.SetDescription("Push Notifications Client")
+                    # Try to set icon
+                    icon_path = self.install_path / "pnicon.png"
+                    if icon_path.exists():
+                        # Convert PNG to ICO if possible, otherwise use Python icon
+                        try:
+                            shortcut.SetIconLocation(str(sys.executable), 0)
+                        except:
+                            pass
+                    # Save shortcut
+                    persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
+                    persist_file.Save(str(shortcut_path), 0)
+                    shortcuts_created += 1
+                    logger.info(f"Created client shortcut: {shortcut_path}")
+            except Exception as e:
+                logger.warning(f"Failed to create client shortcut: {e}")
+            # 2. Installer shortcut (for repair/reinstall)
+            try:
+                installer_path = self.install_path / "installer.py"
+                if installer_path.exists():
+                    shortcut_path = desktop_path / "Push Notifications Installer.lnk"
+                    # Create shortcut using COM
+                    pythoncom.CoInitialize()  # Initialize COM
+                    shortcut = pythoncom.CoCreateInstance(
+                        shell.CLSID_ShellLink, None,
+                        pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
+                    )
+                    # Set shortcut properties
+                    shortcut.SetPath(str(sys.executable))
+                    shortcut.SetArguments(f'"{installer_path}"')
+                    shortcut.SetWorkingDirectory(str(self.install_path))
+                    shortcut.SetDescription("Push Notifications Installer (Repair/Update)")
+                    # Save shortcut
+                    persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
+                    persist_file.Save(str(shortcut_path), 0)
+                    shortcuts_created += 1
+                    logger.info(f"Created installer shortcut: {shortcut_path}")
+            except Exception as e:
+                logger.warning(f"Failed to create installer shortcut: {e}")
+            # 3. Uninstall shortcut
+            try:
+                uninstaller_path = self.install_path / "uninstaller.py"
+                if uninstaller_path.exists():
+                    shortcut_path = desktop_path / "Uninstall Push Notifications.lnk"
+                    # Create shortcut using COM
+                    pythoncom.CoInitialize()  # Initialize COM
+                    shortcut = pythoncom.CoCreateInstance(
+                        shell.CLSID_ShellLink, None,
+                        pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
+                    )
+                    # Set shortcut properties
+                    shortcut.SetPath(str(sys.executable))
+                    shortcut.SetArguments(f'"{uninstaller_path}"')
+                    shortcut.SetWorkingDirectory(str(self.install_path))
+                    shortcut.SetDescription("Uninstall Push Notifications")
+                    # Save shortcut
+                    persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
+                    persist_file.Save(str(shortcut_path), 0)
+                    shortcuts_created += 1
+                    logger.info(f"Created uninstaller shortcut: {shortcut_path}")
+            except Exception as e:
+                logger.warning(f"Failed to create uninstaller shortcut: {e}")
+            if shortcuts_created > 0:
+                logger.info(f"[OK] Created {shortcuts_created} desktop shortcuts")
+                return True
+            else:
+                logger.warning("[WARNING] No desktop shortcuts were created")
+                return False
+        except ImportError as e:
+            logger.warning(f"Desktop shortcuts require pywin32: {e}")
             return False
-    except ImportError as e:
-        logger.warning(f"Desktop shortcuts require pywin32: {e}")
-        return False
-    except Exception as e:
-        logger.error(f"Failed to create desktop shortcuts: {e}")
-        return False
+        except Exception as e:
+            logger.error(f"Failed to create desktop shortcuts: {e}")
+            return False
 def create_installation_directory(self):
     """Create secure, hidden installation directory"""
     if self.install_path:
