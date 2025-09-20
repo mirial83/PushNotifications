@@ -359,13 +359,9 @@ WMI_AVAILABLE = False
 UI_AUTOMATION_AVAILABLE = False
 SCREEN_INFO_AVAILABLE = False
 
-# GUI imports - required for Windows installer
-try:
-    import tkinter as tk
-    from tkinter import messagebox, simpledialog, ttk
-    GUI_AVAILABLE = True
-except ImportError:
-    GUI_AVAILABLE = False
+# GUI imports - will be imported dynamically when needed
+# No module-level tkinter imports to prevent early crashes
+GUI_AVAILABLE = None  # Will be determined when GUI is actually needed
 
 # Global flag to control GUI dialog usage - only enabled for key entry popup
 # Set to False to disable most GUI dialogs except key entry popup
