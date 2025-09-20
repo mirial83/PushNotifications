@@ -142,7 +142,7 @@ try:
     
     # Log initialization success
     logger.info(f"Logging initialized successfully - Log file: {log_file_path}")
-    logger.info(f"Installer version: {INSTALLER_VERSION if 'INSTALLER_VERSION' in locals() else 'Unknown'}")
+    logger.info(f"Installer version: 1.8.4")
     logger.info(f"Python version: {sys.version}")
     logger.info(f"Platform: {platform.platform()}")
     
@@ -530,8 +530,14 @@ class InstallationProgressDialog:
         self.log_text = None
         
         # Progress dialog is disabled to only show cmd window
-        # if USE_GUI_DIALOGS:
-        #     self._create_dialog()
+        # Import tkinter at runtime if needed
+        try:
+            import tkinter as tk
+            from tkinter import ttk, messagebox, simpledialog
+            if USE_GUI_DIALOGS:
+                self._create_dialog()
+        except ImportError:
+            logger.warning("tkinter not available, progress dialog disabled")
         pass
     
     def _create_dialog(self):
@@ -725,9 +731,9 @@ def fetch_current_version_from_api(api_url=None):
     logger.warning("Using fallback version 1.0.0")
     return "1.0.0"
 
-# Global configuration
-INSTALLER_VERSION = '1.0.0'  # Dynamic version - replaced by download API
-VERSION_NUMBER = 1  # Numeric version for update comparisons
+# Global configuration - moved before logging setup
+INSTALLER_VERSION = '1.8.4'  # Current version from header
+VERSION_NUMBER = 85  # Numeric version for update comparisons
 REGISTRY_KEY = r"HKEY_CURRENT_USER\Software\PushNotifications"
 DEFAULT_API_URL = "https://push-notifications-phi.vercel.app"
 
@@ -1720,12 +1726,16 @@ class PushNotificationsInstaller:
         self.cleanup_performed = False  # Track if cleanup was already performed
         self.device_registered = False  # Track if device was registered with server
         
-        # Initialize progress dialog only if GUI dialogs are enabled
+    # Initialize progress dialog only if GUI dialogs are enabled
         self.progress_dialog = None
         if USE_GUI_DIALOGS:
-            self.progress_dialog = InstallationProgressDialog()
-            self.progress_dialog.show()
-            self.progress_dialog.add_log(f"PushNotifications Installer v{INSTALLER_VERSION}")
+            try:
+                self.progress_dialog = InstallationProgressDialog()
+                self.progress_dialog.show()
+                self.progress_dialog.add_log(f"PushNotifications Installer v{INSTALLER_VERSION}")
+            except Exception as e:
+                logger.warning(f"Could not initialize progress dialog: {e}")
+                self.progress_dialog = None
             self.progress_dialog.add_log(f"Platform: {self.system}")
             self.progress_dialog.add_log(f"MAC Address: {self.mac_address}")
             self.progress_dialog.add_log(f"Client Name: {self.client_name}")
@@ -2655,8 +2665,12 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         for attempt in range(1, max_attempts + 1):
             # For key entry, we always want to use GUI dialog regardless of other settings
             print(f"Debug: System detected as '{self.system}', Key Entry Popup: {USE_KEY_ENTRY_POPUP}")
-            if USE_KEY_ENTRY_POPUP and GUI_AVAILABLE:
+            if USE_KEY_ENTRY_POPUP:
                 try:
+                    # Import tkinter and check availability
+                    import tkinter as tk
+                    from tkinter import simpledialog
+                    
                     # Set environment variable to suppress tkinter deprecation warning
                     os.environ['TK_SILENCE_DEPRECATION'] = '1'
                     
@@ -2736,31 +2750,31 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                 try:
                     if response.status_code == 200:
                         result = response.json()
-                    if result.get('success'):
-                        self.installation_key = key
-                        user_info = result.get('user', {})
-                        
-                        # Update username to use website username with numbers
-                        website_username = user_info.get('username', 'unknown')
-                        import random
-                        number = random.randint(1000, 9999)
-                        self.username = f"{website_username}_{number}"
-                        self.client_name = f"{self.username}_{platform.node()}"
-                        
-                        print(f"[OK] Installation key validated successfully!")
-                        print(f"  User: {user_info.get('username', 'Unknown')}")
-                        print(f"  Role: {user_info.get('role', 'Unknown')}")
-                        print(f"  Generated Client Username: {self.username}")
-                        return True
+                        if result.get('success'):
+                            self.installation_key = key
+                            user_info = result.get('user', {})
+                            
+                            # Update username to use website username with numbers
+                            website_username = user_info.get('username', 'unknown')
+                            import random
+                            number = random.randint(1000, 9999)
+                            self.username = f"{website_username}_{number}"
+                            self.client_name = f"{self.username}_{platform.node()}"
+                            
+                            print(f"[OK] Installation key validated successfully!")
+                            print(f"  User: {user_info.get('username', 'Unknown')}")
+                            print(f"  Role: {user_info.get('role', 'Unknown')}")
+                            print(f"  Generated Client Username: {self.username}")
+                            return True
+                        else:
+                            print(f"[ERR] {result.get('message', 'Invalid installation key')}")
                     else:
-                        print(f"[ERR] {result.get('message', 'Invalid installation key')}")
-                else:
-                    print(f"[ERR] Server error: HTTP {response.status_code}")
-                    
-            except requests.RequestException as e:
-                print(f"[ERR] Network error: {e}")
-            except Exception as e:
-                print(f"[ERR] Validation error: {e}")
+                        print(f"[ERR] Server error: HTTP {response.status_code}")
+                        
+                except requests.RequestException as e:
+                    print(f"[ERR] Network error: {e}")
+                except Exception as e:
+                    print(f"[ERR] Validation error: {e}")
         
         print("Installation key validation failed after maximum attempts.")
         return False
@@ -3599,9 +3613,20 @@ def create_desktop_shortcuts_impl(installer_instance):
     """Create desktop shortcuts for the client application and installer"""
     try:
         import os
-        import pythoncom  # Import for Windows COM support
-        from win32com.shell import shell, shellcon
         from pathlib import Path
+        
+        # Import COM components with fallbacks
+        try:
+            import pythoncom  # Import for Windows COM support
+            from win32com.shell import shell, shellcon
+        except ImportError:
+            try:
+                import win32com.shell.shell as shell
+                import win32com.shell.shellcon as shellcon
+                import pythoncom
+            except ImportError:
+                logger.warning("Windows COM components not available for shortcuts")
+                return False
         
         logger.info("Creating desktop shortcuts...")
         
