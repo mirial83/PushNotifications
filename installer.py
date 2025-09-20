@@ -2052,6 +2052,10 @@ class PushNotificationsInstaller:
                     
                     if result.returncode == 0:
                         logger.info("[OK] Administrator privileges requested via PowerShell")
+                        print("\n[INFO] UAC prompt should appear - please approve to continue with installation")
+                        print("       If UAC is cancelled, the installation will not proceed.")
+                        # Small delay to allow UAC dialog to appear before exiting
+                        time.sleep(2)
                         sys.exit(0)
                     else:
                         logger.error(f"PowerShell elevation failed: {result.stderr}")
