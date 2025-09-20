@@ -3608,7 +3608,9 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         except Exception as e:
             logger.warning(f"Could not save installation summary to file: {e}")
             print(f"Warning: Could not save installation summary to file: {e}")
-    
+
+
+# External utility functions (outside of PushNotificationsInstaller class)
 def create_desktop_shortcuts_impl(installer_instance):
     """Create desktop shortcuts for the client application and installer"""
     try:
@@ -3760,98 +3762,98 @@ def create_desktop_shortcuts_impl(installer_instance):
         logger.error(f"Failed to create desktop shortcuts: {e}")
         return False
     
-    def create_installation_directory(self):
-        """Create secure, hidden installation directory"""
-        if self.install_path:
-            return True
-            
-        print("Creating hidden installation directory...")
+def create_installation_directory(self):
+    """Create secure, hidden installation directory"""
+    if self.install_path:
+        return True
         
-        try:
-            # Generate a random UUID-based path for stealth
-            random_path = f"PushNotifications_{uuid.uuid4().hex[:8]}"
-            base_path = Path(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'))
-            install_path = base_path / random_path
-            
-            # Create installation directory
-            install_path.mkdir(parents=True, exist_ok=True)
-            
-            # Hide directory and set system attributes
-            subprocess.run([
-                "attrib", "+S", "+H", str(install_path)
-            ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            self.install_path = install_path
-            print(f"[OK] Created hidden installation directory: {install_path}")
-            return True
-            
-        except Exception as e:
-            print(f"[ERR] Failed to create installation directory: {e}")
-            return False
-            
-    def create_client_script(self):
-        """Create the Python client script in the installation directory"""
-        try:
-            # Get the client code template
-            client_code = self._get_unified_client_code()
-            
-            # Write client script
-            client_path = self.install_path / "client.py"
-            with open(client_path, 'w', encoding='utf-8') as f:
-                f.write(client_code)
-                
-            # Make client script hidden
-            subprocess.run([
-                "attrib", "+H", str(client_path)
-            ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            print(f"[OK] Created client script: {client_path}")
-            return True
-            
-        except Exception as e:
-            print(f"[ERR] Failed to create client script: {e}")
-            return False
-            
-    def create_config_file(self):
-        """Create client configuration file"""
-        try:
-            # Build config data
-            config = {
-                'clientId': self.device_data.get('clientId'),
-                'macAddress': self.mac_address,
-                'username': self.username,
-                'apiUrl': self.api_url,
-                'version': CLIENT_VERSION,
-                'installPath': str(self.install_path),
-                'keyId': self.key_id,
-                'encryptionMetadata': self.encryption_metadata,
-                'clientPolicy': getattr(self, 'client_policy', {}),
-                'allowedWebsites': [],
-                'installDate': datetime.now().isoformat(),
-                'lastUpdated': datetime.now().isoformat()
-            }
-            
-            # Write config file
-            config_path = self.install_path / "config.json"
-            with open(config_path, 'w') as f:
-                json.dump(config, f, indent=4)
-                
-            # Make config file hidden
-            subprocess.run([
-                "attrib", "+H", str(config_path)
-            ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            print(f"[OK] Created config file: {config_path}")
-            return True
-            
-        except Exception as e:
-            print(f"[ERR] Failed to create config file: {e}")
-            return False
+    print("Creating hidden installation directory...")
     
-    def _get_unified_client_code(self):
-        """Get the unified cross-platform client code with complete functionality"""
+    try:
+        # Generate a random UUID-based path for stealth
+        random_path = f"PushNotifications_{uuid.uuid4().hex[:8]}"
+        base_path = Path(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'))
+        install_path = base_path / random_path
         
-        return f'''#!/usr/bin/env python3
+        # Create installation directory
+        install_path.mkdir(parents=True, exist_ok=True)
+        
+        # Hide directory and set system attributes
+        subprocess.run([
+            "attrib", "+S", "+H", str(install_path)
+        ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        
+        self.install_path = install_path
+        print(f"[OK] Created hidden installation directory: {install_path}")
+        return True
+        
+    except Exception as e:
+        print(f"[ERR] Failed to create installation directory: {e}")
+        return False
+            
+def create_client_script(self):
+    """Create the Python client script in the installation directory"""
+    try:
+        # Get the client code template
+        client_code = self._get_unified_client_code()
+        
+        # Write client script
+        client_path = self.install_path / "client.py"
+        with open(client_path, 'w', encoding='utf-8') as f:
+            f.write(client_code)
+            
+        # Make client script hidden
+        subprocess.run([
+            "attrib", "+H", str(client_path)
+        ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        
+        print(f"[OK] Created client script: {client_path}")
+        return True
+        
+    except Exception as e:
+        print(f"[ERR] Failed to create client script: {e}")
+        return False
+            
+def create_config_file(self):
+    """Create client configuration file"""
+    try:
+        # Build config data
+        config = {
+            'clientId': self.device_data.get('clientId'),
+            'macAddress': self.mac_address,
+            'username': self.username,
+            'apiUrl': self.api_url,
+            'version': CLIENT_VERSION,
+            'installPath': str(self.install_path),
+            'keyId': self.key_id,
+            'encryptionMetadata': self.encryption_metadata,
+            'clientPolicy': getattr(self, 'client_policy', {}),
+            'allowedWebsites': [],
+            'installDate': datetime.now().isoformat(),
+            'lastUpdated': datetime.now().isoformat()
+        }
+        
+        # Write config file
+        config_path = self.install_path / "config.json"
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=4)
+            
+        # Make config file hidden
+        subprocess.run([
+            "attrib", "+H", str(config_path)
+        ], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        
+        print(f"[OK] Created config file: {config_path}")
+        return True
+        
+    except Exception as e:
+        print(f"[ERR] Failed to create config file: {e}")
+        return False
+    
+def _get_unified_client_code(self):
+    """Get the unified cross-platform client code with complete functionality"""
+    
+    return f'''#!/usr/bin/env python3
 """
 PushNotifications Unified Cross-Platform Client
 Complete system with multi-monitor overlay, notification management, and security controls
@@ -4956,9 +4958,9 @@ if __name__ == "__main__":
         
         return True
 
-    def create_desktop_shortcuts(self):
-        """Create desktop shortcuts for the client application and installer"""
-        return create_desktop_shortcuts(self)
+def create_desktop_shortcuts(self):
+    """Create desktop shortcuts for the client application and installer"""
+    return create_desktop_shortcuts(self)
 
 
 # External utility classes and functions for embedded client code
