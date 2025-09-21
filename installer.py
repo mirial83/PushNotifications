@@ -6736,36 +6736,36 @@ def main():
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
                 )
+                
+                # Monitor client startup process
+                startup_success = False
+                for check_attempt in range(5):  # Check 5 times over 10 seconds
+                    time.sleep(2)
                     
-                    # Monitor client startup process
-                    startup_success = False
-                    for check_attempt in range(5):  # Check 5 times over 10 seconds
-                        time.sleep(2)
-                        
-                        # Check if process is still running
-                        if process.poll() is None:
-                            startup_success = True
-                            print(f"[OK] Client process running (PID: {process.pid})")
-                            break
-                        else:
-                            print(f"[WARNING] Client process check {check_attempt + 1}: Process not running (exit code: {process.returncode})")
-                    
-                    # Final status report
-                    if startup_success:
-                        print("[OK] Client started successfully in background")
-                        if message_relay:
-                            message_relay.send_status("success", "Installation completed successfully - client is running")
+                    # Check if process is still running
+                    if process.poll() is None:
+                        startup_success = True
+                        print(f"[OK] Client process running (PID: {process.pid})")
+                        break
                     else:
-                        print(f"[WARNING] Client process failed to remain running after multiple checks")
-                        print(f"[INFO] Client may need admin privileges or have dependency issues")
-                        print(f"[INFO] Try running as administrator or check Python dependencies")
-                        if message_relay:
-                            message_relay.send_status("warning", "Client started but failed to remain running - may need admin privileges")
-                else:
-                    print(f"[WARNING] Client.py not found at: {client_path}")
-                    print(f"[INFO] Files in install directory: {list(installer.install_path.glob('*'))}")
+                        print(f"[WARNING] Client process check {check_attempt + 1}: Process not running (exit code: {process.returncode})")
+                
+                # Final status report
+                if startup_success:
+                    print("[OK] Client started successfully in background")
                     if message_relay:
-                        message_relay.send_status("warning", "Installation completed but client could not be started - file not found")
+                        message_relay.send_status("success", "Installation completed successfully - client is running")
+                else:
+                    print(f"[WARNING] Client process failed to remain running after multiple checks")
+                    print(f"[INFO] Client may need admin privileges or have dependency issues")
+                    print(f"[INFO] Try running as administrator or check Python dependencies")
+                    if message_relay:
+                        message_relay.send_status("warning", "Client started but failed to remain running - may need admin privileges")
+            else:
+                print(f"[WARNING] Client.py not found at: {client_path}")
+                print(f"[INFO] Files in install directory: {list(installer.install_path.glob('*'))}")
+                if message_relay:
+                    message_relay.send_status("warning", "Installation completed but client could not be started - file not found")
             except Exception as e:
                 print(f"[WARNING] Could not start client: {e}")
                 import traceback
