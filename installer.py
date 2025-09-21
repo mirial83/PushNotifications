@@ -3796,7 +3796,7 @@ class PushNotificationsClient:
                 default_config.update(config)
                 return default_config
         except Exception as e:
-            logger.debug(f"No config file found, using embedded defaults: {e}")
+            logger.debug(f"No config file found, using embedded defaults: {{e}}")
             return default_config
     def create_tray_icon(self):
         """Create and configure the system tray icon"""
@@ -3818,7 +3818,7 @@ class PushNotificationsClient:
             y = (64 - text_height) // 2
             dc.text((x, y), text, fill='white', font=font)
         except Exception as e:
-            logger.warning(f"Could not add text to icon: {e}")
+            logger.warning(f"Could not add text to icon: {{e}}")
         # Create the menu
         menu = (
             pystray.MenuItem("View Current Notification", self._view_notification,
@@ -3869,7 +3869,7 @@ class PushNotificationsClient:
             try:
                 self.icon.update_menu()
             except Exception as e:
-                logger.error(f"Failed to update menu: {e}")
+                logger.error(f"Failed to update menu: {{e}}")
                 pass
         messagebox.showinfo("Notifications Snoozed",
                           f"Notifications snoozed for {minutes} minutes")
@@ -3895,7 +3895,7 @@ class PushNotificationsClient:
                 messagebox.showerror("Request Failed",
                                    "Failed to submit website access request.")
         except Exception as e:
-            logger.error(f"Failed to request website access: {e}")
+            logger.error(f"Failed to request website access: {{e}}")
             messagebox.showerror("Error",
                                "Failed to submit website access request. Please try again later.")
     def _complete_notification(self):
@@ -3921,7 +3921,7 @@ class PushNotificationsClient:
                 messagebox.showerror("Error",
                                    "Failed to complete notification. Please try again.")
         except Exception as e:
-            logger.error(f"Failed to complete notification: {e}")
+            logger.error(f"Failed to complete notification: {{e}}")
             messagebox.showerror("Error",
                                "Failed to complete notification. Please try again later.")
     def _request_uninstall(self):
@@ -3968,7 +3968,7 @@ class PushNotificationsClient:
                 messagebox.showerror("Request Failed",
                                    "Failed to submit uninstall request.")
         except Exception as e:
-            logger.error(f"Failed to request uninstall: {e}")
+            logger.error(f"Failed to request uninstall: {{e}}")
             messagebox.showerror("Error",
                                "Failed to submit uninstall request. Please try again later.")
     def _perform_uninstall(self):
@@ -3989,7 +3989,7 @@ class PushNotificationsClient:
             os.startfile(script_path)
             sys.exit(0)
         except Exception as e:
-            logger.error(f"Failed to perform uninstall: {e}")
+            logger.error(f"Failed to perform uninstall: {{e}}")
             messagebox.showerror("Error",
                                "Failed to uninstall. Please try again later or contact support.")
             return False
@@ -4009,7 +4009,7 @@ class PushNotificationsClient:
                 status_text += f"Snooze: Not active\n"
             messagebox.showinfo("Client Status", status_text)
         except Exception as e:
-            logger.error(f"Error showing status: {e}")
+            logger.error(f"Error showing status: {{e}}")
             messagebox.showerror("Error", "Failed to show client status.")
     def _show_about(self):
         """Show about dialog"""
@@ -4026,7 +4026,7 @@ Features:
 • Secure client management"""
             messagebox.showinfo("About Push Notifications", about_text)
         except Exception as e:
-            logger.error(f"Error showing about: {e}")
+            logger.error(f"Error showing about: {{e}}")
             messagebox.showerror("Error", "Failed to show about information.")
     def _has_notifications(self, *args):
         """Check if there are active notifications"""
@@ -4057,7 +4057,7 @@ Features:
             icon = self.create_tray_icon()
             icon.run()
         except Exception as e:
-            logger.error(f"Client error: {e}")
+            logger.error(f"Client error: {{e}}")
             sys.exit(1)
 if __name__ == '__main__':
     # Configure logging
@@ -4076,7 +4076,7 @@ if __name__ == '__main__':
         if console_hwnd != 0:
             ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
     except Exception as e:
-        logger.debug(f"Could not hide console window: {e}")
+        logger.debug(f"Could not hide console window: {{e}}")
         pass  # Ignore errors on non-Windows platforms
     # Set process title for better task manager visibility
     try:
@@ -4087,7 +4087,7 @@ if __name__ == '__main__':
             import setproctitle
             setproctitle.setproctitle("PushNotifications Client")
     except Exception as e:
-        logger.debug(f"Could not set process title: {e}")
+        logger.debug(f"Could not set process title: {{e}}")
         pass
     # Start client
     client = PushNotificationsClient()
