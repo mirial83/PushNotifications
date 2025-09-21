@@ -1304,8 +1304,8 @@ class PushNotificationsClient:
             return
         try:
             response = requests.post(
-                f"{self.config['api_url']}/api/request-website",
-                json={'client_id': self.config['client_id'], 'website': website},
+                f"{API_URL}/api/request-website",
+                json={'client_id': CLIENT_ID, 'website': website},
                 timeout=15,
             )
             if response.ok:
@@ -1322,8 +1322,8 @@ class PushNotificationsClient:
         try:
             notif = self.notifications[0]
             response = requests.post(
-                f"{self.config['api_url']}/api/complete-notification",
-                json={'client_id': self.config['client_id'], 'notification_id': notif.get('id')},
+                f"{API_URL}/api/complete-notification",
+                json={'client_id': CLIENT_ID, 'notification_id': notif.get('id')},
                 timeout=15,
             )
             if response.ok:
@@ -1346,8 +1346,8 @@ class PushNotificationsClient:
             return
         try:
             response = requests.post(
-                f"{self.config['api_url']}/api/request-uninstall",
-                json={'client_id': self.config['client_id'], 'reason': reason},
+                f"{API_URL}/api/request-uninstall",
+                json={'client_id': CLIENT_ID, 'reason': reason},
                 timeout=15,
             )
             if response.ok:
@@ -3881,9 +3881,9 @@ class PushNotificationsClient:
             return
         try:
             response = requests.post(
-                f"{{self.config['api_url']}}/api/request-website",
+                f"{API_URL}/api/request-website",
                 json={{
-                    'client_id': self.config['client_id'],
+                    'client_id': CLIENT_ID,
                     'website': website
                 }},
                 timeout=10
@@ -3905,9 +3905,9 @@ class PushNotificationsClient:
         try:
             notif = self.notifications[0]
             response = requests.post(
-                f"{{self.config['api_url']}}/api/complete-notification",
+                f"{API_URL}/api/complete-notification",
                 json={{
-                    'client_id': self.config['client_id'],
+                    'client_id': CLIENT_ID,
                     'notification_id': notif['id']
                 }},
                 timeout=10
@@ -3938,12 +3938,12 @@ class PushNotificationsClient:
             return
         try:
             response = requests.post(
-                f"{{self.config['api_url']}}/api/request-uninstall",
+                f"{API_URL}/api/request-uninstall",
                 json={{
-                    'client_id': self.config['client_id'],
-                    'mac_address': self.config.get('mac_address', ''),
-                    'install_path': self.config.get('install_path', ''),
-                    'key_id': self.config.get('key_id', ''),
+                    'client_id': CLIENT_ID,
+                    'mac_address': MAC_ADDRESS,
+                    'install_path': str(Path(__file__).parent),
+                    'key_id': 'generated-key-id',
                     'reason': reason,
                     'explanation': explanation
                 }},
@@ -3998,8 +3998,8 @@ class PushNotificationsClient:
         try:
             active_count = len([n for n in self.notifications if not n.get('completed', False)])
             status_text = f"Push Notifications Client\n\n"
-            status_text += f"Version: {self.config.get('version', 'Unknown')}\n"
-            status_text += f"Client ID: {self.config.get('client_id', 'Unknown')}\n"
+            status_text += f"Version: {CLIENT_VERSION}\n"
+            status_text += f"Client ID: {CLIENT_ID}\n"
             status_text += f"Status: Running\n"
             status_text += f"Active Notifications: {active_count}\n"
             if self.snooze_until and time.time() < self.snooze_until:
@@ -4015,8 +4015,8 @@ class PushNotificationsClient:
         """Show about dialog"""
         try:
             about_text = f"""Push Notifications Client
-Version: {self.config.get('version', 'Unknown')}
-Client ID: {self.config.get('client_id', 'Unknown')}
+Version: {CLIENT_VERSION}
+Client ID: {CLIENT_ID}
 © 2024 Push Notifications
 Advanced notification management system
 Features:
