@@ -3752,16 +3752,16 @@ try:
 except ImportError:
     print("Warning: tkinter not available")
     class DummyMessagebox:
-        def showinfo(self, title, message): print(f"INFO: {title} - {message}")
-        def showwarning(self, title, message): print(f"WARNING: {title} - {message}")
-        def showerror(self, title, message): print(f"ERROR: {title} - {message}")
+        def showinfo(self, title, message): print(f"INFO: {{title}} - {{message}}")
+        def showwarning(self, title, message): print(f"WARNING: {{title}} - {{message}}")
+        def showerror(self, title, message): print(f"ERROR: {{title}} - {{message}}")
         def askyesno(self, title, message): 
-            print(f"QUESTION: {title} - {message}")
+            print(f"QUESTION: {{title}} - {{message}}")
             return input("Enter y/n: ").lower().startswith('y')
     messagebox = DummyMessagebox()
     class DummySimpledialog:
         def askstring(self, title, prompt, **kwargs): 
-            print(f"{title}: {prompt}")
+            print(f"{{title}}: {{prompt}}")
             return input("Enter value: ") or None
     simpledialog = DummySimpledialog()
 
