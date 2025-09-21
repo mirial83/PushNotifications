@@ -6766,20 +6766,20 @@ def main():
                 print(f"[INFO] Files in install directory: {list(installer.install_path.glob('*'))}")
                 if message_relay:
                     message_relay.send_status("warning", "Installation completed but client could not be started - file not found")
-            except Exception as e:
-                print(f"[WARNING] Could not start client: {e}")
-                import traceback
-                traceback.print_exc()
-                if message_relay:
-                    message_relay.send_status("warning", f"Installation completed but client failed to start: {e}")
-            # Installation complete message shown only in console, not as popup
-            # Removed GUI dialog to only show cmd window during installation
-            pass
+        except Exception as e:
+            print(f"[WARNING] Could not start client: {e}")
+            import traceback
+            traceback.print_exc()
             if message_relay:
-                message_relay.send_status("completed", "Installation process finished - ready to exit")
-            print("\nInstallation completed. Press Enter to exit...")
-            input()
-            sys.exit(0)
+                message_relay.send_status("warning", f"Installation completed but client failed to start: {e}")
+        
+        # Installation complete message shown only in console, not as popup
+        # Removed GUI dialog to only show cmd window during installation
+        if message_relay:
+            message_relay.send_status("completed", "Installation process finished - ready to exit")
+        print("\nInstallation completed. Press Enter to exit...")
+        input()
+        sys.exit(0)
         else:
             if message_relay:
                 message_relay.send_status("failed", "Installation failed - check logs for details")
