@@ -3636,7 +3636,7 @@ if os.name == 'nt':  # Windows only
                 print(f"[ERROR] Failed to request elevation: {{stderr_msg}}")
                 return False
         except Exception as e:
-            print(f"[ERROR] Could not request admin privileges: {e}")
+            print(f"[ERROR] Could not request admin privileges: {{e}}")
             return False
     
     # Check admin privileges and restart if needed
@@ -3662,7 +3662,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import requests
     except Exception as e:
-        print(f"Warning: Could not install/import requests: {e}")
+        print(f"Warning: Could not install/import requests: {{e}}")
         class DummyRequests:
             def post(self, *args, **kwargs):
                 class DummyResponse:
@@ -3681,7 +3681,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         from PIL import Image, ImageDraw, ImageFont
     except Exception as e:
-        print(f"Warning: Could not install/import PIL: {e}")
+        print(f"Warning: Could not install/import PIL: {{e}}")
         # Create dummy PIL classes
         class DummyImage:
             def new(self, mode, size, color=None): return self
@@ -3715,7 +3715,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import pystray
     except Exception as e:
-        print(f"Warning: Could not install/import pystray: {e}")
+        print(f"Warning: Could not install/import pystray: {{e}}")
         # Create comprehensive dummy pystray
         class DummyPystray:
             class Menu:
@@ -5044,7 +5044,7 @@ class NotificationWindow:
                                            colors['button_secondary'])
                 minimize_btn.pack(side=tk.RIGHT, padx=5)
         except Exception as e:
-            print(f"Error creating notification window: {e}")
+            print(f"Error creating notification window: {{e}}")
     def request_website_access(self):
         """Request access to a specific website"""
         website = self.website_request_var.get().strip()
@@ -5108,7 +5108,7 @@ class NotificationWindow:
             clean_text = re.sub(r'\s+', ' ', clean_text).strip()
             return clean_text
         except Exception as e:
-            print(f"Error stripping HTML: {e}")
+            print(f"Error stripping HTML: {{e}}")
             # Return original text if processing fails
             return text
 class PushNotificationsClient:
@@ -5145,7 +5145,7 @@ class PushNotificationsClient:
             win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, 
                                  win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) | win32con.WS_EX_TOOLWINDOW)
         except Exception as e:
-            print(f"Warning: Could not hide from taskbar: {e}")
+            print(f"Warning: Could not hide from taskbar: {{e}}")
     def _set_process_title(self):
         """Set proper process title for Task Manager and hide console"""
         try:
@@ -5159,7 +5159,7 @@ class PushNotificationsClient:
                 # Hide the console window (SW_HIDE = 0)
                 ctypes.windll.user32.ShowWindow(console_hwnd, 0)
         except Exception as e:
-            print(f"Warning: Could not set process title or hide console: {e}")
+            print(f"Warning: Could not set process title or hide console: {{e}}")
     def _extract_embedded_icon(self):
         """Extract embedded icon data to PNG file"""
         try:
@@ -5174,7 +5174,7 @@ class PushNotificationsClient:
             print(f"[OK] Extracted embedded icon to: {icon_path.name}")
             return True
         except Exception as e:
-            print(f"Error extracting embedded icon: {e}")
+            print(f"Error extracting embedded icon: {{e}}")
             return False
     def create_tray_icon(self):
         """Create system tray icon with enhanced quick actions menu"""
