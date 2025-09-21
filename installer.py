@@ -3781,9 +3781,9 @@ class PushNotificationsClient:
         # Default configuration values (embedded from config.json)
         default_config = {{
             'version': '{INSTALLER_VERSION}',
-            'client_id': '{self.device_data.get("clientId", "test-client-123") if hasattr(self, "device_data") and self.device_data else "unknown-client"}',
-            'mac_address': '{self.mac_address if hasattr(self, "mac_address") else "00-00-00-00-00-00"}',
-            'api_url': '{self.api_url if hasattr(self, "api_url") else "https://localhost:3000"}',
+            'client_id': '{self.device_data.get("clientId", "unknown-client") if self.device_data else "unknown-client"}',
+            'mac_address': '{self.mac_address}',
+            'api_url': '{self.api_url}',
             'install_path': str(Path(__file__).parent),
             'allowed_websites': []
         }}
@@ -3881,7 +3881,7 @@ class PushNotificationsClient:
             return
         try:
             response = requests.post(
-                f"{self.config['api_url']}/api/request-website",
+                f"{{self.config['api_url']}}/api/request-website",
                 json={{
                     'client_id': self.config['client_id'],
                     'website': website
@@ -3905,7 +3905,7 @@ class PushNotificationsClient:
         try:
             notif = self.notifications[0]
             response = requests.post(
-                f"{self.config['api_url']}/api/complete-notification",
+                f"{{self.config['api_url']}}/api/complete-notification",
                 json={{
                     'client_id': self.config['client_id'],
                     'notification_id': notif['id']
@@ -3938,7 +3938,7 @@ class PushNotificationsClient:
             return
         try:
             response = requests.post(
-                f"{self.config['api_url']}/api/request-uninstall",
+                f"{{self.config['api_url']}}/api/request-uninstall",
                 json={{
                     'client_id': self.config['client_id'],
                     'mac_address': self.config.get('mac_address', ''),
