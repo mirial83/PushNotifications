@@ -4238,12 +4238,14 @@ if os.name == "nt":
             def showerror(self, title, message): print(f"ERROR: {{title}} - {{message}}")
             def askyesno(self, title, message): return True
         messagebox = DummyMessagebox()
-        simpledialog = type('simpledialog', (), {
+        simpledialog_dict = {{
             'askstring': lambda title, prompt, **kwargs: None
-        })()
-        ttk = type('ttk', (), {
+        }}
+        simpledialog = type('simpledialog', (), simpledialog_dict)()
+        ttk_dict = {{
             'Progressbar': DummyTk
-        })()
+        }}
+        ttk = type('ttk', (), ttk_dict)()
     # Import PIL components
     try:
         from PIL import Image, ImageDraw
@@ -4324,7 +4326,8 @@ if os.name == "nt":
             pystray = DummyPystray()
             # Create dummy win32 modules
             class DummyWin32:
-                def __getattr__(self, name): return lambda *args, **kwargs: None
+                def __getattr__(self, name): 
+                    return lambda *args, **kwargs: None
             win32gui = DummyWin32()
             win32con = DummyWin32()
             win32api = DummyWin32()
