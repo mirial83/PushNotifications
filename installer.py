@@ -4001,7 +4001,7 @@ class PushNotificationsClient:
             status_text += f"Version: {CLIENT_VERSION}\n"
             status_text += f"Client ID: {CLIENT_ID}\n"
             status_text += f"Status: Running\n"
-            status_text += f"Active Notifications: {active_count}\n"
+            status_text += f"Active Notifications: {{active_count}}\n"
             if self.snooze_until and time.time() < self.snooze_until:
                 remaining = int((self.snooze_until - time.time()) / 60)
                 status_text += f"Snooze: {remaining} minutes remaining\n"
