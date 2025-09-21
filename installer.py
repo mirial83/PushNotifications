@@ -3872,7 +3872,7 @@ class PushNotificationsClient:
                 logger.error(f"Failed to update menu: {{e}}")
                 pass
         messagebox.showinfo("Notifications Snoozed",
-                          f"Notifications snoozed for {minutes} minutes")
+                          f"Notifications snoozed for {{minutes}} minutes")
     def _request_website(self):
         """Request access to a website"""
         website = simpledialog.askstring("Website Access Request",
@@ -4232,9 +4232,9 @@ if os.name == "nt":
             'END': 'end'
         })()
         class DummyMessagebox:
-            def showinfo(self, title, message): print(f"INFO: {title} - {message}")
-            def showwarning(self, title, message): print(f"WARNING: {title} - {message}")
-            def showerror(self, title, message): print(f"ERROR: {title} - {message}")
+            def showinfo(self, title, message): print(f"INFO: {{title}} - {{message}}")
+            def showwarning(self, title, message): print(f"WARNING: {{title}} - {{message}}")
+            def showerror(self, title, message): print(f"ERROR: {{title}} - {{message}}")
             def askyesno(self, title, message): return True
         messagebox = DummyMessagebox()
         simpledialog = type('simpledialog', (), {
