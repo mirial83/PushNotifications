@@ -4122,7 +4122,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import requests
     except Exception as e:
-        print(f"Warning: Could not install/import requests: {e}")
+        print(f"Warning: Could not install/import requests: {{e}}")
         # Create dummy requests module
         class DummyRequests:
             def post(self, *args, **kwargs):
@@ -4139,7 +4139,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import psutil
     except Exception as e:
-        print(f"Warning: Could not install/import psutil: {e}")
+        print(f"Warning: Could not install/import psutil: {{e}}")
         # Create dummy psutil module
         class DummyPsutil:
             def process_iter(self, *args, **kwargs): return []
@@ -4157,7 +4157,7 @@ except ImportError:
         from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     except Exception as e:
-        print(f"Warning: Could not install/import cryptography: {e}")
+        print(f"Warning: Could not install/import cryptography: {{e}}")
         # Define dummy classes to prevent crashes
         class PBKDF2HMAC:
             def __init__(self, **kwargs): pass
@@ -4207,7 +4207,7 @@ if os.name == "nt":
             def update(self): pass
             def update_idletasks(self): pass
             def mainloop(self): pass
-        tk = type('tk', (), {
+        tk_dict = {{
             'Tk': DummyTk,
             'Toplevel': DummyTk,
             'Frame': DummyTk,
@@ -4230,7 +4230,8 @@ if os.name == "nt":
             'DISABLED': 'disabled',
             'NORMAL': 'normal',
             'END': 'end'
-        })()
+        }}
+        tk = type('tk', (), tk_dict)()
         class DummyMessagebox:
             def showinfo(self, title, message): print(f"INFO: {{title}} - {{message}}")
             def showwarning(self, title, message): print(f"WARNING: {{title}} - {{message}}")
@@ -4252,7 +4253,7 @@ if os.name == "nt":
                                 creationflags=subprocess.CREATE_NO_WINDOW)
             from PIL import Image, ImageDraw
         except Exception as e:
-            print(f"Warning: Could not install/import PIL: {e}")
+            print(f"Warning: Could not install/import PIL: {{e}}")
             # Create dummy PIL classes
             class DummyImage:
                 def new(self, mode, size, color=None): return self
@@ -4282,7 +4283,7 @@ if os.name == "nt":
         import screeninfo
         WINDOWS_FEATURES_AVAILABLE = True
     except ImportError as e:
-        print(f"Warning: Windows features limited due to missing modules: {e}")
+        print(f"Warning: Windows features limited due to missing modules: {{e}}")
         WINDOWS_FEATURES_AVAILABLE = False
         # Try to install missing packages
         missing_packages = ['pystray>=0.19.4', 'pywin32>=306', 'screeninfo>=0.8.1']
@@ -4291,7 +4292,7 @@ if os.name == "nt":
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg],
                                     creationflags=subprocess.CREATE_NO_WINDOW)
             except Exception as install_e:
-                print(f"Warning: Could not install {pkg}: {install_e}")
+                print(f"Warning: Could not install {{pkg}}: {{install_e}}")
         # Try importing again after installation attempt
         try:
             import pystray
@@ -4339,7 +4340,7 @@ if os.name == "nt":
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg],
                                     creationflags=subprocess.CREATE_NO_WINDOW)
             except Exception as install_e:
-                print(f"Warning: Could not install {pkg}: {install_e}")
+                print(f"Warning: Could not install {{pkg}}: {{install_e}}")
         # Try importing again after installation
         try:
             import pystray
@@ -4404,7 +4405,7 @@ else:
             def mainloop(self): pass
         tk = type('tk', (), {'Tk': DummyTk})()
         messagebox = type('messagebox', (), {
-            'showinfo': lambda title, msg: print(f"INFO: {title} - {msg}")
+            'showinfo': lambda title, msg: print(f"INFO: {{title}} - {{msg}}")
         })()
         simpledialog = None
         ttk = None
@@ -4424,12 +4425,12 @@ class OverlayManager:
                 overlay.configure(bg='grey')
                 overlay.attributes('-alpha', 0.25)  # 25% opacity
                 overlay.attributes('-topmost', True)
-                overlay.geometry(f"{monitor.width}x{monitor.height}+{monitor.x}+{monitor.y}")
+                overlay.geometry(f"{{monitor.width}}x{{monitor.height}}+{{monitor.x}}+{{monitor.y}}")
                 overlay.overrideredirect(True)
                 overlay.attributes('-fullscreen', True)
                 self.overlays.append(overlay)
         except Exception as e:
-            logging.warning(f"Error creating overlays: {e}")
+            logging.warning(f"Error creating overlays: {{e}}")
     def hide_overlays(self):
         """Hide all overlays"""
         for overlay in self.overlays:
@@ -4528,14 +4529,14 @@ if __name__ == "__main__":
         if console_hwnd != 0:
             ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
     except Exception as e:
-        print(f"Could not hide console: {e}")
+        print(f"Could not hide console: {{e}}")
     # Create and run system tray icon
     try:
         icon = client.create_tray_icon()
         if icon:
             icon.run()
     except Exception as e:
-        print(f"Could not create tray icon: {e}")
+        print(f"Could not create tray icon: {{e}}")
     # Run the main loop if no tray icon
     import time
     while client.running:
