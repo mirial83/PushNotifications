@@ -3633,7 +3633,7 @@ if os.name == 'nt':  # Windows only
                 return True
             else:
                 stderr_msg = getattr(result, 'stderr', 'Unknown error')
-                print(f"[ERROR] Failed to request elevation: {stderr_msg}")
+                print(f"[ERROR] Failed to request elevation: {{stderr_msg}}")
                 return False
         except Exception as e:
             print(f"[ERROR] Could not request admin privileges: {e}")
