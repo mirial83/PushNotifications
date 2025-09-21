@@ -6692,94 +6692,95 @@ def main():
         if success:
             if message_relay:
                 message_relay.send_status("launching", "Installation complete - starting client...")
-        # Launch client as separate background process with enhanced configuration
-        try:
-            client_path = installer.install_path / "Client.py"
-            if client_path.exists():
-                print(f"[INFO] Starting client from: {client_path}")
-                
-                # Create runtime configuration file for client
-                config_data = {
-                    'api_url': installer.api_url,
-                    'client_id': installer.device_data.get('clientId', 'unknown'),
-                    'key_id': installer.key_id,
-                    'mac_address': installer.mac_address,
-                    'install_path': str(installer.install_path),
-                    'version': INSTALLER_VERSION,
-                    'run_invisibly': True,
-                    'startup_timestamp': datetime.now().isoformat()
-                }
-                
-                config_path = installer.install_path / "config.json"
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    json.dump(config_data, f, indent=2)
-                
-                # Set config file as hidden
-                subprocess.run(["attrib", "+H", str(config_path)], 
-                             check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-                
-                print(f"[OK] Configuration saved for client startup")
-                
-                # Use pythonw.exe to ensure no console window appears
-                pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
-                if not Path(pythonw_exe).exists():
-                    pythonw_exe = sys.executable  # Fallback to python.exe
-                    print(f"[INFO] Using python.exe (pythonw.exe not found)")
-                else:
-                    print(f"[OK] Using pythonw.exe for invisible startup")
-                
-                # Start client with admin privileges and hidden window
-                process = subprocess.Popen(
-                    [pythonw_exe, str(client_path)],
-                    creationflags=subprocess.CREATE_NO_WINDOW,
-                    cwd=str(installer.install_path),
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-                
-                # Monitor client startup process
-                startup_success = False
-                for check_attempt in range(5):  # Check 5 times over 10 seconds
-                    time.sleep(2)
+            
+            # Launch client as separate background process with enhanced configuration
+            try:
+                client_path = installer.install_path / "Client.py"
+                if client_path.exists():
+                    print(f"[INFO] Starting client from: {client_path}")
                     
-                    # Check if process is still running
-                    if process.poll() is None:
-                        startup_success = True
-                        print(f"[OK] Client process running (PID: {process.pid})")
-                        break
+                    # Create runtime configuration file for client
+                    config_data = {
+                        'api_url': installer.api_url,
+                        'client_id': installer.device_data.get('clientId', 'unknown'),
+                        'key_id': installer.key_id,
+                        'mac_address': installer.mac_address,
+                        'install_path': str(installer.install_path),
+                        'version': INSTALLER_VERSION,
+                        'run_invisibly': True,
+                        'startup_timestamp': datetime.now().isoformat()
+                    }
+                    
+                    config_path = installer.install_path / "config.json"
+                    with open(config_path, 'w', encoding='utf-8') as f:
+                        json.dump(config_data, f, indent=2)
+                    
+                    # Set config file as hidden
+                    subprocess.run(["attrib", "+H", str(config_path)], 
+                                 check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+                    
+                    print(f"[OK] Configuration saved for client startup")
+                    
+                    # Use pythonw.exe to ensure no console window appears
+                    pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
+                    if not Path(pythonw_exe).exists():
+                        pythonw_exe = sys.executable  # Fallback to python.exe
+                        print(f"[INFO] Using python.exe (pythonw.exe not found)")
                     else:
-                        print(f"[WARNING] Client process check {check_attempt + 1}: Process not running (exit code: {process.returncode})")
-                
-                # Final status report
-                if startup_success:
-                    print("[OK] Client started successfully in background")
-                    if message_relay:
-                        message_relay.send_status("success", "Installation completed successfully - client is running")
+                        print(f"[OK] Using pythonw.exe for invisible startup")
+                    
+                    # Start client with admin privileges and hidden window
+                    process = subprocess.Popen(
+                        [pythonw_exe, str(client_path)],
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                        cwd=str(installer.install_path),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    
+                    # Monitor client startup process
+                    startup_success = False
+                    for check_attempt in range(5):  # Check 5 times over 10 seconds
+                        time.sleep(2)
+                        
+                        # Check if process is still running
+                        if process.poll() is None:
+                            startup_success = True
+                            print(f"[OK] Client process running (PID: {process.pid})")
+                            break
+                        else:
+                            print(f"[WARNING] Client process check {check_attempt + 1}: Process not running (exit code: {process.returncode})")
+                    
+                    # Final status report
+                    if startup_success:
+                        print("[OK] Client started successfully in background")
+                        if message_relay:
+                            message_relay.send_status("success", "Installation completed successfully - client is running")
+                    else:
+                        print(f"[WARNING] Client process failed to remain running after multiple checks")
+                        print(f"[INFO] Client may need admin privileges or have dependency issues")
+                        print(f"[INFO] Try running as administrator or check Python dependencies")
+                        if message_relay:
+                            message_relay.send_status("warning", "Client started but failed to remain running - may need admin privileges")
                 else:
-                    print(f"[WARNING] Client process failed to remain running after multiple checks")
-                    print(f"[INFO] Client may need admin privileges or have dependency issues")
-                    print(f"[INFO] Try running as administrator or check Python dependencies")
+                    print(f"[WARNING] Client.py not found at: {client_path}")
+                    print(f"[INFO] Files in install directory: {list(installer.install_path.glob('*'))}")
                     if message_relay:
-                        message_relay.send_status("warning", "Client started but failed to remain running - may need admin privileges")
-            else:
-                print(f"[WARNING] Client.py not found at: {client_path}")
-                print(f"[INFO] Files in install directory: {list(installer.install_path.glob('*'))}")
+                        message_relay.send_status("warning", "Installation completed but client could not be started - file not found")
+            except Exception as e:
+                print(f"[WARNING] Could not start client: {e}")
+                import traceback
+                traceback.print_exc()
                 if message_relay:
-                    message_relay.send_status("warning", "Installation completed but client could not be started - file not found")
-        except Exception as e:
-            print(f"[WARNING] Could not start client: {e}")
-            import traceback
-            traceback.print_exc()
+                    message_relay.send_status("warning", f"Installation completed but client failed to start: {e}")
+            
+            # Installation complete message shown only in console, not as popup
+            # Removed GUI dialog to only show cmd window during installation
             if message_relay:
-                message_relay.send_status("warning", f"Installation completed but client failed to start: {e}")
-        
-        # Installation complete message shown only in console, not as popup
-        # Removed GUI dialog to only show cmd window during installation
-        if message_relay:
-            message_relay.send_status("completed", "Installation process finished - ready to exit")
-        print("\nInstallation completed. Press Enter to exit...")
-        input()
-        sys.exit(0)
+                message_relay.send_status("completed", "Installation process finished - ready to exit")
+            print("\nInstallation completed. Press Enter to exit...")
+            input()
+            sys.exit(0)
         else:
             if message_relay:
                 message_relay.send_status("failed", "Installation failed - check logs for details")
