@@ -3731,7 +3731,7 @@ except ImportError:
                     self.image = image
                     self.title = title
                     self.menu = menu
-                    print(f"Created system tray icon: {name} (pystray not available - running in console mode)")
+                    print(f"Created system tray icon: {{self.name}} (pystray not available - running in console mode)")
                 def run(self): 
                     print("Running client in console mode (system tray not available)")
                     print("Press Ctrl+C to exit")
