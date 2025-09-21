@@ -2108,7 +2108,7 @@ if ($process) {{
                 # Method 2: Try win32api ShellExecute (traditional method)
                 try:
                     import win32api
-                    script_args = ' '.join([f'"{{arg}}"' for arg in sys.argv])
+                    script_args = ' '.join([f'"{arg}"' for arg in sys.argv])
                     result = win32api.ShellExecute(
                         None, "runas", sys.executable, script_args, None, 1
                     )
@@ -3497,10 +3497,10 @@ if os.name == 'nt':  # Windows only
                 print("[OK] Client elevation request sent successfully")
                 return True
             else:
-                print(f"[ERROR] Failed to request elevation: {{result.stderr}}")
+                print(f"[ERROR] Failed to request elevation: {result.stderr}")
                 return False
         except Exception as e:
-            print(f"[ERROR] Could not request admin privileges: {{e}}")
+            print(f"[ERROR] Could not request admin privileges: {e}")
             return False
     
     # Check admin privileges and restart if needed
@@ -3526,13 +3526,13 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import requests
     except Exception as e:
-        print(f"Warning: Could not install/import requests: {{e}}")
+        print(f"Warning: Could not install/import requests: {e}")
         class DummyRequests:
             def post(self, *args, **kwargs):
                 class DummyResponse:
                     status_code = 200
                     ok = True
-                    def json(self): return {{'success': False, 'message': 'requests not available'}}
+                    def json(self): return {'success': False, 'message': 'requests not available'}
                 return DummyResponse()
         requests = DummyRequests()
 
@@ -3545,7 +3545,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         from PIL import Image, ImageDraw, ImageFont
     except Exception as e:
-        print(f"Warning: Could not install/import PIL: {{e}}")
+        print(f"Warning: Could not install/import PIL: {e}")
         # Create dummy PIL classes
         class DummyImage:
             def new(self, mode, size, color=None): return self
@@ -3579,7 +3579,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import pystray
     except Exception as e:
-        print(f"Warning: Could not install/import pystray: {{e}}")
+        print(f"Warning: Could not install/import pystray: {e}")
         # Create comprehensive dummy pystray
         class DummyPystray:
             class Menu:
@@ -3595,7 +3595,7 @@ except ImportError:
                     self.image = image
                     self.title = title
                     self.menu = menu
-                    print(f"Created system tray icon: {{name}} (pystray not available - running in console mode)")
+                    print(f"Created system tray icon: {name} (pystray not available - running in console mode)")
                 def run(self): 
                     print("Running client in console mode (system tray not available)")
                     print("Press Ctrl+C to exit")
@@ -3604,7 +3604,7 @@ except ImportError:
                         while True:
                             time.sleep(1)
                     except KeyboardInterrupt:
-                        print("\\\\nShutting down client...")
+                        print("\nShutting down client...")
                         pass
                 def stop(self): pass
                 def update_menu(self): pass
@@ -3616,16 +3616,16 @@ try:
 except ImportError:
     print("Warning: tkinter not available")
     class DummyMessagebox:
-        def showinfo(self, title, message): print(f"INFO: {{title}} - {{message}}")
-        def showwarning(self, title, message): print(f"WARNING: {{title}} - {{message}}")
-        def showerror(self, title, message): print(f"ERROR: {{title}} - {{message}}")
+        def showinfo(self, title, message): print(f"INFO: {title} - {message}")
+        def showwarning(self, title, message): print(f"WARNING: {title} - {message}")
+        def showerror(self, title, message): print(f"ERROR: {title} - {message}")
         def askyesno(self, title, message): 
-            print(f"QUESTION: {{title}} - {{message}}")
+            print(f"QUESTION: {title} - {message}")
             return input("Enter y/n: ").lower().startswith('y')
     messagebox = DummyMessagebox()
     class DummySimpledialog:
         def askstring(self, title, prompt, **kwargs): 
-            print(f"{{title}}: {{prompt}}")
+            print(f"{title}: {prompt}")
             return input("Enter value: ") or None
     simpledialog = DummySimpledialog()
 
@@ -3660,7 +3660,7 @@ class PushNotificationsClient:
                 default_config.update(config)
                 return default_config
         except Exception as e:
-            logger.debug(f"No config file found, using embedded defaults: {{e}}")
+            logger.debug(f"No config file found, using embedded defaults: {e}")
             return default_config
     def create_tray_icon(self):
         """Create and configure the system tray icon"""
@@ -3682,7 +3682,7 @@ class PushNotificationsClient:
             y = (64 - text_height) // 2
             dc.text((x, y), text, fill='white', font=font)
         except Exception as e:
-            logger.warning(f"Could not add text to icon: {{e}}")
+            logger.warning(f"Could not add text to icon: {e}")
         # Create the menu
         menu = (
             pystray.MenuItem("View Current Notification", self._view_notification,
@@ -3733,10 +3733,10 @@ class PushNotificationsClient:
             try:
                 self.icon.update_menu()
             except Exception as e:
-                logger.error(f"Failed to update menu: {{e}}")
+                logger.error(f"Failed to update menu: {e}")
                 pass
         messagebox.showinfo("Notifications Snoozed",
-                          f"Notifications snoozed for {{minutes}} minutes")
+                          f"Notifications snoozed for {minutes} minutes")
     def _request_website(self):
         """Request access to a website"""
         website = simpledialog.askstring("Website Access Request",
@@ -3745,7 +3745,7 @@ class PushNotificationsClient:
             return
         try:
             response = requests.post(
-                f"{{self.config['api_url']}}/api/request-website",
+                f"{self.config['api_url']}/api/request-website",
                 json={{
                     'client_id': self.config['client_id'],
                     'website': website
@@ -3759,7 +3759,7 @@ class PushNotificationsClient:
                 messagebox.showerror("Request Failed",
                                    "Failed to submit website access request.")
         except Exception as e:
-            logger.error(f"Failed to request website access: {{e}}")
+            logger.error(f"Failed to request website access: {e}")
             messagebox.showerror("Error",
                                "Failed to submit website access request. Please try again later.")
     def _complete_notification(self):
@@ -3769,7 +3769,7 @@ class PushNotificationsClient:
         try:
             notif = self.notifications[0]
             response = requests.post(
-                f"{{self.config['api_url']}}/api/complete-notification",
+                f"{self.config['api_url']}/api/complete-notification",
                 json={{
                     'client_id': self.config['client_id'],
                     'notification_id': notif['id']
@@ -3785,7 +3785,7 @@ class PushNotificationsClient:
                 messagebox.showerror("Error",
                                    "Failed to complete notification. Please try again.")
         except Exception as e:
-            logger.error(f"Failed to complete notification: {{e}}")
+            logger.error(f"Failed to complete notification: {e}")
             messagebox.showerror("Error",
                                "Failed to complete notification. Please try again later.")
     def _request_uninstall(self):
@@ -3802,7 +3802,7 @@ class PushNotificationsClient:
             return
         try:
             response = requests.post(
-                f"{{self.config['api_url']}}/api/request-uninstall",
+                f"{self.config['api_url']}/api/request-uninstall",
                 json={{
                     'client_id': self.config['client_id'],
                     'mac_address': self.config.get('mac_address', ''),
@@ -3832,7 +3832,7 @@ class PushNotificationsClient:
                 messagebox.showerror("Request Failed",
                                    "Failed to submit uninstall request.")
         except Exception as e:
-            logger.error(f"Failed to request uninstall: {{e}}")
+            logger.error(f"Failed to request uninstall: {e}")
             messagebox.showerror("Error",
                                "Failed to submit uninstall request. Please try again later.")
     def _perform_uninstall(self):
@@ -3844,7 +3844,7 @@ class PushNotificationsClient:
             uninstall_script = (
                 f"@echo off\n"
                 f"timeout /t 2 /nobreak\n"
-                f"rmdir /s /q \"{{self.config.get('install_path', '')}}\"\n"
+                f"rmdir /s /q \"{self.config.get('install_path', '')}\"\n"
             )
             script_path = os.path.join(os.environ['TEMP'], 'uninstall.bat')
             with open(script_path, 'w') as f:
@@ -3853,7 +3853,7 @@ class PushNotificationsClient:
             os.startfile(script_path)
             sys.exit(0)
         except Exception as e:
-            logger.error(f"Failed to perform uninstall: {{e}}")
+            logger.error(f"Failed to perform uninstall: {e}")
             messagebox.showerror("Error",
                                "Failed to uninstall. Please try again later or contact support.")
             return False
@@ -3862,25 +3862,25 @@ class PushNotificationsClient:
         try:
             active_count = len([n for n in self.notifications if not n.get('completed', False)])
             status_text = f"Push Notifications Client\n\n"
-            status_text += f"Version: {{self.config.get('version', 'Unknown')}}\n"
-            status_text += f"Client ID: {{self.config.get('client_id', 'Unknown')}}\n"
+            status_text += f"Version: {self.config.get('version', 'Unknown')}\n"
+            status_text += f"Client ID: {self.config.get('client_id', 'Unknown')}\n"
             status_text += f"Status: Running\n"
-            status_text += f"Active Notifications: {{active_count}}\n"
+            status_text += f"Active Notifications: {active_count}\n"
             if self.snooze_until and time.time() < self.snooze_until:
                 remaining = int((self.snooze_until - time.time()) / 60)
-                status_text += f"Snooze: {{remaining}} minutes remaining\n"
+                status_text += f"Snooze: {remaining} minutes remaining\n"
             else:
                 status_text += f"Snooze: Not active\n"
             messagebox.showinfo("Client Status", status_text)
         except Exception as e:
-            logger.error(f"Error showing status: {{e}}")
+            logger.error(f"Error showing status: {e}")
             messagebox.showerror("Error", "Failed to show client status.")
     def _show_about(self):
         """Show about dialog"""
         try:
             about_text = f"""Push Notifications Client
-Version: {{self.config.get('version', 'Unknown')}}
-Client ID: {{self.config.get('client_id', 'Unknown')}}
+Version: {self.config.get('version', 'Unknown')}
+Client ID: {self.config.get('client_id', 'Unknown')}
 © 2024 Push Notifications
 Advanced notification management system
 Features:
@@ -3890,7 +3890,7 @@ Features:
 • Secure client management"""
             messagebox.showinfo("About Push Notifications", about_text)
         except Exception as e:
-            logger.error(f"Error showing about: {{e}}")
+            logger.error(f"Error showing about: {e}")
             messagebox.showerror("Error", "Failed to show about information.")
     def _has_notifications(self, *args):
         """Check if there are active notifications"""
@@ -3921,7 +3921,7 @@ Features:
             icon = self.create_tray_icon()
             icon.run()
         except Exception as e:
-            logger.error(f"Client error: {{e}}")
+            logger.error(f"Client error: {e}")
             sys.exit(1)
 if __name__ == '__main__':
     # Configure logging
@@ -3940,7 +3940,7 @@ if __name__ == '__main__':
         if console_hwnd != 0:
             ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
     except Exception as e:
-        logger.debug(f"Could not hide console window: {{e}}")
+        logger.debug(f"Could not hide console window: {e}")
         pass  # Ignore errors on non-Windows platforms
     # Set process title for better task manager visibility
     try:
@@ -3951,7 +3951,7 @@ if __name__ == '__main__':
             import setproctitle
             setproctitle.setproctitle("PushNotifications Client")
     except Exception as e:
-        logger.debug(f"Could not set process title: {{e}}")
+        logger.debug(f"Could not set process title: {e}")
         pass
     # Start client
     client = PushNotificationsClient()
@@ -3986,13 +3986,13 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import requests
     except Exception as e:
-        print(f"Warning: Could not install/import requests: {{e}}")
+        print(f"Warning: Could not install/import requests: {e}")
         # Create dummy requests module
         class DummyRequests:
             def post(self, *args, **kwargs):
                 class DummyResponse:
                     status_code = 200
-                    def json(self): return {{'success': False, 'message': 'requests not available'}}
+                    def json(self): return {'success': False, 'message': 'requests not available'}
                 return DummyResponse()
         requests = DummyRequests()
 try:
@@ -4003,7 +4003,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import psutil
     except Exception as e:
-        print(f"Warning: Could not install/import psutil: {{e}}")
+        print(f"Warning: Could not install/import psutil: {e}")
         # Create dummy psutil module
         class DummyPsutil:
             def process_iter(self, *args, **kwargs): return []
@@ -4021,7 +4021,7 @@ except ImportError:
         from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     except Exception as e:
-        print(f"Warning: Could not install/import cryptography: {{e}}")
+        print(f"Warning: Could not install/import cryptography: {e}")
         # Define dummy classes to prevent crashes
         class PBKDF2HMAC:
             def __init__(self, **kwargs): pass
@@ -4071,7 +4071,7 @@ if os.name == "nt":
             def update(self): pass
             def update_idletasks(self): pass
             def mainloop(self): pass
-        tk = type('tk', (), {{
+        tk = type('tk', (), {
             'Tk': DummyTk,
             'Toplevel': DummyTk,
             'Frame': DummyTk,
@@ -4094,19 +4094,19 @@ if os.name == "nt":
             'DISABLED': 'disabled',
             'NORMAL': 'normal',
             'END': 'end'
-        }})()
+        })()
         class DummyMessagebox:
-            def showinfo(self, title, message): print(f"INFO: {{title}} - {{message}}")
-            def showwarning(self, title, message): print(f"WARNING: {{title}} - {{message}}")
-            def showerror(self, title, message): print(f"ERROR: {{title}} - {{message}}")
+            def showinfo(self, title, message): print(f"INFO: {title} - {message}")
+            def showwarning(self, title, message): print(f"WARNING: {title} - {message}")
+            def showerror(self, title, message): print(f"ERROR: {title} - {message}")
             def askyesno(self, title, message): return True
         messagebox = DummyMessagebox()
-        simpledialog = type('simpledialog', (), {{
+        simpledialog = type('simpledialog', (), {
             'askstring': lambda title, prompt, **kwargs: None
-        }})()
-        ttk = type('ttk', (), {{
+        })()
+        ttk = type('ttk', (), {
             'Progressbar': DummyTk
-        }})()
+        })()
     # Import PIL components
     try:
         from PIL import Image, ImageDraw
@@ -4116,7 +4116,7 @@ if os.name == "nt":
                                 creationflags=subprocess.CREATE_NO_WINDOW)
             from PIL import Image, ImageDraw
         except Exception as e:
-            print(f"Warning: Could not install/import PIL: {{e}}")
+            print(f"Warning: Could not install/import PIL: {e}")
             # Create dummy PIL classes
             class DummyImage:
                 def new(self, mode, size, color=None): return self
@@ -4146,7 +4146,7 @@ if os.name == "nt":
         import screeninfo
         WINDOWS_FEATURES_AVAILABLE = True
     except ImportError as e:
-        print(f"Warning: Windows features limited due to missing modules: {{e}}")
+        print(f"Warning: Windows features limited due to missing modules: {e}")
         WINDOWS_FEATURES_AVAILABLE = False
         # Try to install missing packages
         missing_packages = ['pystray>=0.19.4', 'pywin32>=306', 'screeninfo>=0.8.1']
@@ -4155,7 +4155,7 @@ if os.name == "nt":
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg],
                                     creationflags=subprocess.CREATE_NO_WINDOW)
             except Exception as install_e:
-                print(f"Warning: Could not install {{pkg}}: {{install_e}}")
+                print(f"Warning: Could not install {pkg}: {install_e}")
         # Try importing again after installation attempt
         try:
             import pystray
@@ -4203,7 +4203,7 @@ if os.name == "nt":
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg],
                                     creationflags=subprocess.CREATE_NO_WINDOW)
             except Exception as install_e:
-                print(f"Warning: Could not install {{pkg}}: {{install_e}}")
+                print(f"Warning: Could not install {pkg}: {install_e}")
         # Try importing again after installation
         try:
             import pystray
@@ -4266,10 +4266,10 @@ else:
             def winfo_screenheight(self): return 1080
             def update(self): pass
             def mainloop(self): pass
-        tk = type('tk', (), {{'Tk': DummyTk}})()
-        messagebox = type('messagebox', (), {{
-            'showinfo': lambda title, msg: print(f"INFO: {{title}} - {{msg}}")
-        }})()
+        tk = type('tk', (), {'Tk': DummyTk})()
+        messagebox = type('messagebox', (), {
+            'showinfo': lambda title, msg: print(f"INFO: {title} - {msg}")
+        })()
         simpledialog = None
         ttk = None
 # Overlay Manager class for multi-monitor overlays
@@ -4288,12 +4288,12 @@ class OverlayManager:
                 overlay.configure(bg='grey')
                 overlay.attributes('-alpha', 0.25)  # 25% opacity
                 overlay.attributes('-topmost', True)
-                overlay.geometry(f"{{monitor.width}}x{{monitor.height}}+{{monitor.x}}+{{monitor.y}}")
+                overlay.geometry(f"{monitor.width}x{monitor.height}+{monitor.x}+{monitor.y}")
                 overlay.overrideredirect(True)
                 overlay.attributes('-fullscreen', True)
                 self.overlays.append(overlay)
         except Exception as e:
-            logging.warning(f"Error creating overlays: {{e}}")
+            logging.warning(f"Error creating overlays: {e}")
     def hide_overlays(self):
         """Hide all overlays"""
         for overlay in self.overlays:
@@ -4303,11 +4303,11 @@ class OverlayManager:
                 pass
         self.overlays = []
 # Basic client template - this is just a placeholder
-print(f"PushNotifications Client v{{CLIENT_VERSION}} starting...")
-print(f"Client ID: {{CLIENT_ID}}")
-print(f"MAC Address: {{MAC_ADDRESS}}")
-print(f"API URL: {{API_URL}}")
-print(f"Windows Features Available: {{WINDOWS_FEATURES_AVAILABLE}}")
+print(f"PushNotifications Client v{CLIENT_VERSION} starting...")
+print(f"Client ID: {CLIENT_ID}")
+print(f"MAC Address: {MAC_ADDRESS}")
+print(f"API URL: {API_URL}")
+print(f"Windows Features Available: {WINDOWS_FEATURES_AVAILABLE}")
 class PushNotificationsClient:
     """Main client application class"""
     def __init__(self):
@@ -4375,7 +4375,7 @@ class PushNotificationsClient:
                               "PushNotifications Client", menu)
             return icon
         except Exception as e:
-            print(f"Error creating tray icon: {{str(e)}}")
+            print(f"Error creating tray icon: {str(e)}")
             return None
     def quit(self, icon=None):
         """Clean shutdown of the client"""
@@ -4392,14 +4392,14 @@ if __name__ == "__main__":
         if console_hwnd != 0:
             ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
     except Exception as e:
-        print(f"Could not hide console: {{e}}")
+        print(f"Could not hide console: {e}")
     # Create and run system tray icon
     try:
         icon = client.create_tray_icon()
         if icon:
             icon.run()
     except Exception as e:
-        print(f"Could not create tray icon: {{e}}")
+        print(f"Could not create tray icon: {e}")
     # Run the main loop if no tray icon
     import time
     while client.running:
@@ -5807,7 +5807,7 @@ Features:
         try:
             self.security_active = True
             # Get allowed websites from top notification
-            top_notification = notifications[0] if notifications else {{}}
+            top_notification = notifications[0] if notifications else {}
             allowed_websites = top_notification.get('allowedWebsites', [])
             # Show grey overlays on all monitors
             self.overlay_manager.show_overlays()
@@ -6561,22 +6561,55 @@ def main():
             try:
                 client_path = installer.install_path / "Client.py"
                 if client_path.exists():
+                    print(f"[INFO] Starting client from: {client_path}")
+                    
                     # Use pythonw.exe to ensure no console window appears
                     pythonw_exe = sys.executable.replace('python.exe', 'pythonw.exe')
                     if not Path(pythonw_exe).exists():
                         pythonw_exe = sys.executable  # Fallback to python.exe
-                    subprocess.Popen([pythonw_exe, str(client_path)],
-                                   creationflags=subprocess.CREATE_NO_WINDOW,
-                                   cwd=str(installer.install_path))
-                    print("[OK] Client started in background")
-                    if message_relay:
-                        message_relay.send_status("success", "Installation completed successfully - client is running")
+                    
+                    # Start client with admin privileges and hidden window
+                    process = subprocess.Popen(
+                        [pythonw_exe, str(client_path)],
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                        cwd=str(installer.install_path),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    
+                    # Monitor client startup process
+                    startup_success = False
+                    for check_attempt in range(5):  # Check 5 times over 10 seconds
+                        time.sleep(2)
+                        
+                        # Check if process is still running
+                        if process.poll() is None:
+                            startup_success = True
+                            print(f"[OK] Client process running (PID: {process.pid})")
+                            break
+                        else:
+                            print(f"[WARNING] Client process check {check_attempt + 1}: Process not running (exit code: {process.returncode})")
+                    
+                    # Final status report
+                    if startup_success:
+                        print("[OK] Client started successfully in background")
+                        if message_relay:
+                            message_relay.send_status("success", "Installation completed successfully - client is running")
+                    else:
+                        print(f"[WARNING] Client process failed to remain running after multiple checks")
+                        print(f"[INFO] Client may need admin privileges or have dependency issues")
+                        print(f"[INFO] Try running as administrator or check Python dependencies")
+                        if message_relay:
+                            message_relay.send_status("warning", "Client started but failed to remain running - may need admin privileges")
                 else:
-                    print("[WARNING] Client.py not found, client not started")
+                    print(f"[WARNING] Client.py not found at: {client_path}")
+                    print(f"[INFO] Files in install directory: {list(installer.install_path.glob('*'))}")
                     if message_relay:
-                        message_relay.send_status("warning", "Installation completed but client could not be started")
+                        message_relay.send_status("warning", "Installation completed but client could not be started - file not found")
             except Exception as e:
                 print(f"[WARNING] Could not start client: {e}")
+                import traceback
+                traceback.print_exc()
                 if message_relay:
                     message_relay.send_status("warning", f"Installation completed but client failed to start: {e}")
             # Installation complete message shown only in console, not as popup
