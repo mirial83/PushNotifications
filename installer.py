@@ -4004,7 +4004,7 @@ class PushNotificationsClient:
             status_text += f"Active Notifications: {{active_count}}\n"
             if self.snooze_until and time.time() < self.snooze_until:
                 remaining = int((self.snooze_until - time.time()) / 60)
-                status_text += f"Snooze: {remaining} minutes remaining\n"
+            status_text += f"Snooze: {{remaining}} minutes remaining\n"
             else:
                 status_text += f"Snooze: Not active\n"
             messagebox.showinfo("Client Status", status_text)
