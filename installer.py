@@ -3580,11 +3580,11 @@ exit'''
             return False
     def _get_unified_client_code(self):
         """Get the unified cross-platform client code with complete functionality"""
-        return f'''#!/usr/bin/env python3
+        return '''#!/usr/bin/env python3
 """
 PushNotifications Unified Cross-Platform Client
 Complete system with multi-monitor overlay, notification management, and security controls
-Version: {INSTALLER_VERSION}
+Version: ''' + INSTALLER_VERSION + '''
 Supported Platforms:
 - Windows 10/11 (Full feature set with overlays, tray icon, window management)
 - macOS (Adapted features with system notifications and menu bar)
