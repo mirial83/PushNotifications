@@ -512,7 +512,7 @@ def check_and_install_package(package_name, pip_name=None):
                 logger.info(f"Successfully installed {package_name}")
                 return True
             else:
-                logger.warning(f"Failed to install {package_name}: {result.stderr}")
+                logger.warning(f"Failed to install {package_name}: {getattr(result, 'stderr', 'Unknown error')}")
                 return False
         except subprocess.TimeoutExpired:
             logger.error(f"Installation of {package_name} timed out after 5 minutes")
@@ -2910,7 +2910,7 @@ powershell -Command "Start-Process -FilePath '{sys.executable}' -ArgumentList '{
                     if result.returncode == 0:
                         print(f"[OK] Set hidden/system attributes on Client.py")
                     else:
-                        print(f"[WARNING] Could not set file attributes: {result.stderr}")
+                        print(f"[WARNING] Could not set file attributes: {getattr(result, 'stderr', 'Unknown error')}")
                 except Exception as e:
                     print(f"[WARNING] Error setting file attributes: {e}")
                     
@@ -3094,7 +3094,7 @@ exit'''
                     )
                     
                     if result.returncode != 0:
-                        print(f"[WARNING] Client.py has syntax errors: {result.stderr}")
+                        print(f"[WARNING] Client.py has syntax errors: {getattr(result, 'stderr', 'Unknown error')}")
                         return False
                 except Exception as e:
                     print(f"[WARNING] Could not verify client syntax: {e}")
@@ -3629,10 +3629,11 @@ if os.name == 'nt':  # Windows only
             ], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
             
             if result.returncode == 0:
-                print("[OK] Client elevation request sent successfully")
+                print(f"[OK] Client elevation request sent successfully")
                 return True
             else:
-                print(f"[ERROR] Failed to request elevation: {result.stderr}")
+                stderr_msg = getattr(result, 'stderr', 'Unknown error')
+                print(f"[ERROR] Failed to request elevation: {stderr_msg}")
                 return False
         except Exception as e:
             print(f"[ERROR] Could not request admin privileges: {e}")
