@@ -3668,7 +3668,7 @@ except ImportError:
                 class DummyResponse:
                     status_code = 200
                     ok = True
-                    def json(self): return {'success': False, 'message': 'requests not available'}
+                    def json(self): return {{'success': False, 'message': 'requests not available'}}
                 return DummyResponse()
         requests = DummyRequests()
 
@@ -4128,7 +4128,7 @@ except ImportError:
             def post(self, *args, **kwargs):
                 class DummyResponse:
                     status_code = 200
-                    def json(self): return {'success': False, 'message': 'requests not available'}
+                    def json(self): return {{'success': False, 'message': 'requests not available'}}
                 return DummyResponse()
         requests = DummyRequests()
 try:
