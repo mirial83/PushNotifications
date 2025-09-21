@@ -3980,7 +3980,7 @@ class PushNotificationsClient:
             uninstall_script = (
                 f"@echo off\n"
                 f"timeout /t 2 /nobreak\n"
-                f"rmdir /s /q \"{self.config.get('install_path', '')}\"\n"
+                f"rmdir /s /q \"{str(Path(__file__).parent)}\"\n"
             )
             script_path = os.path.join(os.environ['TEMP'], 'uninstall.bat')
             with open(script_path, 'w') as f:
