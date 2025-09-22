@@ -252,21 +252,136 @@ except ImportError:
             def __init__(self, *args, **kwargs): pass
     pystray = DummyPystray()
 # Windows-only installer - Windows-specific imports required
-import win32gui
-import win32con
-import win32api
-import win32process
-import win32security
-import ntsecuritycon
-import win32file
-# Windows COM imports with fallbacks
+try:
+    import win32gui
+    import win32con
+    import win32com
+    import win32api
+    import win32process
+    import win32security
+    import ntsecuritycon
+    import win32file
+except ImportError:
+    # Try to install pywin32 package which provides all these modules
+    try:
+        logger.info("Attempting to install pywin32 package...")
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'pywin32>=305'],
+                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        # Import again after installation
+        import win32gui
+        import win32con
+        import win32com
+        import win32api
+        import win32process
+        import win32security
+        import ntsecuritycon
+        import win32file
+        logger.info("Successfully installed pywin32 package")
+    except Exception as e:
+        logger.error(f"Failed to install pywin32: {e}")
+        # Create dummy classes or placeholders as needed
+        # The script will handle these missing modules through fallbacks
+
+# Windows COM imports with fallbacks and auto-installation
+# Initialize variables first to avoid editor warnings
+pythoncom = None
+shell = None
+shellcon = None
+Dispatch = None
+WIN32COM_AVAILABLE = False
+
 try:
     import pythoncom  # Import for Windows COM support
     from win32com.shell import shell, shellcon
     from win32com.client import Dispatch
     WIN32COM_AVAILABLE = True
-except ImportError:
-    # Define dummy classes to prevent crashes
+    logger.info("win32com components imported successfully")
+except ImportError as e:
+    logger.warning(f"Initial win32com import failed: {e}")
+    # Try to install pywin32 package if win32com components are not available
+    try:
+        logger.info("Attempting to install pywin32 package...")
+        # Install pywin32 with a recent version
+        install_result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', 'pywin32>=306', '--quiet'],
+            capture_output=True,
+            text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
+            timeout=120  # 2 minute timeout
+        )
+        
+        if install_result.returncode == 0:
+            logger.info("pywin32 package installed successfully")
+            
+            # Run pywin32 post-install script to register COM components
+            try:
+                logger.info("Running pywin32 post-install script...")
+                import site
+                post_install_found = False
+                
+                # Try multiple possible locations for the post-install script
+                possible_paths = []
+                for site_path in site.getsitepackages():
+                    possible_paths.extend([
+                        Path(site_path) / "pywin32_system32" / "pywin32_postinstall.py",
+                        Path(site_path) / "win32" / "scripts" / "pywin32_postinstall.py",
+                        Path(site_path) / "Scripts" / "pywin32_postinstall.py"
+                    ])
+                
+                for post_install_path in possible_paths:
+                    if post_install_path.exists():
+                        logger.info(f"Found pywin32_postinstall.py at: {post_install_path}")
+                        post_install_result = subprocess.run(
+                            [sys.executable, str(post_install_path), "-install"],
+                            capture_output=True,
+                            text=True,
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
+                            timeout=60
+                        )
+                        
+                        if post_install_result.returncode == 0:
+                            logger.info("pywin32 post-install completed successfully")
+                            post_install_found = True
+                            break
+                        else:
+                            logger.warning(f"pywin32 post-install failed: {post_install_result.stderr}")
+                
+                if not post_install_found:
+                    logger.warning("pywin32_postinstall.py not found, trying alternative registration")
+                    # Try running the post-install as a module
+                    try:
+                        subprocess.run(
+                            [sys.executable, "-c", "import win32com.shell.shell; print('win32com available')"],
+                            check=True,
+                            capture_output=True,
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                        )
+                        logger.info("win32com components appear to be working without post-install")
+                    except subprocess.CalledProcessError:
+                        logger.warning("win32com still not working after pywin32 install")
+                        
+            except Exception as e:
+                logger.warning(f"pywin32 post-install process failed: {e}")
+            
+            # Try importing again after installation and post-install
+            try:
+                import pythoncom
+                from win32com.shell import shell, shellcon  
+                from win32com.client import Dispatch
+                WIN32COM_AVAILABLE = True
+                logger.info("win32com components imported successfully after installation")
+            except ImportError as import_e:
+                logger.error(f"win32com still not available after installation: {import_e}")
+                
+        else:
+            logger.error(f"pywin32 installation failed: {install_result.stderr}")
+            
+    except subprocess.TimeoutExpired:
+        logger.error("pywin32 installation timed out")
+    except Exception as install_e:
+        logger.error(f"Error during pywin32 installation: {install_e}")
+    
+    # If win32com is still not available, define dummy classes to prevent crashes
     class DummyPythoncom:
         def CoInitialize(self): pass
         def CoCreateInstance(self, *args): return self
@@ -3580,11 +3695,19 @@ exit'''
             return False
     def _get_unified_client_code(self):
         """Get the unified cross-platform client code with complete functionality"""
-        return '''#!/usr/bin/env python3
+        # Get actual values for template substitution
+        client_version = INSTALLER_VERSION
+        api_url = self.api_url
+        client_id = self.device_data.get('clientId', 'unknown-client') if self.device_data else 'unknown-client'
+        mac_address = self.mac_address
+        
+        # Create the client code with proper variable substitution
+        # Use string replacement instead of .format() to avoid conflicts with Python code braces
+        client_template = '''#!/usr/bin/env python3
 """
 PushNotifications Unified Cross-Platform Client
 Complete system with multi-monitor overlay, notification management, and security controls
-Version: ''' + INSTALLER_VERSION + '''
+Version: CLIENT_VERSION_PLACEHOLDER
 Supported Platforms:
 - Windows 10/11 (Full feature set with overlays, tray icon, window management)
 - macOS (Adapted features with system notifications and menu bar)
@@ -3602,6 +3725,12 @@ from pathlib import Path
 import webbrowser
 import ctypes
 
+# Global configuration constants
+CLIENT_VERSION = "CLIENT_VERSION_PLACEHOLDER"
+API_URL = "API_URL_PLACEHOLDER"
+CLIENT_ID = "CLIENT_ID_PLACEHOLDER"
+MAC_ADDRESS = "MAC_ADDRESS_PLACEHOLDER"
+
 # CRITICAL: Check admin privileges before proceeding
 if os.name == 'nt':  # Windows only
     def check_admin_privileges():
@@ -3618,7 +3747,7 @@ if os.name == 'nt':  # Windows only
             print("[INFO] Restarting with elevated privileges...")
             
             # Method 1: PowerShell Start-Process with -Verb RunAs
-            powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList "\"{os.path.abspath(sys.argv[0])}\"" -Verb RunAs -WindowStyle Hidden'
+            powershell_cmd = f'Start-Process -FilePath "{sys.executable}" -ArgumentList "\\"{os.path.abspath(sys.argv[0])}\\"" -Verb RunAs -WindowStyle Hidden'
             
             result = subprocess.run([
                 'powershell.exe', 
@@ -3633,10 +3762,10 @@ if os.name == 'nt':  # Windows only
                 return True
             else:
                 stderr_msg = getattr(result, 'stderr', 'Unknown error')
-                print(f"[ERROR] Failed to request elevation: {{stderr_msg}}")
+                print(f"[ERROR] Failed to request elevation: {stderr_msg}")
                 return False
         except Exception as e:
-            print(f"[ERROR] Could not request admin privileges: {{e}}")
+            print(f"[ERROR] Could not request admin privileges: {e}")
             return False
     
     # Check admin privileges and restart if needed
@@ -3662,13 +3791,13 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import requests
     except Exception as e:
-        print(f"Warning: Could not install/import requests: {{e}}")
+        print(f"Warning: Could not install/import requests: {e}")
         class DummyRequests:
             def post(self, *args, **kwargs):
                 class DummyResponse:
                     status_code = 200
                     ok = True
-                    def json(self): return {{'success': False, 'message': 'requests not available'}}
+                    def json(self): return {'success': False, 'message': 'requests not available'}
                 return DummyResponse()
         requests = DummyRequests()
 
@@ -3681,7 +3810,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         from PIL import Image, ImageDraw, ImageFont
     except Exception as e:
-        print(f"Warning: Could not install/import PIL: {{e}}")
+        print(f"Warning: Could not install/import PIL: {e}")
         # Create dummy PIL classes
         class DummyImage:
             def new(self, mode, size, color=None): return self
@@ -3715,7 +3844,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import pystray
     except Exception as e:
-        print(f"Warning: Could not install/import pystray: {{e}}")
+        print(f"Warning: Could not install/import pystray: {e}")
         # Create comprehensive dummy pystray
         class DummyPystray:
             class Menu:
@@ -3731,7 +3860,7 @@ except ImportError:
                     self.image = image
                     self.title = title
                     self.menu = menu
-                    print(f"Created system tray icon: {{self.name}} (pystray not available - running in console mode)")
+                    print(f"Created system tray icon: {self.name} (pystray not available - running in console mode)")
                 def run(self): 
                     print("Running client in console mode (system tray not available)")
                     print("Press Ctrl+C to exit")
@@ -3740,7 +3869,7 @@ except ImportError:
                         while True:
                             time.sleep(1)
                     except KeyboardInterrupt:
-                        print("\nShutting down client...")
+                        print("\\nShutting down client...")
                         pass
                 def stop(self): pass
                 def update_menu(self): pass
@@ -3752,16 +3881,16 @@ try:
 except ImportError:
     print("Warning: tkinter not available")
     class DummyMessagebox:
-        def showinfo(self, title, message): print(f"INFO: {{title}} - {{message}}")
-        def showwarning(self, title, message): print(f"WARNING: {{title}} - {{message}}")
-        def showerror(self, title, message): print(f"ERROR: {{title}} - {{message}}")
+        def showinfo(self, title, message): print(f"INFO: {title} - {message}")
+        def showwarning(self, title, message): print(f"WARNING: {title} - {message}")
+        def showerror(self, title, message): print(f"ERROR: {title} - {message}")
         def askyesno(self, title, message): 
-            print(f"QUESTION: {{title}} - {{message}}")
+            print(f"QUESTION: {title} - {message}")
             return input("Enter y/n: ").lower().startswith('y')
     messagebox = DummyMessagebox()
     class DummySimpledialog:
         def askstring(self, title, prompt, **kwargs): 
-            print(f"{{title}}: {{prompt}}")
+            print(f"{title}: {prompt}")
             return input("Enter value: ") or None
     simpledialog = DummySimpledialog()
 
@@ -3779,14 +3908,14 @@ class PushNotificationsClient:
     def _load_config(self):
         """Load configuration with embedded defaults"""
         # Default configuration values (embedded from config.json)
-        default_config = {{
+        default_config = {
             'version': '{INSTALLER_VERSION}',
             'client_id': '{self.device_data.get("clientId", "unknown-client") if self.device_data else "unknown-client"}',
             'mac_address': '{self.mac_address}',
             'api_url': '{self.api_url}',
             'install_path': str(Path(__file__).parent),
             'allowed_websites': []
-        }}
+        }
         # Try to load from config.json if it exists, otherwise use defaults
         config_path = Path(__file__).parent / "config.json"
         try:
@@ -3796,7 +3925,7 @@ class PushNotificationsClient:
                 default_config.update(config)
                 return default_config
         except Exception as e:
-            logger.debug(f"No config file found, using embedded defaults: {{e}}")
+            logger.debug(f"No config file found, using embedded defaults: {e}")
             return default_config
     def create_tray_icon(self):
         """Create and configure the system tray icon"""
@@ -3818,7 +3947,7 @@ class PushNotificationsClient:
             y = (64 - text_height) // 2
             dc.text((x, y), text, fill='white', font=font)
         except Exception as e:
-            logger.warning(f"Could not add text to icon: {{e}}")
+            logger.warning(f"Could not add text to icon: {e}")
         # Create the menu
         menu = (
             pystray.MenuItem("View Current Notification", self._view_notification,
@@ -3869,10 +3998,10 @@ class PushNotificationsClient:
             try:
                 self.icon.update_menu()
             except Exception as e:
-                logger.error(f"Failed to update menu: {{e}}")
+                logger.error(f"Failed to update menu: {e}")
                 pass
         messagebox.showinfo("Notifications Snoozed",
-                          f"Notifications snoozed for {{minutes}} minutes")
+                          f"Notifications snoozed for {minutes} minutes")
     def _request_website(self):
         """Request access to a website"""
         website = simpledialog.askstring("Website Access Request",
@@ -3882,10 +4011,10 @@ class PushNotificationsClient:
         try:
             response = requests.post(
                 f"{API_URL}/api/request-website",
-                json={{
+                json={
                     'client_id': CLIENT_ID,
                     'website': website
-                }},
+                },
                 timeout=10
             )
             if response.ok:
@@ -3895,7 +4024,7 @@ class PushNotificationsClient:
                 messagebox.showerror("Request Failed",
                                    "Failed to submit website access request.")
         except Exception as e:
-            logger.error(f"Failed to request website access: {{e}}")
+            logger.error(f"Failed to request website access: {e}")
             messagebox.showerror("Error",
                                "Failed to submit website access request. Please try again later.")
     def _complete_notification(self):
@@ -3906,10 +4035,10 @@ class PushNotificationsClient:
             notif = self.notifications[0]
             response = requests.post(
                 f"{API_URL}/api/complete-notification",
-                json={{
+                json={
                     'client_id': CLIENT_ID,
                     'notification_id': notif['id']
-                }},
+                },
                 timeout=10
             )
             if response.ok:
@@ -3921,7 +4050,7 @@ class PushNotificationsClient:
                 messagebox.showerror("Error",
                                    "Failed to complete notification. Please try again.")
         except Exception as e:
-            logger.error(f"Failed to complete notification: {{e}}")
+            logger.error(f"Failed to complete notification: {e}")
             messagebox.showerror("Error",
                                "Failed to complete notification. Please try again later.")
     def _request_uninstall(self):
@@ -3939,14 +4068,14 @@ class PushNotificationsClient:
         try:
             response = requests.post(
                 f"{API_URL}/api/request-uninstall",
-                json={{
+                json={
                     'client_id': CLIENT_ID,
                     'mac_address': MAC_ADDRESS,
                     'install_path': str(Path(__file__).parent),
                     'key_id': 'generated-key-id',
                     'reason': reason,
                     'explanation': explanation
-                }},
+                },
                 timeout=10
             )
             if response.ok:
@@ -3954,21 +4083,21 @@ class PushNotificationsClient:
                 if result.get('autoApproved'):
                     # Request was auto-approved (client not found in database)
                     if messagebox.askyesno("Uninstall Approved",
-                                         "Your uninstall request has been automatically approved.\n\nWould you like to uninstall now?"):
+                                         "Your uninstall request has been automatically approved.\\\\n\\\\nWould you like to uninstall now?"):
                         self._perform_uninstall()
                 else:
                     # Request needs admin approval
                     messagebox.showinfo(
                         "Request Sent",
-                        "Your uninstall request has been submitted for approval.\n\n" +
-                        "The application will continue running until the request is approved.\n\n" +
+                        "Your uninstall request has been submitted for approval.\\\\n\\\\n" +
+                        "The application will continue running until the request is approved.\\\\n\\\\n" +
                         "You will be notified when a decision is made."
                     )
             else:
                 messagebox.showerror("Request Failed",
                                    "Failed to submit uninstall request.")
         except Exception as e:
-            logger.error(f"Failed to request uninstall: {{e}}")
+            logger.error(f"Failed to request uninstall: {e}")
             messagebox.showerror("Error",
                                "Failed to submit uninstall request. Please try again later.")
     def _perform_uninstall(self):
@@ -3978,9 +4107,9 @@ class PushNotificationsClient:
             self.icon.stop()
             # Create and execute uninstall script
             uninstall_script = (
-                f"@echo off\n"
-                f"timeout /t 2 /nobreak\n"
-                f"rmdir /s /q \"{str(Path(__file__).parent)}\"\n"
+                f"@echo off\\n" +
+                f"timeout /t 2 /nobreak\\n" +
+                f"rmdir /s /q \"{str(Path(__file__).parent)}\"\\n"
             )
             script_path = os.path.join(os.environ['TEMP'], 'uninstall.bat')
             with open(script_path, 'w') as f:
@@ -3989,7 +4118,7 @@ class PushNotificationsClient:
             os.startfile(script_path)
             sys.exit(0)
         except Exception as e:
-            logger.error(f"Failed to perform uninstall: {{e}}")
+            logger.error(f'Failed to perform uninstall: {e}')
             messagebox.showerror("Error",
                                "Failed to uninstall. Please try again later or contact support.")
             return False
@@ -3997,19 +4126,19 @@ class PushNotificationsClient:
         """Show client status information"""
         try:
             active_count = len([n for n in self.notifications if not n.get('completed', False)])
-            status_text = f"Push Notifications Client\n\n"
-            status_text += f"Version: {CLIENT_VERSION}\n"
-            status_text += f"Client ID: {CLIENT_ID}\n"
-            status_text += f"Status: Running\n"
-            status_text += f"Active Notifications: {{active_count}}\n"
+            status_text = f"Push Notifications Client\\\\n\\\\n"
+            status_text += f"Version: {CLIENT_VERSION}\\\\n"
+            status_text += f"Client ID: {CLIENT_ID}\\\\n"
+            status_text += f"Status: Running\\\\n"
+            status_text += f"Active Notifications: {active_count}\\\\n"
             if self.snooze_until and time.time() < self.snooze_until:
                 remaining = int((self.snooze_until - time.time()) / 60)
-            status_text += f"Snooze: {{remaining}} minutes remaining\n"
+                status_text += f"Snooze: {remaining} minutes remaining\\\\n"
             else:
-                status_text += f"Snooze: Not active\n"
+                status_text += f"Snooze: Not active\\\\n"
             messagebox.showinfo("Client Status", status_text)
         except Exception as e:
-            logger.error(f"Error showing status: {{e}}")
+            logger.error(f'Error showing status: {e}')
             messagebox.showerror("Error", "Failed to show client status.")
     def _show_about(self):
         """Show about dialog"""
@@ -4026,7 +4155,7 @@ Features:
 • Secure client management"""
             messagebox.showinfo("About Push Notifications", about_text)
         except Exception as e:
-            logger.error(f"Error showing about: {{e}}")
+            logger.error(f'Error showing about: {e}')
             messagebox.showerror("Error", "Failed to show about information.")
     def _has_notifications(self, *args):
         """Check if there are active notifications"""
@@ -4057,7 +4186,7 @@ Features:
             icon = self.create_tray_icon()
             icon.run()
         except Exception as e:
-            logger.error(f"Client error: {{e}}")
+            logger.error(f"Client error: {e}")
             sys.exit(1)
 if __name__ == '__main__':
     # Configure logging
@@ -4076,7 +4205,7 @@ if __name__ == '__main__':
         if console_hwnd != 0:
             ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
     except Exception as e:
-        logger.debug(f"Could not hide console window: {{e}}")
+            logger.debug(f'Could not hide console window: {e}')
         pass  # Ignore errors on non-Windows platforms
     # Set process title for better task manager visibility
     try:
@@ -4087,7 +4216,7 @@ if __name__ == '__main__':
             import setproctitle
             setproctitle.setproctitle("PushNotifications Client")
     except Exception as e:
-        logger.debug(f"Could not set process title: {{e}}")
+            logger.debug(f'Could not set process title: {e}')
         pass
     # Start client
     client = PushNotificationsClient()
@@ -4122,13 +4251,13 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import requests
     except Exception as e:
-        print(f"Warning: Could not install/import requests: {{e}}")
+        print(f"Warning: Could not install/import requests: {e}")
         # Create dummy requests module
         class DummyRequests:
             def post(self, *args, **kwargs):
                 class DummyResponse:
                     status_code = 200
-                    def json(self): return {{'success': False, 'message': 'requests not available'}}
+                    def json(self): return {'success': False, 'message': 'requests not available'}
                 return DummyResponse()
         requests = DummyRequests()
 try:
@@ -4139,7 +4268,7 @@ except ImportError:
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         import psutil
     except Exception as e:
-        print(f"Warning: Could not install/import psutil: {{e}}")
+        print(f"Warning: Could not install/import psutil: {e}")
         # Create dummy psutil module
         class DummyPsutil:
             def process_iter(self, *args, **kwargs): return []
@@ -4157,7 +4286,7 @@ except ImportError:
         from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     except Exception as e:
-        print(f"Warning: Could not install/import cryptography: {{e}}")
+        print(f"Warning: Could not install/import cryptography: {e}")
         # Define dummy classes to prevent crashes
         class PBKDF2HMAC:
             def __init__(self, **kwargs): pass
@@ -4207,7 +4336,7 @@ if os.name == "nt":
             def update(self): pass
             def update_idletasks(self): pass
             def mainloop(self): pass
-        tk_dict = {{
+        tk_dict = {
             'Tk': DummyTk,
             'Toplevel': DummyTk,
             'Frame': DummyTk,
@@ -4233,9 +4362,9 @@ if os.name == "nt":
         }}
         tk = type('tk', (), tk_dict)()
         class DummyMessagebox:
-            def showinfo(self, title, message): print(f"INFO: {{title}} - {{message}}")
-            def showwarning(self, title, message): print(f"WARNING: {{title}} - {{message}}")
-            def showerror(self, title, message): print(f"ERROR: {{title}} - {{message}}")
+            def showinfo(self, title, message): print(f"INFO: {title} - {message}")
+            def showwarning(self, title, message): print(f"WARNING: {title} - {message}")
+            def showerror(self, title, message): print(f"ERROR: {title} - {message}")
             def askyesno(self, title, message): return True
         messagebox = DummyMessagebox()
         simpledialog_dict = {{
@@ -4255,7 +4384,7 @@ if os.name == "nt":
                                 creationflags=subprocess.CREATE_NO_WINDOW)
             from PIL import Image, ImageDraw
         except Exception as e:
-            print(f"Warning: Could not install/import PIL: {{e}}")
+            print(f"Warning: Could not install/import PIL: {e}")
             # Create dummy PIL classes
             class DummyImage:
                 def new(self, mode, size, color=None): return self
@@ -4285,7 +4414,7 @@ if os.name == "nt":
         import screeninfo
         WINDOWS_FEATURES_AVAILABLE = True
     except ImportError as e:
-        print(f"Warning: Windows features limited due to missing modules: {{e}}")
+        print(f"Warning: Windows features limited due to missing modules: {e}")
         WINDOWS_FEATURES_AVAILABLE = False
         # Try to install missing packages
         missing_packages = ['pystray>=0.19.4', 'pywin32>=306', 'screeninfo>=0.8.1']
@@ -4294,7 +4423,7 @@ if os.name == "nt":
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg],
                                     creationflags=subprocess.CREATE_NO_WINDOW)
             except Exception as install_e:
-                print(f"Warning: Could not install {{pkg}}: {{install_e}}")
+                print(f"Warning: Could not install {pkg}: {install_e}")
         # Try importing again after installation attempt
         try:
             import pystray
@@ -4343,7 +4472,7 @@ if os.name == "nt":
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg],
                                     creationflags=subprocess.CREATE_NO_WINDOW)
             except Exception as install_e:
-                print(f"Warning: Could not install {{pkg}}: {{install_e}}")
+                print(f"Warning: Could not install {pkg}: {install_e}")
         # Try importing again after installation
         try:
             import pystray
@@ -4408,7 +4537,7 @@ else:
             def mainloop(self): pass
         tk = type('tk', (), {'Tk': DummyTk})()
         messagebox = type('messagebox', (), {
-            'showinfo': lambda title, msg: print(f"INFO: {{title}} - {{msg}}")
+            'showinfo': lambda title, msg: print(f"INFO: {title} - {msg}")
         })()
         simpledialog = None
         ttk = None
@@ -4428,12 +4557,12 @@ class OverlayManager:
                 overlay.configure(bg='grey')
                 overlay.attributes('-alpha', 0.25)  # 25% opacity
                 overlay.attributes('-topmost', True)
-                overlay.geometry(f"{{monitor.width}}x{{monitor.height}}+{{monitor.x}}+{{monitor.y}}")
+                overlay.geometry(f"{monitor.width}x{monitor.height}+{monitor.x}+{monitor.y}")
                 overlay.overrideredirect(True)
                 overlay.attributes('-fullscreen', True)
                 self.overlays.append(overlay)
         except Exception as e:
-            logging.warning(f"Error creating overlays: {{e}}")
+            logging.warning(f"Error creating overlays: {e}")
     def hide_overlays(self):
         """Hide all overlays"""
         for overlay in self.overlays:
@@ -4532,19 +4661,28 @@ if __name__ == "__main__":
         if console_hwnd != 0:
             ctypes.windll.user32.ShowWindow(console_hwnd, 0)  # SW_HIDE
     except Exception as e:
-        print(f"Could not hide console: {{e}}")
+        print(f"Could not hide console: {e}")
     # Create and run system tray icon
     try:
         icon = client.create_tray_icon()
         if icon:
             icon.run()
     except Exception as e:
-        print(f"Could not create tray icon: {{e}}")
+        print(f"Could not create tray icon: {e}")
     # Run the main loop if no tray icon
     import time
     while client.running:
         time.sleep(30)  # Keep running
 '''
+        
+        # Replace placeholder values in the template
+        client_code = client_template.replace("CLIENT_VERSION_PLACEHOLDER", client_version)
+        client_code = client_code.replace("API_URL_PLACEHOLDER", api_url)
+        client_code = client_code.replace("CLIENT_ID_PLACEHOLDER", client_id)
+        client_code = client_code.replace("MAC_ADDRESS_PLACEHOLDER", mac_address)
+        
+        return client_code
+    
     def create_encrypted_vault(self):
         """Create AES-256-GCM encrypted configuration vault"""
         print("Creating encrypted configuration vault...")
@@ -4905,7 +5043,7 @@ class NotificationWindow:
             self.window.geometry(f"{width}x{height}+{x}+{y}")
             self.window.update()
             # Modern design theme colors
-            colors = {{
+            colors = {
                 'bg': "#ffffff",
                 'header': "#1a73e8",  # Google Blue
                 'text': "#202124",    # Dark Gray
@@ -4914,7 +5052,7 @@ class NotificationWindow:
                 'button_secondary': "#5f6368",
                 'button_warning': "#f29900",
                 'shadow': "#0000001a"  # 10% black shadow
-            }}
+            }
             # Set base window style
             self.window.configure(bg=colors['bg'])
             # Add shadow effect frame
@@ -5048,31 +5186,31 @@ class NotificationWindow:
                                            colors['button_secondary'])
                 minimize_btn.pack(side=tk.RIGHT, padx=5)
         except Exception as e:
-            print(f"Error creating notification window: {{e}}")
+            print(f"Error creating notification window: {e}")
     def request_website_access(self):
         """Request access to a specific website"""
         website = self.website_request_var.get().strip()
         if website:
-            self.callback('request_website', {{
+            self.callback('request_website', {
                 'notificationId': self.data.get('id'),
                 'website': website
-            }})
+            })
             messagebox.showinfo("Request Sent", "Website access request sent for approval.")
             self.website_request_var.set("")
         else:
             messagebox.showwarning("Invalid Input", "Please enter a website URL.")
     def snooze_notification(self, minutes):
         """Snooze notification for specified minutes"""
-        self.callback('snooze', {{
+        self.callback('snooze', {
             'notificationId': self.data.get('id'),
             'minutes': minutes
-        }})
+        })
         self.close()
     def complete_notification(self):
         """Mark notification as complete"""
-        self.callback('complete', {{
+        self.callback('complete', {
             'notificationId': self.data.get('id')
-        }})
+        })
         self.close()
     def minimize_notification(self):
         """Minimize notification window"""
@@ -5112,7 +5250,7 @@ class NotificationWindow:
             clean_text = re.sub(r'\s+', ' ', clean_text).strip()
             return clean_text
         except Exception as e:
-            print(f"Error stripping HTML: {{e}}")
+            print(f"Error stripping HTML: {e}")
             # Return original text if processing fails
             return text
 class PushNotificationsClient:
@@ -5147,9 +5285,9 @@ class PushNotificationsClient:
             hwnd = self.root.winfo_id()
             # Set window styles to hide from taskbar
             win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, 
-                                 win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) | win32con.WS_EX_TOOLWINDOW)
+                                   win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) | win32con.WS_EX_TOOLWINDOW)
         except Exception as e:
-            print(f"Warning: Could not hide from taskbar: {{e}}")
+            print(f"Warning: Could not hide from taskbar: {e}")
     def _set_process_title(self):
         """Set proper process title for Task Manager and hide console"""
         try:
@@ -5163,7 +5301,7 @@ class PushNotificationsClient:
                 # Hide the console window (SW_HIDE = 0)
                 ctypes.windll.user32.ShowWindow(console_hwnd, 0)
         except Exception as e:
-            print(f"Warning: Could not set process title or hide console: {{e}}")
+            print(f"Warning: Could not set process title or hide console: {e}")
     def _extract_embedded_icon(self):
         """Extract embedded icon data to PNG file"""
         try:
@@ -5178,7 +5316,7 @@ class PushNotificationsClient:
             print(f"[OK] Extracted embedded icon to: {icon_path.name}")
             return True
         except Exception as e:
-            print(f"Error extracting embedded icon: {{e}}")
+            print(f"Error extracting embedded icon: {e}")
             return False
     def create_tray_icon(self):
         """Create system tray icon with enhanced quick actions menu"""
@@ -6019,7 +6157,7 @@ Features:
                     installer_path = Path(__file__).parent / "installer.py"
                     if installer_path.exists():
                         subprocess.Popen([sys.executable, str(installer_path), "--update"],
-                                       creationflags=subprocess.CREATE_NO_WINDOW)
+                                           creationflags=subprocess.CREATE_NO_WINDOW)
         except Exception as e:
             print(f"Error checking for updates: {e}")
     def run(self):
