@@ -1,26 +1,146 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <meta charset="UTF-8" viewport="device-width" description="Client information and logs" author="Lauren Streich">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="Push Notifications Client Dashboard - Monitor client status, connections and activity logs"> 
+        <meta name="author" content="Lauren Streich">
+        <!--CSS Stylesheets-->
         <link rel="stylesheet" href="styles/client.css">
         <link rel="stylesheet" href="styles/notifications.css">
         <link rel="stylesheet" href="styles/overlays.css">
+        <link rel="stylesheet" href="styles/dashboard.css">
+        <!--Favicon-->
         <link rel="icon" type="image/png" href="assets/icons/pnicon.png">
-        <link rel="scripts" href="">
-        <title></title>
+        <!--Electron Security-->
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+        <title>Push Notifications Client Dashboard</title>
     </head>
     <body>
-        <div id="client-dashboard">
-  <div id="status-panel">
-    <div id="connection-status"></div>
-    <div id="notification-count"></div>
-    <div id="client-version"></div>
-  </div>
-  
-  <div id="log-panel">
-    <div id="recent-activity"></div>
-    <div id="error-log"></div>
-  </div>
-</div>
+      <!--Dashboard Header-->
+        <div id="dashboard-header" class="client-header">
+          <div class="header-left">
+            <h1>Push Notifications Client</h1>
+            <div id="client-identity" class="client-identity">
+              <span id="client-name">Loading...</span>
+              <span id="client-id" class="client-id">ID: ----</span>
+            </div>
+          </div>
+          <div class="header-right">
+            <div id="connection-indicator" class="connection-indicator">
+              <div class="status-dot offline" id="status-dot"></div>
+              <span id="connection-text">Connecting...</span>
+            </div>
+          </div>
+        </div>
+      <!--Enhanced Status Panel-->
+      <div id="status-panel" class="status-panel">
+        <div class="panel-header">
+          <h2>System Status</h2>
+          <div id="last-update" class="last-update">Last updated: Never</div>
+        </div>
+        <div class="status-grid">
+          <div id="connection-status" class="status-card">
+            <div class="status-card-header">
+              <h3>Server Connection</h3>
+              <div class="status-indicator" id="server-status">Connecting</div>
+            </div>
+            <div class="status-card-content">
+              <div class="status-detail">
+                <span class="label">Server URL:</span>
+                <span id="server-url" class="value">Not configured</span>
+              </div>
+              <div class="status-detail">
+                <span class="label">Last Contact:</span>
+                <span id="last-contact" class="value">Never</span>
+              </div>
+            </div>
+          </div>
+          <div id="notification-status" class="status-card">
+            <div class="status-card-header">
+              <h3>Notifications</h3>
+              <div class="status-indicator" id="notification-status-indicator">Ready</div>
+            </div>
+            <div class="status-card-content">
+              <div class="status-detail">
+                <span class="label">Active:</span>
+                <span id="active-notifications" class="value count">0</span>
+              </div>
+              <div class="status-detail">
+                <span class="label">Pending:</span>
+                <span id="pending-notifications" class="value count">0</span>
+              </div>
+              <div class="status-detail">
+                <span class="label">Snoozed:</span>
+                <span id="snoozed-notifications" class="value count">0</span>
+              </div>
+            </div>
+          </div>
+          <div id="system-status" class="status-card">
+            <div class="status-card-header">
+              <h3>System Info</h3>
+              <div class="status-indicator" id="system-status-indicator">Normal</div>
+            </div>
+            <div class="status-card-content">
+              <div class="status-detail">
+                <span class="label">Version:</span>
+                <span id="client-version" class="value">Loading...</span>
+              </div>
+              <div class="status-detail">
+                <span class="label">Uptime:</span>
+                <span id="client-uptime" class="value">0m</span>
+              </div>
+              <div class="status-detail">
+                <span class="label">Admin Mode:</span>
+                <span id="admin-status" class="value">Unknown</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!--Enhanced Log Panel-->
+      <div id="log-panel" class="log-panel">
+        <div class="panel-header">
+          <h2>Activity Log</h2>
+          <div class="log-controls">
+            <button id="clear-log" class="btn-small">Clear Log</button>
+            <button id="refresh-log" class="btn-small">Refresh</button>
+          </div>
+        </div>
+        <div class="log-container">
+          <div id="recent-activity" class="log-section">
+            <h3>Recent Activity</h3>
+            <div id="activity-log" class="log-content">
+              <div class="log-entry startup">
+                <span class="log-time">Starting...</span>
+                <span class="log-message">Client initializing...</span>
+              </div>
+            </div>
+          </div>
+          <div id="error-log-section" class="log-section">
+            <h3>Error Log</h3>
+            <div id="error-log" class="log-content error-log">
+              <div class="no-errors">
+                <span class="log-message">No errors recorded</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!--Additional Control Panel-->
+      <div id="control-panel" class="control-panel">
+        <div class="panel-header">
+          <h2>Controls</h2>
+        </div>
+        <div class="control-buttons">
+          <button id="test-connection" class="btn-primary">Test Connection</button>
+          <button id="force-sync" class="btn-primary">Force Sync</button>
+          <button id="restart-client" class="btn-warning">Restart Client</button>
+          <button id="open-config" class="btn-secondary">Open Config</button>
+        </div>
+      </div>
+      <script src="scripts/client-dashboard.js"></script>
+      <script src="scripts/client-status.js"></script>
+      <script src="scripts/client-log.js"></script>
     </body>
 </html>

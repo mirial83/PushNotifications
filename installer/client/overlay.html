@@ -1,17 +1,139 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
     <head>
-        <meta charset="UTF-8" viewport="device-width" description="Overlay" author="Lauren Streich">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="Push Notifications Overlay Window - Work Mode and Browser Control">
+        <meta name="author" content="Lauren Streich">
+        
+        <!-- CSS Stylesheets -->
         <link rel="stylesheet" href="styles/client.css">
-        <link rel="stylesheet" href="styles/notifications.css">
         <link rel="stylesheet" href="styles/overlays.css">
+        <link rel="stylesheet" href="styles/work-mode.css">
+        
+        <!-- Favicon -->
         <link rel="icon" type="image/png" href="assets/icons/pnicon.png">
-        <link rel="scripts" href="">
-        <title></title>
+        
+        <!-- Electron Security -->
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+        
+        <title>Push Notifications Overlay</title>
     </head>
     <body>
-      <div id="notification-overlay">
-        <!-- 25% opacity grey overlay - no content needed -->
-      </div>
+        <!-- Main Overlay Container -->
+        <div id="overlay-container" class="overlay-container">
+            <!-- Work Mode Overlay -->
+            <div id="work-mode-overlay" class="overlay-section work-mode hidden">
+                <div class="overlay-content">
+                    <div class="overlay-header">
+                        <img src="assets/icons/work-mode.png" alt="Work Mode" class="mode-icon">
+                        <h1>Work Mode Active</h1>
+                    </div>
+                    
+                    <div class="overlay-message">
+                        <p id="work-mode-message" class="primary-message">
+                            Focus time is active. Complete your work to continue.
+                        </p>
+                        <p id="work-mode-timer" class="timer-display">
+                            Time Remaining: <span id="time-remaining">00:00</span>
+                        </p>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button id="complete-work" class="btn-primary">
+                            <span class="btn-icon">✓</span>
+                            Work Completed
+                        </button>
+                        <button id="extend-time" class="btn-secondary">
+                            <span class="btn-icon">⏰</span>
+                            Need More Time
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Browser Block Overlay -->
+            <div id="browser-block-overlay" class="overlay-section browser-block hidden">
+                <div class="overlay-content">
+                    <div class="overlay-header">
+                        <img src="assets/icons/blocked.png" alt="Browser Blocked" class="mode-icon">
+                        <h1>Browser Access Restricted</h1>
+                    </div>
+                    
+                    <div class="overlay-message">
+                        <p id="block-message" class="primary-message">
+                            This website is currently restricted.
+                        </p>
+                        <div id="website-info" class="website-info">
+                            <span class="label">Blocked URL:</span>
+                            <span id="blocked-url" class="value">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button id="request-access" class="btn-primary">
+                            <span class="btn-icon">↗</span>
+                            Request Access
+                        </button>
+                        <button id="go-back" class="btn-secondary">
+                            <span class="btn-icon">←</span>
+                            Go Back
+                        </button>
+                    </div>
+
+                    <!-- Access Request Form -->
+                    <div id="access-request-form" class="request-form hidden">
+                        <h2>Request Website Access</h2>
+                        <div class="form-group">
+                            <label for="request-reason">Reason for Access:</label>
+                            <textarea id="request-reason" 
+                                    placeholder="Please explain why you need access to this website..."
+                                    rows="3"></textarea>
+                        </div>
+                        <div class="form-buttons">
+                            <button id="submit-request" class="btn-submit">Submit Request</button>
+                            <button id="cancel-request" class="btn-cancel">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Indicators -->
+            <div id="progress-overlay" class="progress-overlay">
+                <!-- Work Mode Progress -->
+                <div id="work-mode-progress" class="progress-bar work-mode hidden">
+                    <div class="progress-fill"></div>
+                </div>
+                
+                <!-- Browser Block Progress -->
+                <div id="block-progress" class="progress-bar block-mode hidden">
+                    <div class="progress-fill"></div>
+                </div>
+            </div>
+
+            <!-- Status Messages -->
+            <div id="status-messages" class="status-messages hidden">
+                <div class="message-content">
+                    <span id="status-text">Status message here</span>
+                    <button id="close-status" class="close-button">×</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Countdown Timer -->
+        <div id="global-timer" class="global-timer hidden">
+            <div class="timer-content">
+                <span id="global-time-remaining">00:00</span>
+                <div class="timer-controls">
+                    <button id="pause-timer" class="timer-control" title="Pause Timer">⏸</button>
+                    <button id="reset-timer" class="timer-control" title="Reset Timer">↺</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scripts -->
+        <script src="scripts/overlay-manager.js"></script>
+        <script src="scripts/work-mode.js"></script>
+        <script src="scripts/browser-block.js"></script>
     </body>
 </html>

@@ -1,25 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
     <head>
-        <meta charset="UTF-8" viewport="device-width" description="" author="Lauren Streich">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="Push Notifications Snooze Timer">
+        <meta name="author" content="Lauren Streich">
+        
+        <!-- CSS Stylesheets -->
         <link rel="stylesheet" href="styles/client.css">
-        <link rel="stylesheet" href="styles/notifications.css">
-        <link rel="stylesheet" href="styles/overlays.css">
-        <!--No icon needed - minimal overlay-->
-        <link rel="scripts" href="">
-        <title></title>
+        <link rel="stylesheet" href="styles/timer.css">
+        
+        <!-- Favicon -->
+        <link rel="icon" type="image/png" href="assets/icons/pnicon.png">
+        
+        <!-- Electron Security -->
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+        
+        <title>Snooze Timer</title>
     </head>
     <body>
-        <div id="client-dashboard">
-            <div id="status-panel">
-                <div id="connection-status"></div>
-                <div id="notification-count"></div>
-                <div id="client-version"></div>
+        <!-- Main Timer Container -->
+        <div id="snooze-timer" class="timer-container">
+            <!-- Timer Header -->
+            <div class="timer-header">
+                <div class="header-left">
+                    <img src="assets/icons/snooze.png" alt="Snooze" class="timer-icon">
+                    <span class="notification-count">
+                        <span id="snoozed-count">1</span> Notification(s) Snoozed
+                    </span>
+                </div>
+                <div class="header-right">
+                    <button id="minimize-timer" class="btn-icon" title="Minimize Timer">
+                        <span class="icon">_</span>
+                    </button>
+                </div>
             </div>
-            <div id="log-panel">
-                <div id="recent-activity"></div>
-                <div id="error-log"></div>
+
+            <!-- Timer Display -->
+            <div class="timer-display">
+                <div class="time-remaining">
+                    <span id="minutes">00</span>:<span id="seconds">00</span>
+                </div>
+                <div class="timer-progress">
+                    <div id="progress-bar" class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timer Controls -->
+            <div class="timer-controls">
+                <button id="pause-timer" class="btn-control" title="Pause Timer">
+                    <span class="icon">⏸</span>
+                </button>
+                <button id="resume-timer" class="btn-control hidden" title="Resume Timer">
+                    <span class="icon">▶</span>
+                </button>
+                <button id="cancel-snooze" class="btn-control" title="Cancel Snooze">
+                    <span class="icon">✕</span>
+                </button>
+            </div>
+
+            <!-- Notification Preview -->
+            <div id="notification-preview" class="notification-preview">
+                <div class="preview-header">
+                    <span class="preview-title">Snoozed Notifications</span>
+                    <button id="toggle-preview" class="btn-icon" title="Toggle Preview">
+                        <span class="icon">▼</span>
+                    </button>
+                </div>
+                <div id="preview-content" class="preview-content hidden">
+                    <div id="snoozed-list" class="snoozed-list">
+                        <!-- Snoozed notifications will be listed here -->
+                        <div class="snoozed-item">
+                            <span class="item-title">Loading notifications...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status Messages -->
+            <div id="timer-status" class="status-message hidden">
+                <!-- Status messages will appear here -->
             </div>
         </div>
+
+        <!-- Mini Timer (for minimized state) -->
+        <div id="mini-timer" class="mini-timer hidden">
+            <div class="mini-time">
+                <span id="mini-minutes">00</span>:<span id="mini-seconds">00</span>
+            </div>
+            <button id="expand-timer" class="btn-icon" title="Expand Timer">
+                <span class="icon">□</span>
+            </button>
+        </div>
+
+        <!-- Scripts -->
+        <script src="scripts/snooze-timer.js"></script>
     </body>
 </html>

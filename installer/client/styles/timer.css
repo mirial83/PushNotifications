@@ -1,0 +1,309 @@
+/* Timer Container */
+.timer-container {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    width: 300px;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+}
+
+/* Timer Header */
+.timer-header {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    color: white;
+    padding: 12px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.timer-icon {
+    width: 20px;
+    height: 20px;
+}
+
+.notification-count {
+    font-size: 14pt;
+    font-weight: 500;
+}
+
+/* Timer Display */
+.timer-display {
+    padding: 20px;
+    text-align: center;
+}
+
+.time-remaining {
+    font-size: 36pt;
+    font-weight: bold;
+    color: #333;
+    font-family: monospace;
+    margin-bottom: 15px;
+}
+
+/* Progress Bar */
+.timer-progress {
+    margin: 10px 0;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 6px;
+    background: #f0f0f0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(to right, #1e6b7a, #4a1a4a);
+    transition: width 1s linear;
+}
+
+/* Timer Controls */
+.timer-controls {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    padding: 10px 20px 20px;
+}
+
+.btn-control {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: #f0f0f0;
+    color: #333;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-control:hover {
+    background: #e0e0e0;
+    transform: scale(1.1);
+}
+
+.btn-control .icon {
+    font-size: 16pt;
+}
+
+/* Notification Preview */
+.notification-preview {
+    border-top: 1px solid #eee;
+    padding: 15px;
+}
+
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.preview-title {
+    font-weight: 500;
+    color: #333;
+}
+
+.preview-content {
+    background: #f8f9fa;
+    border-radius: 6px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.snoozed-list {
+    padding: 10px;
+}
+
+.snoozed-item {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    font-size: 14pt;
+}
+
+.snoozed-item:last-child {
+    border-bottom: none;
+}
+
+/* Mini Timer */
+.mini-timer {
+    position: fixed;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: move;
+}
+
+.mini-time {
+    font-family: monospace;
+    font-size: 16pt;
+    font-weight: bold;
+}
+
+/* Status Message */
+.status-message {
+    margin: 10px 15px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14pt;
+    text-align: center;
+}
+
+.status-message.success {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.status-message.error {
+    background: #ffebee;
+    color: #c62828;
+}
+
+/* Animations */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.time-warning {
+    animation: pulse 1s infinite;
+    color: #dc3545;
+}
+
+/* Button States */
+.btn-control:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.btn-control.active {
+    background: #1e6b7a;
+    color: white;
+}
+
+/* Scrollbar Styling */
+.preview-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+/* Responsive Design */
+@media (max-width: 360px) {
+    .timer-container {
+        width: 95%;
+        margin: 0 auto;
+    }
+
+    .time-remaining {
+        font-size: 32pt;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .timer-container {
+        background: #2c2c2c;
+    }
+
+    .time-remaining {
+        color: #fff;
+    }
+
+    .btn-control {
+        background: #444;
+        color: #fff;
+    }
+
+    .btn-control:hover {
+        background: #555;
+    }
+
+    .notification-preview {
+        border-color: #444;
+    }
+
+    .preview-title {
+        color: #fff;
+    }
+
+    .preview-content {
+        background: #333;
+    }
+
+    .snoozed-item {
+        border-color: #444;
+        color: #fff;
+    }
+
+    .progress-bar {
+        background: #444;
+    }
+
+    .mini-timer {
+        background: rgba(44, 44, 44, 0.9);
+    }
+}
+
+/* Accessibility */
+.btn-control:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(30, 107, 122, 0.5);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Draggable Mini Timer */
+.mini-timer.dragging {
+    opacity: 0.8;
+    transition: none;
+}
+
+/* High Contrast Mode */
+@media (forced-colors: active) {
+    .timer-container {
+        border: 2px solid CanvasText;
+    }
+
+    .progress-fill {
+        background: CanvasText;
+    }
+
+    .btn-control {
+        border: 2px solid CanvasText;
+    }
+}

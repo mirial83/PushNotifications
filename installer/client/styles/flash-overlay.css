@@ -1,0 +1,256 @@
+/* Flash Overlay Container */
+#flash-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 999999;
+}
+
+/* Edge Flash Elements */
+#flash-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 15px;
+    background: linear-gradient(to bottom, rgba(255, 0, 0, 0.5), transparent);
+    opacity: 0;
+}
+
+#flash-right {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 15px;
+    background: linear-gradient(to left, rgba(255, 0, 0, 0.5), transparent);
+    opacity: 0;
+}
+
+#flash-bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 15px;
+    background: linear-gradient(to top, rgba(255, 0, 0, 0.5), transparent);
+    opacity: 0;
+}
+
+#flash-left {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 15px;
+    background: linear-gradient(to right, rgba(255, 0, 0, 0.5), transparent);
+    opacity: 0;
+}
+
+/* Flash Animation Classes */
+.flash-urgent {
+    animation: flashUrgent 0.5s infinite;
+}
+
+.flash-warning {
+    animation: flashWarning 1s infinite;
+}
+
+.flash-notification {
+    animation: flashNotification 2s infinite;
+}
+
+/* Countdown Display */
+#countdown-display {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px 40px;
+    border-radius: 10px;
+    font-size: 24pt;
+    font-weight: bold;
+    font-family: Arial, sans-serif;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.countdown-visible {
+    opacity: 1 !important;
+}
+
+/* Urgency Level Styles */
+.urgency-low {
+    --flash-color: rgba(255, 193, 7, 0.5);
+    --flash-duration: 2s;
+}
+
+.urgency-medium {
+    --flash-color: rgba(255, 152, 0, 0.5);
+    --flash-duration: 1s;
+}
+
+.urgency-high {
+    --flash-color: rgba(244, 67, 54, 0.5);
+    --flash-duration: 0.5s;
+}
+
+.urgency-critical {
+    --flash-color: rgba(211, 47, 47, 0.8);
+    --flash-duration: 0.25s;
+}
+
+/* Animation Keyframes */
+@keyframes flashUrgent {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+}
+
+@keyframes flashWarning {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes flashNotification {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 0.5; }
+}
+
+/* Progress Indicator */
+.progress-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.2);
+    z-index: 1000000;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(to right, #1e6b7a, #4a1a4a);
+    width: 100%;
+    transition: width linear;
+}
+
+/* Overlay Effects */
+.pulse-effect {
+    animation: pulse var(--flash-duration) infinite;
+}
+
+.fade-effect {
+    animation: fade var(--flash-duration) infinite;
+}
+
+.strobe-effect {
+    animation: strobe calc(var(--flash-duration) / 2) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0; }
+    50% { opacity: var(--flash-opacity, 0.7); }
+}
+
+@keyframes fade {
+    0% { opacity: var(--flash-opacity, 0.7); }
+    100% { opacity: 0; }
+}
+
+@keyframes strobe {
+    0%, 49% { opacity: var(--flash-opacity, 0.7); }
+    50%, 100% { opacity: 0; }
+}
+
+/* Screen Edge Highlights */
+.edge-highlight {
+    position: absolute;
+    background: var(--flash-color);
+    transition: opacity 0.3s ease;
+}
+
+.edge-highlight.top,
+.edge-highlight.bottom {
+    left: 0;
+    right: 0;
+    height: 2px;
+}
+
+.edge-highlight.left,
+.edge-highlight.right {
+    top: 0;
+    bottom: 0;
+    width: 2px;
+}
+
+.edge-highlight.top { top: 0; }
+.edge-highlight.bottom { bottom: 0; }
+.edge-highlight.left { left: 0; }
+.edge-highlight.right { right: 0; }
+
+/* Focus Mode */
+.focus-mode {
+    background: rgba(0, 0, 0, 0.5);
+    transition: background 0.3s ease;
+}
+
+.focus-mode .countdown-display {
+    font-size: 32pt;
+    background: rgba(0, 0, 0, 0.9);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    #countdown-display {
+        font-size: 20pt;
+        padding: 15px 30px;
+    }
+
+    #flash-top,
+    #flash-bottom {
+        height: 10px;
+    }
+
+    #flash-left,
+    #flash-right {
+        width: 10px;
+    }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+    .flash-urgent,
+    .flash-warning,
+    .flash-notification,
+    .pulse-effect,
+    .fade-effect,
+    .strobe-effect {
+        animation: none;
+    }
+
+    .edge-highlight {
+        transition: none;
+    }
+}
+
+/* High Contrast Mode */
+@media (forced-colors: active) {
+    #flash-top,
+    #flash-right,
+    #flash-bottom,
+    #flash-left {
+        background: CanvasText;
+    }
+
+    #countdown-display {
+        background: Canvas;
+        color: CanvasText;
+        border: 2px solid CanvasText;
+    }
+}

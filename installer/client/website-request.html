@@ -1,32 +1,138 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
     <head>
-        <meta charset="UTF-8" viewport="device-width" description="Website requests" author="Lauren Streich">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="Push Notifications Website Access Request">
+        <meta name="author" content="Lauren Streich">
+        
+        <!-- CSS Stylesheets -->
         <link rel="stylesheet" href="styles/client.css">
-        <link rel="stylesheet" href="styles/notifications.css">
-        <link rel="stylesheet" href="styles/overlays.css">
+        <link rel="stylesheet" href="styles/forms.css">
+        <link rel="stylesheet" href="styles/website-request.css">
+        
+        <!-- Favicon -->
         <link rel="icon" type="image/png" href="assets/icons/pnicon.png">
-        <link rel="scripts" href="">
-        <title></title>
+        
+        <!-- Electron Security -->
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+        
+        <title>Website Access Request</title>
     </head>
     <body>
-        <div id="website-request-container">
-            <div id="request-header">
-                <h2>Request Website Access</h2>
-            </div>
-            <div id="request-form">
-                <div id="url-input-container">
-                    <label for="website-url">Website URL:</label>
-                    <input type="url" id="website-url" placeholder="https://example.com" />
+        <div id="request-window" class="request-container">
+            <!-- Header Section -->
+            <div class="request-header">
+                <div class="header-content">
+                    <img src="assets/icons/web-access.png" alt="Website Access" class="request-icon">
+                    <h1>Website Access Request</h1>
                 </div>
-                <div id="request-buttons">
-                    <button id="submit-request">Submit Request</button>
-                    <button id="cancel-request">Cancel</button>
+                <div class="status-indicator">
+                    <span id="request-status" class="status-badge pending">Pending</span>
                 </div>
             </div>
-            <div id="request-status" style="display: none;">
-                <div id="status-message"></div>
+
+            <!-- Website Information -->
+            <div class="website-info">
+                <div class="info-row">
+                    <span class="label">Website:</span>
+                    <span id="website-url" class="value url-display">Loading...</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Category:</span>
+                    <span id="website-category" class="value">Determining...</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Current Status:</span>
+                    <span id="access-status" class="value status">Blocked</span>
+                </div>
+            </div>
+
+            <!-- Request Form -->
+            <form id="access-request-form" class="request-form">
+                <div class="form-group">
+                    <label for="request-reason">Reason for Access:</label>
+                    <textarea id="request-reason" 
+                             name="reason" 
+                             placeholder="Please explain why you need access to this website..."
+                             rows="4"
+                             required></textarea>
+                    <div class="character-count">
+                        <span id="char-count">0</span>/500 characters
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="access-duration">Access Duration:</label>
+                    <select id="access-duration" name="duration" required>
+                        <option value="temporary">Temporary (This session only)</option>
+                        <option value="today">Today only</option>
+                        <option value="week">One week</option>
+                        <option value="permanent">Permanent access</option>
+                    </select>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="urgent-request" name="urgent">
+                        <span class="checkbox-label">This is an urgent request</span>
+                    </label>
+                </div>
+            </form>
+
+            <!-- Action Buttons -->
+            <div class="request-actions">
+                <div class="primary-actions">
+                    <button id="submit-request" class="btn-primary">
+                        <span class="btn-icon">↗</span>
+                        Submit Request
+                    </button>
+                    <button id="cancel-request" class="btn-secondary">
+                        <span class="btn-icon">×</span>
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status Messages -->
+            <div id="request-messages" class="status-messages hidden">
+                <div class="message-content">
+                    <span id="message-text"></span>
+                    <button class="close-message">×</button>
+                </div>
+            </div>
+
+            <!-- Processing Overlay -->
+            <div id="processing-overlay" class="processing-overlay hidden">
+                <div class="processing-content">
+                    <div class="spinner"></div>
+                    <span id="processing-text">Submitting request...</span>
+                </div>
+            </div>
+
+            <!-- Quick Access Section -->
+            <div id="quick-access" class="quick-access hidden">
+                <h2>Quick Access Options</h2>
+                <div class="quick-access-content">
+                    <div class="quick-access-message">
+                        This website might be needed for:
+                    </div>
+                    <div class="quick-access-buttons">
+                        <!-- Dynamically populated based on website category -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Similar Approved Sites -->
+            <div id="similar-sites" class="similar-sites hidden">
+                <h2>Similar Approved Sites</h2>
+                <div class="similar-sites-list">
+                    <!-- Dynamically populated with similar approved sites -->
+                </div>
             </div>
         </div>
+
+        <!-- Scripts -->
+        <script src="scripts/website-request.js"></script>
     </body>
 </html>

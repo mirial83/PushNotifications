@@ -1,0 +1,270 @@
+/* Base Alert Window Container */
+.alert-container {
+    font-family: Arial, sans-serif;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 20px;
+    width: 400px;
+    position: relative;
+    animation: slideIn 0.3s ease-in-out;
+}
+
+/* Alert Header */
+.alert-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.alert-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.alert-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Alert Content */
+.alert-content {
+    margin: 15px 0;
+    color: #444;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.alert-message {
+    margin-bottom: 15px;
+}
+
+/* Alert Types */
+.alert-info {
+    border-left: 4px solid #2196F3;
+}
+
+.alert-warning {
+    border-left: 4px solid #FFC107;
+}
+
+.alert-error {
+    border-left: 4px solid #F44336;
+}
+
+.alert-success {
+    border-left: 4px solid #4CAF50;
+}
+
+/* Alert Actions */
+.alert-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Buttons */
+.btn {
+    padding: 8px 16px;
+    border-radius: 5px;
+    border: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background-color: #1e6b7a;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #155a68;
+}
+
+.btn-secondary {
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+.btn-secondary:hover {
+    background-color: #d0d0d0;
+}
+
+/* Close Button */
+.close-button {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #666;
+    cursor: pointer;
+    padding: 5px;
+    transition: color 0.2s ease;
+}
+
+.close-button:hover {
+    color: #333;
+}
+
+/* Progress Bar */
+.progress-container {
+    margin-top: 15px;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    overflow: hidden;
+    height: 4px;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: #1e6b7a;
+    transition: width 0.3s ease;
+}
+
+/* Details Section */
+.alert-details {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+    font-size: 13px;
+    color: #666;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.detail-label {
+    font-weight: 500;
+}
+
+/* Animations */
+@keyframes slideIn {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Status Indicators */
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-pending {
+    background-color: #FFF3E0;
+    color: #E65100;
+}
+
+.status-success {
+    background-color: #E8F5E9;
+    color: #2E7D32;
+}
+
+.status-error {
+    background-color: #FFEBEE;
+    color: #C62828;
+}
+
+/* Responsive Design */
+@media (max-width: 480px) {
+    .alert-container {
+        width: 90%;
+        margin: 0 auto;
+    }
+
+    .alert-actions {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+}
+
+/* Focus States */
+.btn:focus,
+.close-button:focus {
+    outline: 2px solid #1e6b7a;
+    outline-offset: 2px;
+}
+
+/* Accessibility */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .alert-container {
+        background: #2c2c2c;
+        color: #fff;
+    }
+
+    .alert-title {
+        color: #fff;
+    }
+
+    .alert-content {
+        color: #ddd;
+    }
+
+    .btn-secondary {
+        background-color: #404040;
+        color: #fff;
+    }
+
+    .btn-secondary:hover {
+        background-color: #505050;
+    }
+
+    .alert-details {
+        color: #bbb;
+    }
+
+    .close-button {
+        color: #999;
+    }
+
+    .close-button:hover {
+        color: #fff;
+    }
+}

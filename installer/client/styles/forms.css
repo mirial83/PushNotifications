@@ -1,0 +1,294 @@
+/* Form Container */
+.form-container {
+    background: white;
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* Form Groups */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #333;
+    font-weight: 500;
+    font-size: 16pt;
+}
+
+/* Input Fields */
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 16pt;
+    border: 2px solid #e0e0e0;
+    border-radius: 5px;
+    transition: all 0.2s ease;
+    background: white;
+    color: #333;
+}
+
+.form-control:focus {
+    border-color: #1e6b7a;
+    box-shadow: 0 0 0 3px rgba(30, 107, 122, 0.2);
+    outline: none;
+}
+
+.form-control::placeholder {
+    color: #999;
+}
+
+/* Textareas */
+textarea.form-control {
+    min-height: 120px;
+    resize: vertical;
+}
+
+/* Select Dropdowns */
+select.form-control {
+    appearance: none;
+    background-image: url('data:image/svg+xml;utf8,<svg fill="%23333" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 24px;
+    padding-right: 2.5rem;
+}
+
+/* Checkboxes and Radio Buttons */
+.checkbox-group,
+.radio-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.checkbox-container,
+.radio-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+/* Form Validation */
+.form-control.is-invalid {
+    border-color: #dc3545;
+    background-image: url('data:image/svg+xml;utf8,<svg fill="%23dc3545" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 24px;
+    padding-right: 2.5rem;
+}
+
+.invalid-feedback {
+    display: none;
+    color: #dc3545;
+    font-size: 14pt;
+    margin-top: 0.25rem;
+}
+
+.form-control.is-invalid + .invalid-feedback {
+    display: block;
+}
+
+/* Form Success */
+.form-control.is-valid {
+    border-color: #28a745;
+    background-image: url('data:image/svg+xml;utf8,<svg fill="%2328a745" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 24px;
+    padding-right: 2.5rem;
+}
+
+/* Character Counter */
+.character-count {
+    text-align: right;
+    color: #666;
+    font-size: 14pt;
+    margin-top: 0.25rem;
+}
+
+.character-count.limit-reached {
+    color: #dc3545;
+}
+
+/* Form Actions */
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+/* Buttons */
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 5px;
+    font-size: 16pt;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #155a68 0%, #3d1538 100%);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: #e0e0e0;
+    color: #333;
+}
+
+.btn-secondary:hover {
+    background: #d0d0d0;
+    transform: translateY(-1px);
+}
+
+/* Loading State */
+.form-loading {
+    opacity: 0.7;
+    pointer-events: none;
+    position: relative;
+}
+
+.form-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    margin: -12px 0 0 -12px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #1e6b7a;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Form Groups Layout */
+.form-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.form-col {
+    flex: 1;
+}
+
+/* Help Text */
+.form-text {
+    color: #666;
+    font-size: 14pt;
+    margin-top: 0.25rem;
+}
+
+/* Required Field */
+.required-field::after {
+    content: '*';
+    color: #dc3545;
+    margin-left: 0.25rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .form-row {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .form-container {
+        background: #2c2c2c;
+    }
+
+    .form-group label {
+        color: #fff;
+    }
+
+    .form-control {
+        background: #333;
+        border-color: #444;
+        color: #fff;
+    }
+
+    .form-control::placeholder {
+        color: #888;
+    }
+
+    .form-control:focus {
+        border-color: #1e6b7a;
+        box-shadow: 0 0 0 3px rgba(30, 107, 122, 0.4);
+    }
+
+    .btn-secondary {
+        background: #444;
+        color: #fff;
+    }
+
+    .btn-secondary:hover {
+        background: #555;
+    }
+
+    .form-text {
+        color: #bbb;
+    }
+
+    select.form-control {
+        background-image: url('data:image/svg+xml;utf8,<svg fill="%23fff" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+    }
+}
+
+/* Accessibility */
+.form-control:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(30, 107, 122, 0.5);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

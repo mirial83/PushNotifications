@@ -1,37 +1,119 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
     <head>
-        <meta charset="UTF-8" viewport="device-width" description="notification window" author="Lauren Streich">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="Push Notifications Alert Window">
+        <meta name="author" content="Lauren Streich">
+        
+        <!-- CSS Stylesheets -->
         <link rel="stylesheet" href="styles/client.css">
         <link rel="stylesheet" href="styles/notifications.css">
-        <link rel="stylesheet" href="styles/overlays.css">
+        <link rel="stylesheet" href="styles/alert-window.css">
+        
+        <!-- Favicon -->
         <link rel="icon" type="image/png" href="assets/icons/pnicon.png">
-        <link rel="scripts" href="">
-        <title></title>
+        
+        <!-- Electron Security -->
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+        
+        <title>Push Notification</title>
     </head>
     <body>
-        <div id="notification-container">
-            <div id="notification-header">
-                <div id="notification-title"></div>
-                <div id="notification-priority"></div>
-            </div>
-            <div id="notification-content">
-                <div id="notification-message"></div>
-                <div id="website-access-info"></div>
-            </div>
-            <div id="notification-actions">
-                <div id="snooze-buttons">
-                    <button id="snooze-5">Snooze 5 Minutes</button>
-                    <button id="snooze-15">Snooze 15 Minutes</button>
-                    <button id="snooze-30">Snooze 30 Minutes</button>
+        <div id="notification-window" class="notification-container">
+            <!-- Header Section -->
+            <div class="notification-header">
+                <div class="header-left">
+                    <img src="assets/icons/pnicon.png" alt="Notification Icon" class="notification-icon">
+                    <div class="notification-title">
+                        <h1 id="notification-title">New Notification</h1>
+                        <span id="notification-time" class="notification-time">Just now</span>
+                    </div>
                 </div>
-                <div id="action-buttons">
-                    <button id="complete-btn">Complete</button>
+                <div class="header-right">
+                    <div id="notification-priority" class="priority-indicator">
+                        <!-- Priority indicator will be dynamically set -->
+                        <span class="priority-dot"></span>
+                        <span class="priority-text">Normal</span>
+                    </div>
                 </div>
             </div>
-            <div id="snooze-disabled-message" style="display:none;">
-                This notification cannot be snoozed.
+
+            <!-- Content Section -->
+            <div class="notification-content">
+                <div id="notification-message" class="message-container">
+                    <!-- Message content will be dynamically inserted -->
+                    <p class="message-text">Loading notification content...</p>
+                </div>
+                
+                <!-- Additional Info Section -->
+                <div id="notification-details" class="details-container">
+                    <div class="detail-row">
+                        <span class="detail-label">From:</span>
+                        <span id="notification-sender" class="detail-value">System</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Category:</span>
+                        <span id="notification-category" class="detail-value">General</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">ID:</span>
+                        <span id="notification-id" class="detail-value">Loading...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons Section -->
+            <div class="notification-actions">
+                <!-- Primary Actions -->
+                <div class="primary-actions">
+                    <button id="action-complete" class="btn-primary">
+                        <span class="btn-icon">✓</span>
+                        Complete
+                    </button>
+                    <div class="snooze-container">
+                        <button id="action-snooze" class="btn-secondary">
+                            <span class="btn-icon">⏰</span>
+                            Snooze
+                        </button>
+                        <div id="snooze-options" class="snooze-dropdown hidden">
+                            <button class="snooze-option" data-minutes="5">5 Minutes</button>
+                            <button class="snooze-option" data-minutes="15">15 Minutes</button>
+                            <button class="snooze-option" data-minutes="30">30 Minutes</button>
+                            <button class="snooze-option" data-minutes="60">1 Hour</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Secondary Actions -->
+                <div class="secondary-actions">
+                    <button id="action-details" class="btn-text">
+                        <span class="btn-icon">ℹ</span>
+                        Details
+                    </button>
+                    <button id="action-dismiss" class="btn-text">
+                        <span class="btn-icon">×</span>
+                        Dismiss
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Bar (for countdown) -->
+            <div id="notification-progress" class="progress-container">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <span id="progress-text" class="progress-text">5:00</span>
+            </div>
+
+            <!-- Feedback Message -->
+            <div id="feedback-message" class="feedback-message hidden">
+                <!-- Will be shown when actions are performed -->
             </div>
         </div>
+
+        <!-- Scripts -->
+        <script src="scripts/notification-window.js"></script>
+        <script src="scripts/notification-actions.js"></script>
     </body>
 </html>

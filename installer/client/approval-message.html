@@ -1,29 +1,51 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <meta charset="UTF-8" viewport="device-width" description="Approval messages" author="Lauren Streich">
+        <meta charset="UTF-8"> 
+        <meta name="viewport" content="device-width, initial-scale=1.0"> 
+        <meta name="description" content="Website access approval and denial messages"> 
+        <meta name="author" content="Lauren Streich">
+        <!--CSS Stylesheets-->
         <link rel="stylesheet" href="styles/client.css">
         <link rel="stylesheet" href="styles/notifications.css">
         <link rel="stylesheet" href="styles/overlays.css">
+        <link rel="stylesheet" href="styles/approval-message.css">
+        <!--Favicon-->
         <link rel="icon" type="image/png" href="assets/icons/pnicon.png">
-        <link rel="scripts" href="">
-        <title></title>
+        <!--Electron Security-->
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; sytle-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+        <title>Website Access Response - Push Notifications</title>
     </head>
     <body>
       <div id="approval-message-container">
         <div id="message-header">
-          <div id="message-type-icon"></div>
-          <div id="message-title"></div>
+          <div id="message-type-icon">
+            <!--Will be populated with ✓ for approval or ✗ for denial-->
+          </div>
+          <div id="message-title">
+            <!--Will be populated with "Website Access Approve" or "Website Access Denied"-->
+          </div>
         </div>
         
         <div id="message-content">
-          <div id="website-info"></div>
-          <div id="approval-status"></div>
+          <div id="website-info">
+            <div class="website-label">Website Requested:</div>
+            <div class="website-url" id="requested-url">
+              <!--Will be populated with the actual website URL-->
+            </div>
+          </div>
+          <div id="approval-status">
+            <!--Will be populated with approval/denial status and message-->
+          </div>
         </div>
         
         <div id="message-actions">
           <button id="acknowledge-btn">OK</button>
+          <div class="auto-close-info" id="auto-close-timer" style="display: none;">
+            <!--AUto-closing in X seconds-->
+          </div>
         </div>
       </div>
+      <script src="scripts/approval-message.js"></script>
     </body>
 </html>

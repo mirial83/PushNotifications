@@ -1,61 +1,344 @@
-/* Screen Overlay Styles */
-.notification-overlay {
+/* Overlay Base Styles */
+.overlay-container {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: rgba(128, 128, 128, 0.25); /* 25% opacity grey */
-    z-index: 5000;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+/* Work Mode Overlay */
+.work-mode {
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: all;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.work-mode.active {
+    opacity: 1;
+}
+
+.overlay-content {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Overlay Header */
+.overlay-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.mode-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 15px;
+}
+
+.overlay-header h1 {
+    font-size: 24pt;
+    color: #333;
+    margin: 0;
+    font-weight: bold;
+}
+
+/* Overlay Message */
+.overlay-message {
+    margin: 20px 0;
+}
+
+.primary-message {
+    font-size: 18pt;
+    color: #333;
+    margin-bottom: 15px;
+    line-height: 1.4;
+}
+
+.timer-display {
+    font-size: 32pt;
+    font-weight: bold;
+    color: #1e6b7a;
+    margin: 20px 0;
+}
+
+/* Browser Block Section */
+.browser-block {
     pointer-events: all;
 }
 
-/* Flash Overlay for Snooze Warnings */
-.flash-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    pointer-events: none;
-    z-index: 8000;
+.website-info {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 15px 0;
 }
 
-.flash-edge {
-    position: absolute;
-    background-color: rgba(255, 0, 0, 0.5);
-    animation: flash 0.5s ease-in-out;
+.website-info .label {
+    font-weight: 500;
+    color: #666;
 }
 
-.flash-top {
-    top: 0;
-    left: 0;
+.website-info .value {
+    color: #333;
+    word-break: break-all;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 25px;
+}
+
+.btn {
+    padding: 12px 24px;
+    border-radius: 6px;
+    border: none;
+    font-size: 16pt;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-secondary {
+    background: #e9ecef;
+    color: #333;
+}
+
+.btn-secondary:hover {
+    background: #dee2e6;
+    transform: translateY(-2px);
+}
+
+/* Access Request Form */
+.request-form {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-top: 20px;
+    text-align: left;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+    font-weight: 500;
+}
+
+.form-group textarea {
     width: 100%;
-    height: 10px;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14pt;
+    resize: vertical;
 }
 
-.flash-right {
-    top: 0;
-    right: 0;
-    width: 10px;
-    height: 100%;
+.form-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
 }
 
-.flash-bottom {
+/* Progress Overlay */
+.progress-overlay {
+    position: absolute;
     bottom: 0;
     left: 0;
-    width: 100%;
-    height: 10px;
+    right: 0;
+    height: 4px;
+    z-index: 10000;
 }
 
-.flash-left {
-    top: 0;
-    left: 0;
-    width: 10px;
+.progress-bar {
     height: 100%;
+    background: linear-gradient(to right, #1e6b7a, #4a1a4a);
+    transition: width 0.1s linear;
 }
 
-@keyframes flash {
-    0%, 100% { opacity: 0; }
-    50% { opacity: 1; }
+/* Status Messages */
+.status-messages {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 12px 24px;
+    border-radius: 8px;
+    background: white;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    z-index: 10001;
+    pointer-events: all;
+}
+
+.message-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 4px;
+    font-size: 18pt;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .overlay-content {
+        padding: 20px;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+    }
+
+    .timer-display {
+        font-size: 28pt;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .overlay-content {
+        background: #2c2c2c;
+    }
+
+    .overlay-header h1 {
+        color: #fff;
+    }
+
+    .primary-message {
+        color: #fff;
+    }
+
+    .timer-display {
+        color: #4a9ead;
+    }
+
+    .website-info {
+        background: #333;
+    }
+
+    .website-info .label {
+        color: #bbb;
+    }
+
+    .website-info .value {
+        color: #fff;
+    }
+
+    .btn-secondary {
+        background: #444;
+        color: #fff;
+    }
+
+    .btn-secondary:hover {
+        background: #555;
+    }
+
+    .request-form {
+        background: #333;
+    }
+
+    .form-group label {
+        color: #fff;
+    }
+
+    .form-group textarea {
+        background: #444;
+        border-color: #555;
+        color: #fff;
+    }
+
+    .status-messages {
+        background: #333;
+        color: #fff;
+    }
+
+    .close-button {
+        color: #bbb;
+    }
+}
+
+/* Accessibility */
+.btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(30, 107, 122, 0.5);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* High Contrast Mode */
+@media (forced-colors: active) {
+    .overlay-content {
+        border: 2px solid CanvasText;
+    }
+
+    .btn {
+        border: 2px solid CanvasText;
+    }
+
+    .progress-bar {
+        background: CanvasText;
+    }
 }
