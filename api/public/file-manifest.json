@@ -1,0 +1,275 @@
+{
+  "manifestVersion": "1.0.0",
+  "clientVersion": "1.8.4",
+  "lastUpdated": "2025-01-23T14:19:10.000Z",
+  "totalSize": 25847296,
+  "downloadBaseUrl": "https://push-notifications-phi.vercel.app/client-files",
+  "files": {
+    "core": {
+      "description": "Core client application files - required",
+      "priority": 1,
+      "files": [
+        {
+          "path": "main.js",
+          "size": 15420,
+          "sha256": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+          "md5": "5d41402abc4b2a76b9719d911017c592",
+          "downloadUrl": "/core/main.js",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "755"
+        },
+        {
+          "path": "background.js",
+          "size": 12854,
+          "sha256": "b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef1234567",
+          "md5": "6e42503bcd5c3a87c0830e922018d693",
+          "downloadUrl": "/core/background.js",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "755"
+        },
+        {
+          "path": "tray.js",
+          "size": 8967,
+          "sha256": "c3d4e5f6789012345678901234567890abcdef1234567890abcdef12345678",
+          "md5": "7f43614ced6d4b98d1941f933029e704",
+          "downloadUrl": "/core/tray.js",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "755"
+        },
+        {
+          "path": "package.json",
+          "size": 2145,
+          "sha256": "d4e5f6789012345678901234567890abcdef1234567890abcdef123456789",
+          "md5": "8g44725def7e5c09e2952g044130f815",
+          "downloadUrl": "/core/package.json",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "644"
+        }
+      ]
+    },
+    "modules": {
+      "description": "Client feature modules - required",
+      "priority": 2,
+      "files": [
+        {
+          "path": "window-manager.js",
+          "size": 11245,
+          "sha256": "e5f6789012345678901234567890abcdef1234567890abcdef1234567890a",
+          "md5": "9h55836efg8f6d10f3063h155241g926",
+          "downloadUrl": "/modules/window-manager.js",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "755"
+        },
+        {
+          "path": "notification-window.js",
+          "size": 9876,
+          "sha256": "f6789012345678901234567890abcdef1234567890abcdef1234567890ab",
+          "md5": "0i66947fgh9g7e21g4174i266352h037",
+          "downloadUrl": "/modules/notification-window.js",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "755"
+        },
+        {
+          "path": "snooze-timer.js",
+          "size": 7654,
+          "sha256": "6789012345678901234567890abcdef1234567890abcdef1234567890abc",
+          "md5": "1j77058ghi0h8f32h5285j377463i148",
+          "downloadUrl": "/modules/snooze-timer.js",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "755"
+        }
+      ]
+    },
+    "utilities": {
+      "description": "Utility and helper modules - required",
+      "priority": 3,
+      "files": [
+        {
+          "path": "crypto-utils.js",
+          "size": 6543,
+          "sha256": "789012345678901234567890abcdef1234567890abcdef1234567890abcd",
+          "md5": "2k88169hij1i9g43i6396k488574j259",
+          "downloadUrl": "/utilities/crypto-utils.js",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "755"
+        },
+        {
+          "path": "config.js",
+          "size": 4321,
+          "sha256": "89012345678901234567890abcdef1234567890abcdef1234567890abcde",
+          "md5": "3l99270ijk2j0h54j7407l599685k360",
+          "downloadUrl": "/utilities/config.js",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "755"
+        },
+        {
+          "path": "utils.js",
+          "size": 8765,
+          "sha256": "9012345678901234567890abcdef1234567890abcdef1234567890abcdef",
+          "md5": "4m00381jkl3k1i65k8518m600796l471",
+          "downloadUrl": "/utilities/utils.js",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "755"
+        }
+      ]
+    },
+    "ui": {
+      "description": "User interface templates - required",
+      "priority": 4,
+      "files": [
+        {
+          "path": "notification-window.html",
+          "size": 3456,
+          "sha256": "012345678901234567890abcdef1234567890abcdef1234567890abcdef1",
+          "md5": "5n11492klm4l2j76l9629n711807m582",
+          "downloadUrl": "/ui/notification-window.html",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "644"
+        },
+        {
+          "path": "website-request.html",
+          "size": 2890,
+          "sha256": "12345678901234567890abcdef1234567890abcdef1234567890abcdef12",
+          "md5": "6o22503lmn5m3k87m0740o822918n693",
+          "downloadUrl": "/ui/website-request.html",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "644"
+        },
+        {
+          "path": "snooze-timer.html",
+          "size": 1876,
+          "sha256": "2345678901234567890abcdef1234567890abcdef1234567890abcdef123",
+          "md5": "7p33614mno6n4l98n1851p933029o704",
+          "downloadUrl": "/ui/snooze-timer.html",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "644"
+        },
+        {
+          "path": "overlay.html",
+          "size": 1234,
+          "sha256": "345678901234567890abcdef1234567890abcdef1234567890abcdef1234",
+          "md5": "8q44725nop7o5m09o2962q044130p815",
+          "downloadUrl": "/ui/overlay.html",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "644"
+        },
+        {
+          "path": "flash-overlay.html",
+          "size": 987,
+          "sha256": "45678901234567890abcdef1234567890abcdef1234567890abcdef12345",
+          "md5": "9r55836opq8p6n10p3073r155241q926",
+          "downloadUrl": "/ui/flash-overlay.html",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "644"
+        },
+        {
+          "path": "approval-message.html",
+          "size": 2345,
+          "sha256": "5678901234567890abcdef1234567890abcdef1234567890abcdef123456",
+          "md5": "0s66947pqr9q7o21q4184s266352r037",
+          "downloadUrl": "/ui/approval-message.html",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "644"
+        }
+      ]
+    },
+    "assets": {
+      "description": "Icons and static assets - optional",
+      "priority": 5,
+      "files": [
+        {
+          "path": "assets/icons/pnicon.ico",
+          "size": 15086,
+          "sha256": "678901234567890abcdef1234567890abcdef1234567890abcdef1234567",
+          "md5": "1t77058qrs0r8p32r5295t377463s148",
+          "downloadUrl": "/assets/icons/pnicon.ico",
+          "version": "1.8.4",
+          "required": false,
+          "permissions": "644"
+        }
+      ]
+    },
+    "dependencies": {
+      "description": "Node.js dependencies - if not bundled",
+      "priority": 6,
+      "files": [
+        {
+          "path": "node_modules.zip",
+          "size": 12584960,
+          "sha256": "901234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "md5": "4w00381tuv3u1s65u8528w600796v471",
+          "downloadUrl": "/dependencies/node_modules.zip",
+          "version": "1.8.4",
+          "required": true,
+          "permissions": "755",
+          "extract": true,
+          "extractTo": "node_modules/"
+        }
+      ]
+    }
+  },
+  "downloadSequence": [
+    "core",
+    "modules", 
+    "utilities",
+    "ui",
+    "assets",
+    "dependencies"
+  ],
+  "postDownloadActions": [
+    {
+      "action": "extract",
+      "condition": "file.extract === true",
+      "description": "Extract compressed files"
+    },
+    {
+      "action": "setPermissions", 
+      "condition": "platform === 'win32'",
+      "description": "Set file permissions on Windows"
+    },
+    {
+      "action": "validateIntegrity",
+      "condition": "always",
+      "description": "Verify all file checksums"
+    },
+    {
+      "action": "createConfig",
+      "condition": "always", 
+      "description": "Generate client configuration file"
+    },
+    {
+      "action": "startClient",
+      "condition": "downloadComplete === true",
+      "description": "Launch client application"
+    }
+  ],
+  "fallbackUrls": [
+    "https://backup-server.example.com/client-files",
+    "https://cdn.example.com/pushnotifications/client"
+  ],
+  "checksumAlgorithm": "sha256",
+  "compressionSupport": ["gzip", "zip"],
+  "platformRequirements": {
+    "windows": {
+      "minVersion": "Windows 10",
+      "architecture": ["x64", "x86"],
+      "adminRequired": true
+    }
+  }
+}
