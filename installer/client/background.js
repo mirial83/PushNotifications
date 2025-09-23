@@ -15,7 +15,7 @@ handleIncomingNotification(notification) //Process new notification
 queueNotification(notification) //add to notification queue
 processNotificationQueue() //handle notification priority
 markNotificationComplete(notificationId) //send completion to server
-handleNotificationDenial(notificationId) //process serrver denial
+handleNotificationDenial(notificationId) //process server denial
 restoreFromOffline() //handle offline notification backlog
 
 //System state management

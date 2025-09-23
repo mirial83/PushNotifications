@@ -1,0 +1,69 @@
+/* Notification Window Styles */
+.notification-window {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+    min-width: 400px;
+    max-width: 600px;
+    z-index: 10000;
+}
+
+.notification-header {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    color: white;
+    padding: 1rem 2rem;
+    border-radius: 5px 5px 0 0;
+    font-size: 18pt;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+.notification-content {
+    padding: 2rem;
+    font-size: 16pt;
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    color: #495057;
+}
+
+.notification-actions {
+    padding: 1rem 2rem 2rem 2rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.notification-message {
+    margin-bottom: 1.5rem;
+    font-size: 16pt;
+    color: #495057;
+}
+
+/* Snooze Timer Styles */
+.snooze-timer {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 5px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+    font-weight: bold;
+    z-index: 9999;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.timer-display {
+    font-size: 18pt;
+    font-weight: bold;
+    text-align: center;
+}
