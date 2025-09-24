@@ -9,10 +9,24 @@ api/micro-installer/
 
 # Ignore utility files that aren't serverless functions
 utils/
-api/assets/
 installer.py
 
-# Keep only the actual serverless functions:
-# api/index.js
-# api/config.js  
-# api/download.js
+# Ignore asset files (CSS, images, icons)
+api/assets/icons/
+api/assets/images/
+api/assets/styles/
+
+# Exclude frontend script files that aren't server functions
+api/assets/scripts/account-settings.js
+api/assets/scripts/download-page.js
+api/assets/scripts/index-page.js
+api/assets/scripts/login.js
+api/assets/scripts/script.js
+
+# Exclude the entire assets directory (frontend files, not serverless functions)
+api/assets/
+
+# Keep only the actual serverless functions in api/ root:
+# api/config.js - Database configuration API
+# api/download.js - File download API  
+# api/index.js - Main API handler
