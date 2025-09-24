@@ -96,7 +96,7 @@ async function apiCall(action, data = {}, useAuth = true) {
     if (!result.success && result.message && 
         (result.message.includes('session') || result.message.includes('expired'))) {
         clearSessionToken();
-        window.location.href = 'index.html';
+        window.location.href = 'login.html';
         return null;
     }
     
@@ -472,7 +472,7 @@ async function handleLogout() {
         
         await apiCall('logout');
         clearSessionToken();
-        window.location.href = 'index.html';
+        window.location.href = 'login.html';
     } catch (error) {
         console.error('Logout error:', error);
         
@@ -480,7 +480,7 @@ async function handleLogout() {
         stopBackgroundProcesses();
         
         clearSessionToken();
-        window.location.href = 'index.html';
+        window.location.href = 'login.html';
     }
 }
 

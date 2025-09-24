@@ -29,7 +29,15 @@
                 if (result.success && result.authenticated) {
                     showStatus('Already logged in, redirecting...', 'success');
                     setTimeout(() => {
-                        window.location.href = 'index.html';
+                        // Redirect based on user role
+                        if (result.role === 'Admin' || result.role === 'Manager') {
+                            window.location.href = 'admin.html';
+                        } else if (result.role === 'User') {
+                            window.location.href = 'download.html';
+                        } else {
+                            // Fallback for unknown roles or legacy admin role
+                            window.location.href = 'admin.html';
+                        }
                     }, 1000);
                 }
             } catch (error) {
@@ -64,7 +72,15 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    // Store auth token/session info if provided
+                    // Set persistent session cookie that lasts until browser is closed
+                    if (result.sessionToken) {
+                        // Set as session cookie (no expires date = cleared when browser closes)
+                        document.cookie = `sessionToken=${result.sessionToken}; path=/; SameSite=Strict`;
+                        // Also store in localStorage as backup
+                        localStorage.setItem('sessionToken', result.sessionToken);
+                    }
+                    
+                    // Legacy token support
                     if (result.token) {
                         localStorage.setItem('adminToken', result.token);
                     }
@@ -75,7 +91,15 @@
                     showStatus('Login successful! Redirecting to admin panel...', 'success');
                     
                     setTimeout(() => {
-                        window.location.href = 'index.html';
+                        // Redirect based on user role
+                        if (result.role === 'Admin' || result.role === 'Manager') {
+                            window.location.href = 'admin.html';
+                        } else if (result.role === 'User') {
+                            window.location.href = 'download.html';
+                        } else {
+                            // Fallback for unknown roles or legacy admin role
+                            window.location.href = 'admin.html';
+                        }
                     }, 1500);
                 } else {
                     showStatus(result.message || 'Invalid credentials', 'error');

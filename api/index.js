@@ -32,7 +32,7 @@ class CryptoUtils {
       const iv = crypto.randomBytes(IV_LENGTH);
       const key = this.deriveKey(ENCRYPTION_KEY, salt);
       
-      const cipher = crypto.createCipher(ALGORITHM, key);
+      const cipher = crypto.createCipherGCM(ALGORITHM, key, iv);
       cipher.setAAD(Buffer.from('pushnotifications'));
       
       let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -66,7 +66,7 @@ class CryptoUtils {
       const authTag = Buffer.from(authTagHex, 'hex');
       const key = this.deriveKey(ENCRYPTION_KEY, salt);
       
-      const decipher = crypto.createDecipher(ALGORITHM, key);
+      const decipher = crypto.createDecipherGCM(ALGORITHM, key, iv);
       decipher.setAuthTag(authTag);
       decipher.setAAD(Buffer.from('pushnotifications'));
       
@@ -3958,7 +3958,7 @@ class DatabaseOperations {
     streetNumber = '',
     streetName = '',
     apartmentSuite = '',
-    secondAddressLine = '',
+    secondLine = '',
     city = '',
     state = '',
     zipCode = '',
@@ -4007,11 +4007,11 @@ class DatabaseOperations {
         lastName: lastName ? CryptoUtils.encrypt(lastName) : '',
         phoneNumber: phoneNumber ? CryptoUtils.encrypt(phoneNumber) : '',
         address: address ? CryptoUtils.encrypt(address) : '', // Legacy field
-        // New structured address fields
+        // New structured address fields in specific order
         streetNumber: streetNumber ? CryptoUtils.encrypt(streetNumber) : '',
         streetName: streetName ? CryptoUtils.encrypt(streetName) : '',
         apartmentSuite: apartmentSuite ? CryptoUtils.encrypt(apartmentSuite) : '',
-        secondAddressLine: secondAddressLine ? CryptoUtils.encrypt(secondAddressLine) : '',
+        secondLine: secondLine ? CryptoUtils.encrypt(secondLine) : '',
         city: city ? CryptoUtils.encrypt(city) : '',
         state: state ? CryptoUtils.encrypt(state) : '',
         zipCode: zipCode ? CryptoUtils.encrypt(zipCode) : '',
@@ -4023,8 +4023,8 @@ class DatabaseOperations {
         lastLogin: null,
         isActive: true,
         _encrypted_fields: [
-          'email', 'firstName', 'lastName', 'phoneNumber', 'address',
-          'streetNumber', 'streetName', 'apartmentSuite', 'secondAddressLine', 'city', 'state', 'zipCode'
+          'email', 'streetNumber', 'streetName', 'apartmentSuite', 'secondLine', 
+          'city', 'state', 'zipCode', 'phoneNumber', 'firstName', 'lastName', 'address'
         ],
         // Password management fields
         passwordGenerated: false,
@@ -4062,7 +4062,7 @@ class DatabaseOperations {
           streetNumber: streetNumber || '',
           streetName: streetName || '',
           apartmentSuite: apartmentSuite || '',
-          secondAddressLine: secondAddressLine || '',
+          secondLine: secondLine || '',
           city: city || '',
           state: state || '',
           zipCode: zipCode || '',
@@ -4134,7 +4134,7 @@ class DatabaseOperations {
         user: {
           id: user._id.toString(),
           username: user.username,
-          email: CryptoUtils.decrypt(user.email) || '',
+          email: user.email ? CryptoUtils.decrypt(user.email) || '' : '',
           role: user.role
         },
         sessionToken,
@@ -4551,12 +4551,20 @@ class DatabaseOperations {
       const processedUsers = users.map(user => ({
         id: user._id.toString(),
         username: user.username,
-        email: user.email,
+        email: user.email ? CryptoUtils.decrypt(user.email) : '',
         role: user.role,
-        firstName: user.firstName || '',
-        lastName: user.lastName || '',
-        phoneNumber: user.phoneNumber || '',
-        address: user.address || '',
+        firstName: user.firstName ? CryptoUtils.decrypt(user.firstName) : '',
+        lastName: user.lastName ? CryptoUtils.decrypt(user.lastName) : '',
+        phoneNumber: user.phoneNumber ? CryptoUtils.decrypt(user.phoneNumber) : '',
+        address: user.address ? CryptoUtils.decrypt(user.address) : '',
+        // New structured address fields
+        streetNumber: user.streetNumber ? CryptoUtils.decrypt(user.streetNumber) : '',
+        streetName: user.streetName ? CryptoUtils.decrypt(user.streetName) : '',
+        apartmentSuite: user.apartmentSuite ? CryptoUtils.decrypt(user.apartmentSuite) : '',
+        secondLine: user.secondLine ? CryptoUtils.decrypt(user.secondLine) : '',
+        city: user.city ? CryptoUtils.decrypt(user.city) : '',
+        state: user.state ? CryptoUtils.decrypt(user.state) : '',
+        zipCode: user.zipCode ? CryptoUtils.decrypt(user.zipCode) : '',
         createdBy: user.createdBy,
         installationKey: user.installationKey,
         createdAt: user.createdAt,
@@ -4615,6 +4623,191 @@ class DatabaseOperations {
       await this.db.collection('sessions').deleteMany({ userId: new ObjectId(userId) });
 
       return { success: true, message: 'User deactivated successfully' };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getUserById(userId, requestingUserId = null, requestingUserRole = null) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'User management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Find the user
+      const user = await this.db.collection('users').findOne(
+        { _id: new ObjectId(userId) },
+        { projection: { password: 0 } }
+      );
+      
+      if (!user) {
+        return { success: false, message: 'User not found' };
+      }
+      
+      // Check permissions - users can view their own profile, managers can view users they created, admins can view all
+      if (requestingUserId !== userId && requestingUserRole === 'Manager' && user.createdBy !== requestingUserId) {
+        return { success: false, message: 'Insufficient permissions' };
+      }
+      
+      if (requestingUserId !== userId && requestingUserRole === 'User') {
+        return { success: false, message: 'Insufficient permissions' };
+      }
+      
+      // Decrypt and return user data
+      const processedUser = {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email ? CryptoUtils.decrypt(user.email) : '',
+        role: user.role,
+        firstName: user.firstName ? CryptoUtils.decrypt(user.firstName) : '',
+        lastName: user.lastName ? CryptoUtils.decrypt(user.lastName) : '',
+        phoneNumber: user.phoneNumber ? CryptoUtils.decrypt(user.phoneNumber) : '',
+        address: user.address ? CryptoUtils.decrypt(user.address) : '',
+        // New structured address fields
+        streetNumber: user.streetNumber ? CryptoUtils.decrypt(user.streetNumber) : '',
+        streetName: user.streetName ? CryptoUtils.decrypt(user.streetName) : '',
+        apartmentSuite: user.apartmentSuite ? CryptoUtils.decrypt(user.apartmentSuite) : '',
+        secondLine: user.secondLine ? CryptoUtils.decrypt(user.secondLine) : '',
+        city: user.city ? CryptoUtils.decrypt(user.city) : '',
+        state: user.state ? CryptoUtils.decrypt(user.state) : '',
+        zipCode: user.zipCode ? CryptoUtils.decrypt(user.zipCode) : '',
+        createdBy: user.createdBy,
+        installationKey: user.installationKey,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin,
+        isActive: user.isActive,
+        subscription: user.subscription || {}
+      };
+      
+      return { success: true, data: processedUser };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async updateUser(
+    userId, 
+    updateData = {}, 
+    requestingUserId = null, 
+    requestingUserRole = null
+  ) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'User management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Find the existing user
+      const existingUser = await this.db.collection('users').findOne({ _id: new ObjectId(userId) });
+      if (!existingUser) {
+        return { success: false, message: 'User not found' };
+      }
+      
+      // Check permissions
+      if (requestingUserId !== userId && requestingUserRole === 'Manager' && existingUser.createdBy !== requestingUserId) {
+        return { success: false, message: 'Insufficient permissions to update this user' };
+      }
+      
+      if (requestingUserId !== userId && requestingUserRole === 'User') {
+        return { success: false, message: 'Insufficient permissions to update this user' };
+      }
+      
+      // Build update object with encrypted fields
+      const updateQuery = {
+        $set: {
+          lastUpdated: new Date()
+        }
+      };
+      
+      // Handle each field individually, encrypting sensitive data
+      if (updateData.email !== undefined) {
+        if (updateData.email) {
+          // Check if email is already in use by another user
+          const emailHash = CryptoUtils.hashSensitiveData(updateData.email);
+          const existingWithEmail = await this.db.collection('users').findOne({
+            email_hash: emailHash,
+            _id: { $ne: new ObjectId(userId) }
+          });
+          
+          if (existingWithEmail) {
+            return { success: false, message: 'Email address is already in use' };
+          }
+          
+          updateQuery.$set.email = CryptoUtils.encrypt(updateData.email);
+          updateQuery.$set.email_hash = emailHash;
+        } else {
+          updateQuery.$set.email = '';
+          updateQuery.$set.email_hash = null;
+        }
+      }
+      
+      if (updateData.firstName !== undefined) {
+        updateQuery.$set.firstName = updateData.firstName ? CryptoUtils.encrypt(updateData.firstName) : '';
+      }
+      
+      if (updateData.lastName !== undefined) {
+        updateQuery.$set.lastName = updateData.lastName ? CryptoUtils.encrypt(updateData.lastName) : '';
+      }
+      
+      if (updateData.phoneNumber !== undefined) {
+        updateQuery.$set.phoneNumber = updateData.phoneNumber ? CryptoUtils.encrypt(updateData.phoneNumber) : '';
+      }
+      
+      if (updateData.address !== undefined) {
+        updateQuery.$set.address = updateData.address ? CryptoUtils.encrypt(updateData.address) : '';
+      }
+      
+      // New structured address fields
+      if (updateData.streetNumber !== undefined) {
+        updateQuery.$set.streetNumber = updateData.streetNumber ? CryptoUtils.encrypt(updateData.streetNumber) : '';
+      }
+      
+      if (updateData.streetName !== undefined) {
+        updateQuery.$set.streetName = updateData.streetName ? CryptoUtils.encrypt(updateData.streetName) : '';
+      }
+      
+      if (updateData.apartmentSuite !== undefined) {
+        updateQuery.$set.apartmentSuite = updateData.apartmentSuite ? CryptoUtils.encrypt(updateData.apartmentSuite) : '';
+      }
+      
+      if (updateData.secondLine !== undefined) {
+        updateQuery.$set.secondLine = updateData.secondLine ? CryptoUtils.encrypt(updateData.secondLine) : '';
+      }
+      
+      if (updateData.city !== undefined) {
+        updateQuery.$set.city = updateData.city ? CryptoUtils.encrypt(updateData.city) : '';
+      }
+      
+      if (updateData.state !== undefined) {
+        updateQuery.$set.state = updateData.state ? CryptoUtils.encrypt(updateData.state) : '';
+      }
+      
+      if (updateData.zipCode !== undefined) {
+        updateQuery.$set.zipCode = updateData.zipCode ? CryptoUtils.encrypt(updateData.zipCode) : '';
+      }
+      
+      // Only allow admin/manager to update role
+      if (updateData.role !== undefined && (requestingUserRole === 'Admin' || requestingUserRole === 'Manager')) {
+        const validRoles = ['User', 'Manager', 'Admin'];
+        if (validRoles.includes(updateData.role)) {
+          updateQuery.$set.role = updateData.role;
+        }
+      }
+      
+      // Update the user
+      const result = await this.db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
+        updateQuery
+      );
+      
+      if (result.modifiedCount === 0) {
+        return { success: false, message: 'No changes were made to the user' };
+      }
+      
+      return { success: true, message: 'User updated successfully' };
     } catch (error) {
       return { success: false, message: error.message };
     }
@@ -6475,7 +6668,7 @@ module.exports = async function handler(req, res) {
           params.streetNumber || '',
           params.streetName || '',
           params.apartmentSuite || '',
-          params.secondAddressLine || '',
+          params.secondLine || '',
           params.city || '',
           params.state || '',
           params.zipCode || '',
@@ -6577,6 +6770,63 @@ module.exports = async function handler(req, res) {
           break;
         }
         result = await db.deleteUser(params.userId || '');
+        break;
+      }
+
+      case 'getUserById': {
+        const getUserAuthHeader = req.headers.authorization;
+        const getUserToken = getUserAuthHeader && getUserAuthHeader.startsWith('Bearer ')
+          ? getUserAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(getUserToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        
+        result = await db.getUserById(
+          params.userId || '',
+          validation.user?.id,
+          validation.role || validation.user?.role
+        );
+        break;
+      }
+
+      case 'updateUser': {
+        const updateUserAuthHeader = req.headers.authorization;
+        const updateUserToken = updateUserAuthHeader && updateUserAuthHeader.startsWith('Bearer ')
+          ? updateUserAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(updateUserToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        
+        // Build update data object from params
+        const updateData = {};
+        if (params.email !== undefined) updateData.email = params.email;
+        if (params.firstName !== undefined) updateData.firstName = params.firstName;
+        if (params.lastName !== undefined) updateData.lastName = params.lastName;
+        if (params.phoneNumber !== undefined) updateData.phoneNumber = params.phoneNumber;
+        if (params.address !== undefined) updateData.address = params.address;
+        if (params.streetNumber !== undefined) updateData.streetNumber = params.streetNumber;
+        if (params.streetName !== undefined) updateData.streetName = params.streetName;
+        if (params.apartmentSuite !== undefined) updateData.apartmentSuite = params.apartmentSuite;
+        if (params.secondLine !== undefined) updateData.secondLine = params.secondLine;
+        if (params.city !== undefined) updateData.city = params.city;
+        if (params.state !== undefined) updateData.state = params.state;
+        if (params.zipCode !== undefined) updateData.zipCode = params.zipCode;
+        if (params.role !== undefined) updateData.role = params.role;
+        
+        result = await db.updateUser(
+          params.userId || '',
+          updateData,
+          validation.user?.id,
+          validation.role || validation.user?.role
+        );
         break;
       }
 
@@ -6769,11 +7019,19 @@ module.exports = async function handler(req, res) {
             user: {
               id: user._id.toString(),
               username: user.username,
-              email: user.email,
-              firstName: user.firstName || '',
-              lastName: user.lastName || '',
-              phoneNumber: user.phoneNumber || '',
-              address: user.address || '',
+              email: user.email ? CryptoUtils.decrypt(user.email) : '',
+              firstName: user.firstName ? CryptoUtils.decrypt(user.firstName) : '',
+              lastName: user.lastName ? CryptoUtils.decrypt(user.lastName) : '',
+              phoneNumber: user.phoneNumber ? CryptoUtils.decrypt(user.phoneNumber) : '',
+              address: user.address ? CryptoUtils.decrypt(user.address) : '',
+              // New structured address fields
+              streetNumber: user.streetNumber ? CryptoUtils.decrypt(user.streetNumber) : '',
+              streetName: user.streetName ? CryptoUtils.decrypt(user.streetName) : '',
+              apartmentSuite: user.apartmentSuite ? CryptoUtils.decrypt(user.apartmentSuite) : '',
+              secondLine: user.secondLine ? CryptoUtils.decrypt(user.secondLine) : '',
+              city: user.city ? CryptoUtils.decrypt(user.city) : '',
+              state: user.state ? CryptoUtils.decrypt(user.state) : '',
+              zipCode: user.zipCode ? CryptoUtils.decrypt(user.zipCode) : '',
               role: user.role,
               subscription: user.subscription || {},
               createdAt: user.createdAt,
