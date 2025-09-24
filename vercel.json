@@ -1,13 +1,13 @@
 {
   "functions": {
     "api/index.js": {
-      "runtime": "@vercel/node"
+      "runtime": "nodejs20.x"
     },
     "api/config.js": {
-      "runtime": "@vercel/node"
+      "runtime": "nodejs20.x"
     },
     "api/download.js": {
-      "runtime": "@vercel/node"
+      "runtime": "nodejs20.x"
     }
   },
   "routes": [
