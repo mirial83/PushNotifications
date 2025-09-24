@@ -1,3 +1,45 @@
+/* Global Base Styles - Push Notifications Design System */
+* {
+    font-family: Arial, sans-serif !important;
+}
+
+h1, h2, h3, h4, h5, h6, p, div, span, label, input, select, textarea, button, a, li, td, th {
+    font-family: Arial, sans-serif !important;
+    font-size: 16pt !important;
+}
+
+small, .small-text, .btn-small {
+    font-size: 14pt !important;
+}
+
+/* Buttons */
+button, .btn-primary, .btn-secondary, .btn-small, .btn-warning {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%) !important;
+    color: white !important;
+    font-weight: bold !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+    transition: all 0.15s ease-in-out !important;
+    border-radius: 5px !important;
+}
+
+button:hover, .btn-primary:hover, .btn-secondary:hover, .btn-small:hover, .btn-warning:hover {
+    background: linear-gradient(135deg, #1a5e6b 0%, #3d1538 100%) !important;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* Form Elements */
+input, select, textarea {
+    border-radius: 5px !important;
+    font-family: Arial, sans-serif !important;
+    font-size: 16pt !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+input:focus, select:focus, textarea:focus {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
 /* Request Container */
 .request-container {
     background: white;

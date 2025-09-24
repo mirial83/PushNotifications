@@ -1,0 +1,181 @@
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+    background-color: #1e6b7a;
+    color: #333;
+    line-height: 1.6;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Micro Installer Container */
+.micro-installer-container {
+    background: white;
+    width: 400px;
+    border-radius: 5px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+/* Header */
+.installer-header {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    color: white;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+.installer-logo {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 10px;
+}
+
+.installer-header h1 {
+    font-size: 18pt;
+    font-weight: bold;
+    margin: 10px 0;
+}
+
+.setup-text {
+    font-size: 14pt;
+    opacity: 0.9;
+}
+
+/* Progress Section */
+.progress-section {
+    padding: 20px;
+}
+
+.progress-container {
+    margin-bottom: 15px;
+}
+
+.progress-bar {
+    height: 6px;
+    background: #f0f0f0;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    width: 0;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    text-align: center;
+    font-size: 14pt;
+    color: #666;
+}
+
+/* Status Section */
+.status-section {
+    padding: 0 20px 10px;
+}
+
+.status-message {
+    font-size: 16pt;
+    color: #333;
+    text-align: center;
+    margin-bottom: 5px;
+}
+
+.detail-message {
+    font-size: 14pt;
+    color: #666;
+    text-align: center;
+}
+
+/* Version Info */
+.version-info {
+    padding: 10px 20px 20px;
+    text-align: center;
+    font-size: 14pt;
+    color: #666;
+}
+
+/* Error Dialog */
+.error-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.error-dialog.hidden {
+    display: none;
+}
+
+.error-content {
+    background: white;
+    padding: 30px;
+    border-radius: 5px;
+    width: 350px;
+    text-align: center;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.error-content h3 {
+    font-size: 18pt;
+    font-weight: bold;
+    color: #dc3545;
+    margin-bottom: 15px;
+}
+
+.error-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+/* Buttons */
+.btn-retry, .btn-close {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    color: white;
+    font-weight: bold;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16pt;
+    font-family: Arial, sans-serif;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.15s ease-in-out;
+}
+
+.btn-retry:hover, .btn-close:hover {
+    background: linear-gradient(135deg, #1a5e6b 0%, #3d1538 100%);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Global Font Override */
+h1, h2, h3, h4, h5, h6, p, div, span, label, button {
+    font-family: Arial, sans-serif !important;
+}
+
+small, .small-text {
+    font-size: 14pt !important;
+}
