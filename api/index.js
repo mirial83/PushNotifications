@@ -1059,7 +1059,8 @@ class DatabaseOperations {
         username,
         clientName: generatedClientName,
         userId: keyValidation.user ? new ObjectId(keyValidation.user.id) : null,
-        userRole: keyValidation.user ? keyValidation.user.role : 'user',
+        userRole: keyValidation.user ? keyValidation.user.role : 'User',
+        administratorUsername: keyValidation.administratorUsername || 'system',
         
         // System information (encrypt sensitive paths)
         hostname: CryptoUtils.encrypt(hostname),
@@ -1201,11 +1202,11 @@ class DatabaseOperations {
       
       // Build query based on user role
       let query = {};
-      if (sendingUserRole === 'admin') {
-        // Regular admins can only see their scheduled notifications
+      if (sendingUserRole === 'Manager') {
+        // Managers can only see their scheduled notifications
         query.sentBy = sendingUserId;
-      } else if (sendingUserRole === 'master_admin') {
-        // Master admins can see all scheduled notifications
+      } else if (sendingUserRole === 'Admin') {
+        // Admins can see all scheduled notifications
         query = {};
       } else {
         // Regular users can only see their own
@@ -3972,9 +3973,9 @@ class DatabaseOperations {
       await this.connect();
       
       // Validate role
-      const validRoles = ['user', 'admin', 'master_admin'];
+      const validRoles = ['User', 'Manager', 'Admin'];
       if (!validRoles.includes(role)) {
-        return { success: false, message: 'Invalid role specified' };
+        return { success: false, message: 'Invalid role specified. Valid roles: User, Manager, Admin' };
       }
       
       // Check if user already exists
@@ -3992,7 +3993,7 @@ class DatabaseOperations {
       
       // Set default numberOfUsers based on role if not provided
       if (numberOfUsers === null) {
-        numberOfUsers = (role === 'admin' || role === 'master_admin') ? 1 : 0;
+        numberOfUsers = (role === 'Manager' || role === 'Admin') ? 1 : 0;
       }
       
       // Prepare user data with sensitive information
@@ -4031,13 +4032,13 @@ class DatabaseOperations {
         passwordGeneratedBy: null,
         passwordGeneratedAt: null,
         subscription: {
-          plan: role === 'admin' || role === 'master_admin' ? 'trial' : 'none',
-          status: 'trial',
-          userLimit: role === 'admin' || role === 'master_admin' ? 1 : 0,
+          plan: role === 'Manager' || role === 'Admin' ? 'trial' : 'none',
+          status: role === 'Manager' || role === 'Admin' ? 'trial' : 'inactive',
+          userLimit: role === 'Manager' || role === 'Admin' ? 1 : 0,
           stripeCustomerId: null,
           stripeSubscriptionId: null,
           nextBillingDate: null,
-          trialEndsAt: role === 'admin' || role === 'master_admin' ? 
+          trialEndsAt: role === 'Manager' || role === 'Admin' ? 
             new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null // 30-day trial
         }
       };
@@ -4429,6 +4430,29 @@ class DatabaseOperations {
           );
         }
         
+        // Find administrator username for this user
+        let administratorUsername = 'system';
+        try {
+          const user = await this.db.collection('users').findOne({ _id: downloadKey.userId });
+          if (user) {
+            if (user.createdBy) {
+              const creator = await this.db.collection('users').findOne({ _id: user.createdBy });
+              if (creator) {
+                administratorUsername = creator.username;
+              }
+            } else if (user.role === 'User') {
+              const admins = await this.db.collection('users').find({ 
+                role: { $in: ['Admin', 'Manager'] } 
+              }).toArray();
+              if (admins.length > 0) {
+                administratorUsername = admins[0].username;
+              }
+            }
+          }
+        } catch (error) {
+          console.log('Could not find administrator for user:', error.message);
+        }
+        
         return {
           success: true,
           message: 'Installation key valid',
@@ -4436,7 +4460,8 @@ class DatabaseOperations {
             id: downloadKey.userId.toString(),
             username: downloadKey.username,
             role: downloadKey.role
-          }
+          },
+          administratorUsername: administratorUsername
         };
       }
       
@@ -4507,11 +4532,11 @@ class DatabaseOperations {
       let userQuery = {};
       
       // Apply role-based filtering
-      if (requestingUserRole === 'admin') {
-        // Regular admins can only see users they created
+      if (requestingUserRole === 'Manager') {
+        // Managers can only see users they created
         userQuery = { createdBy: requestingUserId };
-      } else if (requestingUserRole === 'master_admin') {
-        // Master admins can see all users
+      } else if (requestingUserRole === 'Admin') {
+        // Admins can see all users
         userQuery = {};
       } else {
         // Regular users cannot access this function
@@ -5669,6 +5694,42 @@ class DatabaseOperations {
   // Installation Reporting Methods
   async reportInstallation(keyId, macAddress, installPath, version, status, timestamp, additionalData = {}) {
     try {
+      // Try to find user information from keyId or additionalData
+      let username = additionalData.username || 'unknown';
+      let administratorUsername = 'system';
+      
+      if (keyId && !this.usesFallback) {
+        try {
+          await this.connect();
+          // Find the download key to get user information
+          const downloadKey = await this.db.collection('downloadKeys').findOne({ installationKey: keyId });
+          if (downloadKey && downloadKey.userId) {
+            const user = await this.db.collection('users').findOne({ _id: downloadKey.userId });
+            if (user) {
+              username = user.username;
+              
+              // Find the administrator who created this user
+              if (user.createdBy) {
+                const creator = await this.db.collection('users').findOne({ _id: user.createdBy });
+                if (creator) {
+                  administratorUsername = creator.username;
+                }
+              } else if (user.role === 'User') {
+                // For users without createdBy, try to find a manager/admin
+                const admins = await this.db.collection('users').find({ 
+                  role: { $in: ['Admin', 'Manager'] } 
+                }).toArray();
+                if (admins.length > 0) {
+                  administratorUsername = admins[0].username;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.log('Could not find user info for installation report:', error.message);
+        }
+      }
+      
       const installationReport = {
         keyId,
         macAddress,
@@ -5677,6 +5738,8 @@ class DatabaseOperations {
         status,
         timestamp: timestamp || new Date().toISOString(),
         reportedAt: new Date(),
+        username: username, // Exact username from webform
+        administratorUsername: administratorUsername, // Managing admin/manager username
         ...additionalData
       };
 
@@ -6391,8 +6454,8 @@ module.exports = async function handler(req, res) {
             const validation = await db.validateSession(createToken);
             if (validation.success) {
               const userRole = validation.role || validation.user?.role;
-              // Only admins and master_admins can create users
-              if (userRole === 'admin' || userRole === 'master_admin') {
+              // Only Managers and Admins can create users
+              if (userRole === 'Manager' || userRole === 'Admin') {
                 createdBy = validation.user?.id;
               }
             }
@@ -6403,7 +6466,7 @@ module.exports = async function handler(req, res) {
           params.username || '',
           params.email || '',
           params.password || '',
-          params.role || 'user',
+          params.role || 'User',
           createdBy,
           params.firstName || '',
           params.lastName || '',
@@ -6473,9 +6536,9 @@ module.exports = async function handler(req, res) {
           break;
         }
         const userRole = validation.role || validation.user?.role;
-        const isAdmin = userRole === 'admin' || userRole === 'master_admin';
-        if (!isAdmin) {
-          result = { success: false, message: 'Admin privileges required' };
+        const hasAdminAccess = userRole === 'Admin' || userRole === 'Manager';
+        if (!hasAdminAccess) {
+          result = { success: false, message: 'Manager or Admin privileges required' };
           break;
         }
         result = await db.getAllUsers(validation.user?.id, userRole);
@@ -6485,7 +6548,7 @@ module.exports = async function handler(req, res) {
       case 'updateUserRole':
         result = await db.updateUserRole(
           params.userId || '',
-          params.newRole || 'user'
+          params.newRole || 'User'
         );
         break;
 
@@ -6504,7 +6567,7 @@ module.exports = async function handler(req, res) {
           result = { success: false, message: 'Authentication required' };
           break;
         }
-        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        const isAdmin = validation.role === 'Admin' || validation.user?.role === 'Admin';
         if (!isAdmin) {
           result = { success: false, message: 'Admin privileges required' };
           break;
@@ -6530,9 +6593,9 @@ module.exports = async function handler(req, res) {
           break;
         }
         const userRole = validation.role || validation.user?.role;
-        const isAdmin = userRole === 'admin' || userRole === 'master_admin';
-        if (!isAdmin) {
-          result = { success: false, message: 'Admin privileges required' };
+        const hasManagerAccess = userRole === 'Admin' || userRole === 'Manager';
+        if (!hasManagerAccess) {
+          result = { success: false, message: 'Manager or Admin privileges required' };
           break;
         }
         
@@ -6556,9 +6619,9 @@ module.exports = async function handler(req, res) {
           break;
         }
         const userRole = validation.role || validation.user?.role;
-        const isAdmin = userRole === 'admin' || userRole === 'master_admin';
-        if (!isAdmin) {
-          result = { success: false, message: 'Admin privileges required' };
+        const hasManagerAccess = userRole === 'Admin' || userRole === 'Manager';
+        if (!hasManagerAccess) {
+          result = { success: false, message: 'Manager or Admin privileges required' };
           break;
         }
         
@@ -6582,9 +6645,9 @@ module.exports = async function handler(req, res) {
           break;
         }
         const userRole = validation.role || validation.user?.role;
-        const isAdmin = userRole === 'admin' || userRole === 'master_admin';
-        if (!isAdmin) {
-          result = { success: false, message: 'Admin privileges required' };
+        const hasManagerAccess = userRole === 'Admin' || userRole === 'Manager';
+        if (!hasManagerAccess) {
+          result = { success: false, message: 'Manager or Admin privileges required' };
           break;
         }
         
@@ -6627,7 +6690,7 @@ module.exports = async function handler(req, res) {
           result = { success: false, message: 'Authentication required' };
           break;
         }
-        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        const isAdmin = validation.role === 'Admin' || validation.user?.role === 'Admin';
         if (!isAdmin) {
           result = { success: false, message: 'Admin privileges required' };
           break;
