@@ -43,7 +43,7 @@
                 <a href="client-admin.html" class="nav-link">Client Administration</a>
                 <a href="account-admin.html" class="nav-link active">Account Administration</a>
                 <a href="version-history.html" class="nav-link">Version History</a>
-                <button class="logout-btn nav-logout" onclick="handleLogout()">Logout</button>
+                <button class="logout-btn nav-logout" id="logoutBtn">Logout</button>
             </div>
         </nav>
 
@@ -56,7 +56,7 @@
                         <div class="loading-spinner"></div>
                         <div>Loading notifications...</div>
                     </div>
-                    <div class="no-notifications" style="display: none;">No active notifications</div>
+                    <div class="no-notifications hidden">No active notifications</div>
                 </div>
                 
                 <!-- Clear All Notifications Button -->

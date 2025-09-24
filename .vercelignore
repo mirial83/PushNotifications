@@ -10,6 +10,7 @@ api/micro-installer/
 # Ignore utility files that aren't serverless functions
 utils/
 script.js
+password-reset.js
 installer.py
 
 # Keep only the actual serverless functions:

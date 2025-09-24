@@ -43,7 +43,7 @@
                 <a href="client-admin.html" class="nav-link">Client Administration</a>
                 <a href="account-admin.html" class="nav-link">Account Administration</a>
                 <a href="version-history.html" class="nav-link">Version History</a>
-                <button class="logout-btn nav-logout" onclick="handleLogout()">Logout</button>
+                <button class="logout-btn nav-logout" id="logoutBtn">Logout</button>
             </div>
         </nav>
 
@@ -56,7 +56,7 @@
                         <div class="loading-spinner"></div>
                         <div>Loading notifications...</div>
                     </div>
-                    <div class="no-notifications" style="display: none;">No active notifications</div>
+                    <div class="no-notifications hidden">No active notifications</div>
                 </div>
                 
                 <!-- Clear All Notifications Button -->
@@ -221,11 +221,11 @@
     </div>
     
     <!-- Modal for Client Selection -->
-    <div id="clientSelectionModal" class="modal" style="display: none;">
+    <div id="clientSelectionModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="modalTitle">Select Client</h3>
-                <button class="modal-close" onclick="closeModal()">×</button>
+                <button class="modal-close" id="modalCloseBtn">×</button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
@@ -237,7 +237,7 @@
                 <div id="modalResult" class="modal-result"></div>
             </div>
             <div class="modal-footer">
-                <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn-secondary" id="modalCancelBtn">Cancel</button>
                 <button id="modalActionBtn" class="btn-primary">Confirm</button>
             </div>
         </div>

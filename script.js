@@ -2129,6 +2129,23 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleMessageType();
     toggleBrowserUsageUI();
     
+    // Add logout button listeners for all admin pages
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+    
+    // Add modal button listeners
+    const modalCloseBtn = document.getElementById('modalCloseBtn');
+    if (modalCloseBtn) {
+        modalCloseBtn.addEventListener('click', closeModal);
+    }
+    
+    const modalCancelBtn = document.getElementById('modalCancelBtn');
+    if (modalCancelBtn) {
+        modalCancelBtn.addEventListener('click', closeModal);
+    }
+    
     // Load initial security data
     loadClientInfo();
     loadSecurityKeys();
