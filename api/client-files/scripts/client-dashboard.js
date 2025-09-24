@@ -4,10 +4,10 @@ const { formatTime, formatStatus } = require('./utils');
 const { getSystemInfo } = require('./system-utils');
 
 // Constants
-const UPDATE_INTERVAL
-const MAX_LOG_ENTRIES
-const REFRESH_TYPES
-const DASHBOARD_STATES
+//const UPDATE_INTERVAL
+//const MAX_LOG_ENTRIES
+//const REFRESH_TYPES
+//const DASHBOARD_STATES
 
 // Initialization
 function initializeDashboard() {

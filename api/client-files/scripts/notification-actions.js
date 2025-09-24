@@ -3,10 +3,10 @@ const { ipcRenderer } = require('electron');
 const { formatTime } = require('./utils');
 
 // Constants
-const ACTION_TYPES
-const SNOOZE_DURATIONS
-const ACTION_STATES
-const FEEDBACK_TYPES
+//const ACTION_TYPES
+//const SNOOZE_DURATIONS
+//const ACTION_STATES
+//const FEEDBACK_TYPES
 
 // Action button initialization
 function initializeActionButtons() {

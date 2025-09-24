@@ -5,11 +5,11 @@ const fs = require('fs').promises;
 const { encryptConfigData } = require('./crypto-utils');
 
 // Constants
-const CONFIG_VERSION
-const CONFIG_FILENAME
-const DEFAULT_CONFIG
-const CONFIG_SCHEMA
-const ENCRYPTION_KEY
+//const CONFIG_VERSION
+//const CONFIG_FILENAME
+//const DEFAULT_CONFIG
+//const CONFIG_SCHEMA
+//const ENCRYPTION_KEY
 
 // Configuration Management
 function initializeConfig() {

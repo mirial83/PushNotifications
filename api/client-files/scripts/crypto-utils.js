@@ -4,10 +4,10 @@ const { promisify } = require('util');
 const fs = require('fs').promises;
 
 // Constants
-const ENCRYPTION_ALGORITHM
-const KEY_LENGTH
-const IV_LENGTH
-const HASH_ALGORITHM
+//const ENCRYPTION_ALGORITHM
+//const KEY_LENGTH
+//const IV_LENGTH
+//const HASH_ALGORITHM
 
 // Initialization
 function initializeCrypto() {

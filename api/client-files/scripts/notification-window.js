@@ -3,10 +3,10 @@ const { ipcRenderer } = require('electron');
 const { formatTime, sanitizeHtml } = require('./utils');
 
 // Constants
-const NOTIFICATION_SIZES
-const ANIMATION_DURATION
-const DISPLAY_TIMEOUT
-const NOTIFICATION_STATES
+//const NOTIFICATION_SIZES
+//const ANIMATION_DURATION
+//const DISPLAY_TIMEOUT
+//const NOTIFICATION_STATES
 
 // Initialization
 function initializeNotificationWindow() {

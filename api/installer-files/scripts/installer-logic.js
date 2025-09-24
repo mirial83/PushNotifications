@@ -6,12 +6,12 @@ const { downloadClientFiles } = require('./downloader');
 const { generateClientConfig } = require('./config');
 
 // Constants
-const INSTALL_PHASES
-const HIDDEN_INSTALL_DIR
-const CLIENT_EXECUTABLE_NAME
-const REGISTRY_KEY
-const AUTOSTART_NAME
-const INSTALL_TIMEOUT
+//const INSTALL_PHASES
+//const HIDDEN_INSTALL_DIR
+//const CLIENT_EXECUTABLE_NAME
+//const REGISTRY_KEY
+//const AUTOSTART_NAME
+//const INSTALL_TIMEOUT
 
 // Installation Orchestration
 function initializeInstallation() {

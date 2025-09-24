@@ -3,10 +3,10 @@ const { BrowserWindow, screen } = require('electron');
 const path = require('path');
 
 // Constants
-const WINDOW_TYPES
-const WINDOW_STATES
-const SCREEN_MARGINS
-const Z_ORDER_LEVELS
+//const WINDOW_TYPES
+//const WINDOW_STATES
+//const SCREEN_MARGINS
+//const Z_ORDER_LEVELS
 
 // Initialization
 function initializeWindowManager() {

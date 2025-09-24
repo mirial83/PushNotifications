@@ -4,10 +4,10 @@ const fs = require('fs');
 const path = require('path');
 
 // Constants
-const MAX_LOG_SIZE
-const LOG_LEVELS
-const ROTATION_SIZE
-const LOG_FORMATS
+//const MAX_LOG_SIZE
+//const LOG_LEVELS
+//const ROTATION_SIZE
+//const LOG_FORMATS
 
 // Initialize logging system
 function initializeLogging() {

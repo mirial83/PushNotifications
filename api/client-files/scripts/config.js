@@ -5,10 +5,10 @@ const fs = require('fs').promises;
 const { encryptData, decryptData } = require('./crypto-utils');
 
 // Constants
-const CONFIG_VERSION
-const CONFIG_FILENAME
-const DEFAULT_CONFIG
-const CONFIG_PATHS
+//const CONFIG_VERSION
+//const CONFIG_FILENAME
+//const DEFAULT_CONFIG
+//const CONFIG_PATHS
 
 // Initialization
 function initializeConfig() {

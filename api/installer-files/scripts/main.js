@@ -5,11 +5,11 @@ const { initializeInstallation } = require('./installer-logic');
 const { initializeConfig } = require('./config');
 
 // Constants
-const INSTALLER_WINDOW_CONFIG
-const APP_PATHS
-const IPC_CHANNELS
-const INSTALLER_VERSION
-const isDev
+//const INSTALLER_WINDOW_CONFIG
+//const APP_PATHS
+//const IPC_CHANNELS
+//const INSTALLER_VERSION
+//const isDev
 
 // Application Lifecycle
 function initializeInstallerApp() {

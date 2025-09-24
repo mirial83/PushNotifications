@@ -6,12 +6,12 @@ const path = require('path');
 const crypto = require('crypto');
 
 // Constants
-const DOWNLOAD_TIMEOUT
-const MAX_RETRIES
-const CHUNK_SIZE
-const CLIENT_FILES_ENDPOINT
-const CHECKSUM_ALGORITHM
-const CONCURRENT_DOWNLOADS
+//const DOWNLOAD_TIMEOUT
+//const MAX_RETRIES
+//const CHUNK_SIZE
+//const CLIENT_FILES_ENDPOINT
+//const CHECKSUM_ALGORITHM
+//const CONCURRENT_DOWNLOADS
 
 // Download Management
 function initializeDownloader() {

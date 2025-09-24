@@ -3,10 +3,10 @@ const { ipcRenderer } = require('electron');
 const { validateUrl, formatTime } = require('./utils');
 
 // Constants
-const REQUEST_TYPES
-const REQUEST_STATES
-const VALIDATION_RULES
-const TIMEOUT_DURATION
+//const REQUEST_TYPES
+//const REQUEST_STATES
+//const VALIDATION_RULES
+//const TIMEOUT_DURATION
 
 // Initialization
 function initializeRequestWindow() {

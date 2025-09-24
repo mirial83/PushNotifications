@@ -4,10 +4,10 @@ const path = require('path');
 const { formatTime, sanitizeHtml } = require('./utils');
 
 //Constants
-const APPROVAL_TYPES
-const ANIMATION_DURATION
-const MESSAGE_TIMEOUT
-const APPROVAL_STATES
+//const APPROVAL_TYPES
+//const ANIMATION_DURATION
+//const MESSAGE_TIMEOUT
+//const APPROVAL_STATES
 
 // Initialization
 function initializeApprovalMessage() {

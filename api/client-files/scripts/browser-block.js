@@ -4,10 +4,10 @@ const { validateUrl } = require('./utils');
 const { getConfig } = require('./config');
 
 // Constants
-const BLOCK_TYPES
-const ALLOWED_PROTOCOLS
-const REQUEST_TIMEOUT
-const BLOCK_STATES
+//const BLOCK_TYPES
+//const ALLOWED_PROTOCOLS
+//const REQUEST_TIMEOUT
+//const BLOCK_STATES
 
 // Initialize browser blocking
 function initializeBrowserBlock() {

@@ -3,10 +3,10 @@ const { Tray, Menu, app } = require('electron');
 const path = require('path');
 
 // Constants
-const TRAY_ICON_SIZE
-const MENU_ITEMS
-const TRAY_STATES
-const ICON_PATHS
+//const TRAY_ICON_SIZE
+//const MENU_ITEMS
+//const TRAY_STATES
+//const ICON_PATHS
 
 // Initialization
 function initializeTray() {

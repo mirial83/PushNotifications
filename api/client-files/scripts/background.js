@@ -6,11 +6,11 @@ const { loadConfig } = require('./config');
 const { encryptData } = require('./crypto-utils');
 
 // Constants
-const CHECK_INTERVAL
-const MAX_RETRIES
-const APP_PATHS
-const NOTIFICATION_TIMEOUT
-const PROCESS_STATES
+//const CHECK_INTERVAL
+//const MAX_RETRIES
+//const APP_PATHS
+//const NOTIFICATION_TIMEOUT
+//const PROCESS_STATES
 
 // Initialization
 function initializeBackgroundProcess() {

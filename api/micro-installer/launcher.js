@@ -5,12 +5,12 @@ const fs = require('fs').promises;
 const { app } = require('electron');
 
 // Constants
-const INSTALLER_EXECUTABLE
-const LAUNCH_TIMEOUT
-const PROCESS_CHECK_INTERVAL
-const TEMP_INSTALLER_DIR
-const LAUNCH_OPTIONS
-const PLATFORM_COMMANDS
+//const INSTALLER_EXECUTABLE
+//const LAUNCH_TIMEOUT
+//const PROCESS_CHECK_INTERVAL
+//const TEMP_INSTALLER_DIR
+//const LAUNCH_OPTIONS
+//const PLATFORM_COMMANDS
 
 // Launcher Initialization
 function initializeLauncher() {

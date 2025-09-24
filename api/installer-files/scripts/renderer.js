@@ -2,11 +2,11 @@
 const { ipcRenderer } = require('electron');
 
 // Constants
-const STEP_IDS
-const ANIMATION_DURATION
-const PROGRESS_UPDATE_INTERVAL
-const UI_STATES
-const ERROR_DISPLAY_TIMEOUT
+//const STEP_IDS
+//const ANIMATION_DURATION
+//const PROGRESS_UPDATE_INTERVAL
+//const UI_STATES
+//const ERROR_DISPLAY_TIMEOUT
 
 // UI Initialization
 function initializeInstallerUI() {

@@ -3,10 +3,10 @@ const { ipcRenderer } = require('electron');
 const { formatStatus } = require('./utils');
 
 // Constants
-const STATUS_CHECK_INTERVAL
-const CONNECTION_TIMEOUT
-const STATUS_TYPES
-const CONNECTION_STATES
+//const STATUS_CHECK_INTERVAL
+//const CONNECTION_TIMEOUT
+//const STATUS_TYPES
+//const CONNECTION_STATES
 
 // Initialization
 function initializeStatusMonitoring() {

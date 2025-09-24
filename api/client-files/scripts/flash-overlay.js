@@ -3,10 +3,10 @@ const { ipcRenderer } = require('electron');
 const { getScreenDimensions } = require('./utils');
 
 // Constants
-const FLASH_INTERVALS
-const FLASH_COLORS
-const EDGE_WIDTH
-const ANIMATION_STATES
+//const FLASH_INTERVALS
+//const FLASH_COLORS
+//const EDGE_WIDTH
+//const ANIMATION_STATES
 
 // Initialization
 function initializeFlashOverlay() {

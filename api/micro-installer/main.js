@@ -5,12 +5,12 @@ const { initializeMicroDownloader } = require('./downloader');
 const { initializeLauncher } = require('./launcher');
 
 // Constants
-const MICRO_WINDOW_CONFIG
-const APP_PATHS
-const IPC_CHANNELS
-const MICRO_INSTALLER_VERSION
-const WINDOW_SIZE
-const isDev
+//const MICRO_WINDOW_CONFIG
+//const APP_PATHS
+//const IPC_CHANNELS
+//const MICRO_INSTALLER_VERSION
+//const WINDOW_SIZE
+//const isDev
 
 // Application Lifecycle
 function initializeMicroInstaller() {

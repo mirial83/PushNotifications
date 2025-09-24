@@ -3,10 +3,10 @@ const { ipcRenderer } = require('electron');
 const { formatTime } = require('./utils');
 
 // Constants
-const TIMER_UPDATE_INTERVAL
-const PROGRESS_UPDATE_INTERVAL
-const TIMER_STATES
-const DISPLAY_MODES
+//const TIMER_UPDATE_INTERVAL
+//const PROGRESS_UPDATE_INTERVAL
+//const TIMER_STATES
+//const DISPLAY_MODES
 
 // Initialization
 function initializeSnoozeTimer() {

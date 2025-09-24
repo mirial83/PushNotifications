@@ -3,10 +3,10 @@ const { ipcRenderer } = require('electron');
 const { formatTime } = require('./utils');
 
 // Constants
-const WORK_MODE_STATES
-const DURATION_PRESETS
-const NOTIFICATION_LEVELS
-const MODE_TRANSITIONS
+//const WORK_MODE_STATES
+//const DURATION_PRESETS
+//const NOTIFICATION_LEVELS
+//const MODE_TRANSITIONS
 
 // Initialize work mode
 function initializeWorkMode() {

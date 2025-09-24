@@ -6,12 +6,12 @@ const path = require('path');
 const os = require('os');
 
 // Constants
-const DOWNLOAD_TIMEOUT
-const MAX_RETRIES
-const CHUNK_SIZE
-const SERVER_BASE_URL
-const INSTALLER_FILES_ENDPOINT
-const TEMP_DOWNLOAD_DIR
+//const DOWNLOAD_TIMEOUT
+//const MAX_RETRIES
+//const CHUNK_SIZE
+//const SERVER_BASE_URL
+//const INSTALLER_FILES_ENDPOINT
+//const TEMP_DOWNLOAD_DIR
 
 // Download Initialization
 function initializeMicroDownloader() {

@@ -4,12 +4,12 @@ const fs = require('fs').promises;
 const path = require('path');
 
 // Constants
-const ENCRYPTION_ALGORITHM
-const KEY_LENGTH
-const IV_LENGTH
-const SALT_LENGTH
-const HASH_ALGORITHM
-const PBKDF2_ITERATIONS
+//const ENCRYPTION_ALGORITHM
+//const KEY_LENGTH
+//const IV_LENGTH
+//const SALT_LENGTH
+//const HASH_ALGORITHM
+//const PBKDF2_ITERATIONS
 
 // Key Generation
 function generateClientCredentials() {

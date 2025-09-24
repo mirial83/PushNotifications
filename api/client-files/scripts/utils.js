@@ -4,10 +4,10 @@ const fs = require('fs').promises;
 const os = require('os');
 
 // Constants
-const TIME_FORMATS
-const FILE_SIZE_UNITS
-const MAX_LOG_SIZE
-const VALID_PATTERNS
+//const TIME_FORMATS
+//const FILE_SIZE_UNITS
+//const MAX_LOG_SIZE
+//const VALID_PATTERNS
 
 // Time Formatting
 function formatTime(timestamp) {

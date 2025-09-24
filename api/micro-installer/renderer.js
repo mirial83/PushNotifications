@@ -2,11 +2,11 @@
 const { ipcRenderer } = require('electron');
 
 // Constants
-const PROGRESS_UPDATE_INTERVAL
-const ANIMATION_DURATION
-const STATUS_MESSAGES
-const ERROR_DISPLAY_TIMEOUT
-const PROGRESS_THRESHOLDS
+//const PROGRESS_UPDATE_INTERVAL
+//const ANIMATION_DURATION
+//const STATUS_MESSAGES
+//const ERROR_DISPLAY_TIMEOUT
+//const PROGRESS_THRESHOLDS
 
 // UI Initialization
 function initializeMicroUI() {

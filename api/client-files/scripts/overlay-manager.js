@@ -3,10 +3,10 @@ const { ipcRenderer } = require('electron');
 const { getScreenDimensions } = require('./utils');
 
 // Constants
-const OVERLAY_TYPES
-const OVERLAY_STATES
-const ANIMATION_TIMINGS
-const Z_INDEX_LEVELS
+//const OVERLAY_TYPES
+//const OVERLAY_STATES
+//const ANIMATION_TIMINGS
+//const Z_INDEX_LEVELS
 
 // Initialize overlay system
 function initializeOverlay() {

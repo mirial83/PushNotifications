@@ -5,10 +5,10 @@ const { setupTray } = require('./tray');
 const { initializeConfig } = require('./config');
 
 // Constants
-const WINDOW_DEFAULTS
-const IPC_CHANNELS
-const APP_PATHS
-const PROCESS_MODES
+//const WINDOW_DEFAULTS
+//const IPC_CHANNELS
+//const APP_PATHS
+//const PROCESS_MODES
 
 // Application Lifecycle
 function initializeApp() {
