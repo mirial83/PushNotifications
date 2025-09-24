@@ -1,11 +1,119 @@
 // PushNotifications Node.js API
 const { MongoClient, ObjectId } = require('mongodb');
+const crypto = require('crypto');
 
 // Environment variables
 const MONGODB_CONNECTION_STRING = process.env.MONGODB_CONNECTION_STRING;
 const MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'pushnotifications';
 const JWT_SECRET = process.env.JWT_SECRET || 'pushnotifications-secret-key';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'pushnotifications-encryption-key-32chars';
 const SESSION_TIMEOUT = 8 * 60 * 60 * 1000; // 8 hours
+
+// Encryption constants
+const ALGORITHM = 'aes-256-gcm';
+const IV_LENGTH = 16; // For GCM, this is always 16
+const SALT_LENGTH = 64;
+const TAG_LENGTH = 16;
+const KEY_LENGTH = 32;
+
+// Encryption utility functions
+class CryptoUtils {
+  static deriveKey(password, salt) {
+    return crypto.pbkdf2Sync(password, salt, 100000, KEY_LENGTH, 'sha256');
+  }
+
+  static encrypt(text) {
+    try {
+      if (!text || typeof text !== 'string') {
+        return null;
+      }
+      
+      const salt = crypto.randomBytes(SALT_LENGTH);
+      const iv = crypto.randomBytes(IV_LENGTH);
+      const key = this.deriveKey(ENCRYPTION_KEY, salt);
+      
+      const cipher = crypto.createCipher(ALGORITHM, key);
+      cipher.setAAD(Buffer.from('pushnotifications'));
+      
+      let encrypted = cipher.update(text, 'utf8', 'hex');
+      encrypted += cipher.final('hex');
+      
+      const authTag = cipher.getAuthTag();
+      
+      // Combine salt + iv + authTag + encrypted
+      const combined = salt.toString('hex') + iv.toString('hex') + authTag.toString('hex') + encrypted;
+      return combined;
+    } catch (error) {
+      console.error('Encryption error:', error);
+      return null;
+    }
+  }
+
+  static decrypt(encryptedData) {
+    try {
+      if (!encryptedData || typeof encryptedData !== 'string') {
+        return null;
+      }
+      
+      // Extract components
+      const saltHex = encryptedData.substr(0, SALT_LENGTH * 2);
+      const ivHex = encryptedData.substr(SALT_LENGTH * 2, IV_LENGTH * 2);
+      const authTagHex = encryptedData.substr((SALT_LENGTH + IV_LENGTH) * 2, TAG_LENGTH * 2);
+      const encrypted = encryptedData.substr((SALT_LENGTH + IV_LENGTH + TAG_LENGTH) * 2);
+      
+      const salt = Buffer.from(saltHex, 'hex');
+      const iv = Buffer.from(ivHex, 'hex');
+      const authTag = Buffer.from(authTagHex, 'hex');
+      const key = this.deriveKey(ENCRYPTION_KEY, salt);
+      
+      const decipher = crypto.createDecipher(ALGORITHM, key);
+      decipher.setAuthTag(authTag);
+      decipher.setAAD(Buffer.from('pushnotifications'));
+      
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      
+      return decrypted;
+    } catch (error) {
+      console.error('Decryption error:', error);
+      return null;
+    }
+  }
+
+  static encryptObject(obj, fieldsToEncrypt) {
+    if (!obj || !fieldsToEncrypt) return obj;
+    
+    const encrypted = { ...obj };
+    fieldsToEncrypt.forEach(field => {
+      if (encrypted[field]) {
+        encrypted[`${field}_encrypted`] = this.encrypt(encrypted[field]);
+        delete encrypted[field];
+      }
+    });
+    encrypted._encrypted_fields = fieldsToEncrypt;
+    return encrypted;
+  }
+
+  static decryptObject(obj) {
+    if (!obj || !obj._encrypted_fields) return obj;
+    
+    const decrypted = { ...obj };
+    obj._encrypted_fields.forEach(field => {
+      const encryptedField = `${field}_encrypted`;
+      if (decrypted[encryptedField]) {
+        decrypted[field] = this.decrypt(decrypted[encryptedField]);
+        delete decrypted[encryptedField];
+      }
+    });
+    delete decrypted._encrypted_fields;
+    return decrypted;
+  }
+
+  static hashSensitiveData(data) {
+    // Create a non-reversible hash for indexing purposes
+    return crypto.createHash('sha256').update(data + ENCRYPTION_KEY).digest('hex');
+  }
+}
 
 // In-memory fallback storage
 let fallbackStorage = {
@@ -935,15 +1043,16 @@ class DatabaseOperations {
       // Generate security key for embedding
       const securityKeyValue = this.generateInstallationKey();
 
-      // Store comprehensive installation record in unified structure
+      // Store comprehensive installation record with encrypted sensitive data
       const installationRecord = {
         installationId,
         clientId,
         installationKey,
         keyId,
         
-        // MAC address and device info
-        macAddress,
+        // MAC address and device info (encrypted)
+        macAddress: CryptoUtils.encrypt(macAddress),
+        macAddress_hash: CryptoUtils.hashSensitiveData(macAddress), // For indexing
         macDetectionMethod,
         
         // User information
@@ -952,12 +1061,13 @@ class DatabaseOperations {
         userId: keyValidation.user ? new ObjectId(keyValidation.user.id) : null,
         userRole: keyValidation.user ? keyValidation.user.role : 'user',
         
-        // System information
-        hostname,
+        // System information (encrypt sensitive paths)
+        hostname: CryptoUtils.encrypt(hostname),
         platform,
         version,
-        installPath,
-        systemInfo,
+        installPath: CryptoUtils.encrypt(installPath),
+        systemInfo: systemInfo ? CryptoUtils.encrypt(JSON.stringify(systemInfo)) : null,
+        _encrypted_fields: ['macAddress', 'hostname', 'installPath', 'systemInfo'],
         
         // Installation metadata
         installerMode,
@@ -1039,6 +1149,267 @@ class DatabaseOperations {
       };
     } catch (error) {
       console.error('Client installation registration error:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Scheduled Notifications Management
+  async scheduleNotification(message, scheduledTime, allowBrowserUsage = false, allowedWebsites = '', sendingUserId = null, sendingUserRole = null, targetClientId = null, recurring = null) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Scheduled notifications require MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      const scheduledNotification = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        message,
+        clientId: targetClientId || 'all',
+        scheduledTime: new Date(scheduledTime),
+        status: 'scheduled',
+        allowBrowserUsage,
+        allowedWebsites,
+        sentBy: sendingUserId,
+        senderRole: sendingUserRole,
+        recurring: recurring || null, // { pattern: 'daily|weekly|monthly', interval: 1, endDate: null }
+        created: new Date(),
+        sent: false,
+        sentAt: null
+      };
+      
+      await this.db.collection('scheduledNotifications').insertOne(scheduledNotification);
+      
+      return {
+        success: true,
+        message: 'Notification scheduled successfully',
+        notificationId: scheduledNotification.id,
+        scheduledTime: scheduledNotification.scheduledTime
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async getScheduledNotifications(sendingUserId = null, sendingUserRole = null) {
+    try {
+      if (this.usesFallback) {
+        return { success: true, data: [] };
+      }
+
+      await this.connect();
+      
+      // Build query based on user role
+      let query = {};
+      if (sendingUserRole === 'admin') {
+        // Regular admins can only see their scheduled notifications
+        query.sentBy = sendingUserId;
+      } else if (sendingUserRole === 'master_admin') {
+        // Master admins can see all scheduled notifications
+        query = {};
+      } else {
+        // Regular users can only see their own
+        query.sentBy = sendingUserId;
+      }
+      
+      const notifications = await this.db.collection('scheduledNotifications')
+        .find(query)
+        .sort({ scheduledTime: 1 })
+        .toArray();
+      
+      return {
+        success: true,
+        data: notifications.map(n => ({
+          id: n.id,
+          message: n.message,
+          clientId: n.clientId,
+          scheduledTime: n.scheduledTime,
+          status: n.status,
+          allowBrowserUsage: n.allowBrowserUsage,
+          allowedWebsites: n.allowedWebsites,
+          recurring: n.recurring,
+          created: n.created,
+          sent: n.sent,
+          sentAt: n.sentAt
+        }))
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async processScheduledNotifications() {
+    try {
+      if (this.usesFallback) {
+        return { success: true, processed: 0 };
+      }
+
+      await this.connect();
+      const now = new Date();
+      
+      // Find notifications that should be sent now
+      const dueNotifications = await this.db.collection('scheduledNotifications')
+        .find({
+          scheduledTime: { $lte: now },
+          status: 'scheduled',
+          sent: false
+        })
+        .toArray();
+      
+      let processedCount = 0;
+      
+      for (const notification of dueNotifications) {
+        try {
+          // Send the notification
+          const sendResult = await this.sendNotificationToAllClients(
+            notification.message,
+            notification.allowBrowserUsage,
+            notification.allowedWebsites,
+            notification.sentBy,
+            notification.senderRole,
+            notification.clientId !== 'all' ? notification.clientId : null
+          );
+          
+          if (sendResult.success) {
+            // Mark as sent
+            await this.db.collection('scheduledNotifications').updateOne(
+              { _id: notification._id },
+              { 
+                $set: { 
+                  sent: true, 
+                  sentAt: now,
+                  status: 'sent'
+                }
+              }
+            );
+            
+            // Handle recurring notifications
+            if (notification.recurring) {
+              await this.createRecurringNotification(notification);
+            }
+            
+            processedCount++;
+          }
+        } catch (error) {
+          console.error(`Error processing scheduled notification ${notification.id}:`, error);
+          // Mark as failed
+          await this.db.collection('scheduledNotifications').updateOne(
+            { _id: notification._id },
+            { 
+              $set: { 
+                status: 'failed',
+                errorMessage: error.message,
+                failedAt: now
+              }
+            }
+          );
+        }
+      }
+      
+      return {
+        success: true,
+        processed: processedCount,
+        found: dueNotifications.length
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async createRecurringNotification(originalNotification) {
+    try {
+      if (!originalNotification.recurring) {
+        return { success: false, message: 'Not a recurring notification' };
+      }
+      
+      const { pattern, interval = 1, endDate } = originalNotification.recurring;
+      let nextScheduledTime = new Date(originalNotification.scheduledTime);
+      
+      // Calculate next occurrence
+      switch (pattern) {
+        case 'daily':
+          nextScheduledTime.setDate(nextScheduledTime.getDate() + interval);
+          break;
+        case 'weekly':
+          nextScheduledTime.setDate(nextScheduledTime.getDate() + (interval * 7));
+          break;
+        case 'monthly':
+          nextScheduledTime.setMonth(nextScheduledTime.getMonth() + interval);
+          break;
+        default:
+          return { success: false, message: 'Invalid recurring pattern' };
+      }
+      
+      // Check if we've reached the end date
+      if (endDate && nextScheduledTime > new Date(endDate)) {
+        return { success: true, message: 'Recurring notification series completed' };
+      }
+      
+      // Create next occurrence
+      const nextNotification = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        message: originalNotification.message,
+        clientId: originalNotification.clientId,
+        scheduledTime: nextScheduledTime,
+        status: 'scheduled',
+        allowBrowserUsage: originalNotification.allowBrowserUsage,
+        allowedWebsites: originalNotification.allowedWebsites,
+        sentBy: originalNotification.sentBy,
+        senderRole: originalNotification.senderRole,
+        recurring: originalNotification.recurring,
+        created: new Date(),
+        sent: false,
+        sentAt: null,
+        parentNotificationId: originalNotification.id
+      };
+      
+      await this.db.collection('scheduledNotifications').insertOne(nextNotification);
+      
+      return {
+        success: true,
+        message: 'Next recurring notification created',
+        nextScheduledTime
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async cancelScheduledNotification(notificationId, userId, userRole) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Scheduled notifications require MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Build query based on user role for security
+      let query = { id: notificationId };
+      if (userRole === 'admin') {
+        query.sentBy = userId; // Admins can only cancel their own
+      }
+      // Master admins can cancel any notification
+      
+      const result = await this.db.collection('scheduledNotifications').updateOne(
+        query,
+        { 
+          $set: { 
+            status: 'cancelled',
+            cancelledAt: new Date(),
+            cancelledBy: userId
+          }
+        }
+      );
+      
+      if (result.modifiedCount === 0) {
+        return { success: false, message: 'Notification not found or access denied' };
+      }
+      
+      return {
+        success: true,
+        message: 'Scheduled notification cancelled successfully'
+      };
+    } catch (error) {
       return { success: false, message: error.message };
     }
   }
@@ -3087,25 +3458,32 @@ class DatabaseOperations {
       // Get all installations from the unified collection, grouped by MAC address
       const installations = await this.db.collection('installations')
         .find(installationQuery)
-        .sort({ macAddress: 1, createdAt: -1 }) // Sort by MAC address, then by creation date (newest first)
+        .sort({ macAddress_hash: 1, createdAt: -1 }) // Sort by MAC address hash, then by creation date (newest first)
         .toArray();
 
-      // Group installations by MAC address
+      // Group installations by MAC address hash (since MAC is encrypted)
       const macClientMap = new Map();
       
       for (const installation of installations) {
-        const macAddress = installation.macAddress;
+        // Decrypt sensitive data
+        const decryptedMacAddress = CryptoUtils.decrypt(installation.macAddress);
+        const decryptedHostname = CryptoUtils.decrypt(installation.hostname);
+        const decryptedInstallPath = CryptoUtils.decrypt(installation.installPath);
+        const decryptedSystemInfo = installation.systemInfo ? 
+          JSON.parse(CryptoUtils.decrypt(installation.systemInfo) || '{}') : null;
         
-        if (!macClientMap.has(macAddress)) {
+        const macAddressKey = installation.macAddress_hash; // Use hash as key for grouping
+        
+        if (!macClientMap.has(macAddressKey)) {
           // Initialize MAC client entry with the first (most recent) installation
-          macClientMap.set(macAddress, {
+          macClientMap.set(macAddressKey, {
             _id: installation._id.toString(),
-            macAddress: installation.macAddress,
+            macAddress: decryptedMacAddress,
             username: installation.username,
             clientName: installation.clientName,
             activeClientId: installation.isActive ? installation.clientId : null,
             installationCount: installation.installationCount || 1,
-            hostname: installation.hostname,
+            hostname: decryptedHostname,
             platform: installation.platform,
             createdAt: installation.createdAt,
             registeredAt: installation.registeredAt,
@@ -3115,7 +3493,7 @@ class DatabaseOperations {
               clientId: installation.clientId,
               installationId: installation.installationId,
               keyId: installation.keyId,
-              installPath: installation.installPath,
+              installPath: decryptedInstallPath,
               version: installation.version,
               createdAt: installation.createdAt,
               lastCheckin: installation.lastCheckin,
@@ -3127,7 +3505,7 @@ class DatabaseOperations {
               clientId: installation.clientId,
               installationId: installation.installationId,
               keyId: installation.keyId,
-              installPath: installation.installPath,
+              installPath: decryptedInstallPath,
               version: installation.version,
               createdAt: installation.createdAt,
               lastCheckin: installation.lastCheckin,
@@ -3136,14 +3514,14 @@ class DatabaseOperations {
               deactivatedAt: installation.deactivatedAt,
               deactivationReason: installation.deactivationReason
             },
-            // Count of all installations for this MAC
-            totalInstallations: installations.filter(i => i.macAddress === macAddress).length,
+            // Count of all installations for this MAC (use hash for comparison)
+            totalInstallations: installations.filter(i => i.macAddress_hash === installation.macAddress_hash).length,
             // Count of active installations for this MAC
-            activeInstallations: installations.filter(i => i.macAddress === macAddress && i.isActive).length
+            activeInstallations: installations.filter(i => i.macAddress_hash === installation.macAddress_hash && i.isActive).length
           });
         } else {
           // Update existing MAC client entry with active installation info if needed
-          const macClient = macClientMap.get(macAddress);
+          const macClient = macClientMap.get(macAddressKey);
           
           // Update active installation if this installation is current and active
           if (installation.isActive && installation.isCurrentForMac && !macClient.activeInstallation) {
@@ -3152,7 +3530,7 @@ class DatabaseOperations {
               clientId: installation.clientId,
               installationId: installation.installationId,
               keyId: installation.keyId,
-              installPath: installation.installPath,
+              installPath: decryptedInstallPath,
               version: installation.version,
               createdAt: installation.createdAt,
               lastCheckin: installation.lastCheckin,
@@ -3581,8 +3959,9 @@ class DatabaseOperations {
       }
       
       // Check if user already exists
+      const emailHash = CryptoUtils.hashSensitiveData(email);
       const existingUser = await this.db.collection('users').findOne({
-        $or: [{ username }, { email }]
+        $or: [{ username }, { email_hash: emailHash }]
       });
       
       if (existingUser) {
@@ -3592,19 +3971,22 @@ class DatabaseOperations {
       // Hash password (in production, use bcrypt)
       const hashedPassword = Buffer.from(password).toString('base64');
       
+      // Prepare user data with sensitive information
       const userData = {
         username,
-        email,
+        email: CryptoUtils.encrypt(email), // Encrypt email
+        email_hash: CryptoUtils.hashSensitiveData(email), // For indexing
         password: hashedPassword,
         role,
-        firstName: firstName || '',
-        lastName: lastName || '',
-        phoneNumber: phoneNumber || '',
-        address: address || '',
+        firstName: firstName ? CryptoUtils.encrypt(firstName) : '',
+        lastName: lastName ? CryptoUtils.encrypt(lastName) : '',
+        phoneNumber: phoneNumber ? CryptoUtils.encrypt(phoneNumber) : '',
+        address: address ? CryptoUtils.encrypt(address) : '',
         createdBy: createdBy, // ID of the user who created this account
         createdAt: new Date(),
         lastLogin: null,
         isActive: true,
+        _encrypted_fields: ['email', 'firstName', 'lastName', 'phoneNumber', 'address'],
         subscription: {
           plan: role === 'admin' || role === 'master_admin' ? 'trial' : 'none',
           status: 'trial',
@@ -3626,10 +4008,12 @@ class DatabaseOperations {
         user: {
           id: result.insertedId.toString(),
           username,
-          email,
+          email: email, // Return original unencrypted for response
           role,
-          firstName,
-          lastName,
+          firstName: firstName || '',
+          lastName: lastName || '',
+          phoneNumber: phoneNumber || '',
+          address: address || '',
           subscription: userData.subscription
         }
       };
@@ -3646,8 +4030,10 @@ class DatabaseOperations {
 
       await this.connect();
       
+      // Try to find user by username or email hash
+      const emailHash = CryptoUtils.hashSensitiveData(username);
       const user = await this.db.collection('users').findOne({
-        $or: [{ username }, { email: username }],
+        $or: [{ username }, { email_hash: emailHash }],
         isActive: true
       });
       
@@ -3690,7 +4076,7 @@ class DatabaseOperations {
         user: {
           id: user._id.toString(),
           username: user.username,
-          email: user.email,
+          email: CryptoUtils.decrypt(user.email) || '',
           role: user.role
         },
         sessionToken,
