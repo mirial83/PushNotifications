@@ -647,6 +647,115 @@ select::-webkit-dropdown-item:checked {
     color: white !important;
 }
 
+/* Custom dropdown styling solution */
+.custom-dropdown {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.custom-dropdown-select {
+    display: none; /* Hide original select */
+}
+
+.custom-dropdown-selected {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ced4da;
+    border-radius: 5px;
+    font-size: 16pt;
+    font-family: Arial, sans-serif;
+    background-color: white;
+    color: #495057;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.15s ease-in-out;
+    position: relative;
+    background-image: url('data:image/svg+xml;charset=US-ASCII,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 5"><path fill="%23495057" d="M2 0L0 2h4zm0 5L0 3h4z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 12px;
+}
+
+.custom-dropdown-selected:hover {
+    border-color: #adb5bd;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
+}
+
+.custom-dropdown-selected:focus,
+.custom-dropdown.open .custom-dropdown-selected {
+    outline: 0;
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+.custom-dropdown-options {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ced4da;
+    border-top: none;
+    border-radius: 0 0 5px 5px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+
+.custom-dropdown.open .custom-dropdown-options {
+    display: block;
+}
+
+.custom-dropdown-option {
+    padding: 0.75rem;
+    font-size: 16pt;
+    font-family: Arial, sans-serif;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+    border-bottom: 1px solid #f1f1f1;
+}
+
+.custom-dropdown-option:last-child {
+    border-bottom: none;
+}
+
+.custom-dropdown-option:hover {
+    background-color: #1e6b7a !important; /* Teal hover */
+    color: white !important;
+}
+
+.custom-dropdown-option.selected {
+    background-color: #4a1a4a !important; /* Dark purple selected */
+    color: white !important;
+    font-weight: bold;
+}
+
+.custom-dropdown-option.selected:hover {
+    background-color: #3d1538 !important; /* Darker purple on hover */
+}
+
+/* Custom dropdown scrollbar */
+.custom-dropdown-options::-webkit-scrollbar {
+    width: 8px;
+}
+
+.custom-dropdown-options::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.custom-dropdown-options::-webkit-scrollbar-thumb {
+    background: #4a1a4a;
+    border-radius: 4px;
+}
+
+.custom-dropdown-options::-webkit-scrollbar-thumb:hover {
+    background: #3d1538;
+}
+
 .form-group textarea {
     resize: vertical;
     min-height: 80px;

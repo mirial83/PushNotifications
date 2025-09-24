@@ -103,9 +103,144 @@ async function apiCall(action, data = {}, useAuth = true) {
     return result;
 }
 
+// Custom dropdown functionality
+function initializeCustomDropdowns() {
+    const dropdownSelects = ['#targetClientSelect', '#presetSelect'];
+    
+    dropdownSelects.forEach(selector => {
+        const selectElement = document.querySelector(selector);
+        if (selectElement) {
+            createCustomDropdown(selectElement);
+        }
+    });
+}
+
+function createCustomDropdown(selectElement) {
+    // Create wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = 'custom-dropdown';
+    
+    // Create selected display
+    const selected = document.createElement('div');
+    selected.className = 'custom-dropdown-selected';
+    selected.textContent = selectElement.options[selectElement.selectedIndex].text;
+    selected.tabIndex = 0;
+    
+    // Create options container
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'custom-dropdown-options';
+    
+    // Create options
+    Array.from(selectElement.options).forEach((option, index) => {
+        const optionElement = document.createElement('div');
+        optionElement.className = 'custom-dropdown-option';
+        optionElement.textContent = option.text;
+        optionElement.dataset.value = option.value;
+        optionElement.dataset.index = index;
+        
+        if (option.selected) {
+            optionElement.classList.add('selected');
+        }
+        
+        optionElement.addEventListener('click', () => {
+            selectOption(selectElement, wrapper, selected, optionElement, index);
+        });
+        
+        optionsContainer.appendChild(optionElement);
+    });
+    
+    // Add click events
+    selected.addEventListener('click', () => {
+        toggleDropdown(wrapper);
+    });
+    
+    selected.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleDropdown(wrapper);
+        }
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target)) {
+            wrapper.classList.remove('open');
+        }
+    });
+    
+    // Assemble custom dropdown
+    wrapper.appendChild(selected);
+    wrapper.appendChild(optionsContainer);
+    
+    // Hide original select and add custom dropdown
+    selectElement.style.display = 'none';
+    selectElement.parentNode.insertBefore(wrapper, selectElement.nextSibling);
+    
+    // Listen for programmatic changes to the original select
+    const observer = new MutationObserver(() => {
+        updateCustomDropdown(selectElement, wrapper, selected, optionsContainer);
+    });
+    observer.observe(selectElement, { childList: true, subtree: true });
+    
+    // Store reference for updates
+    selectElement.customDropdown = wrapper;
+}
+
+function toggleDropdown(wrapper) {
+    wrapper.classList.toggle('open');
+}
+
+function selectOption(selectElement, wrapper, selected, optionElement, index) {
+    // Update original select
+    selectElement.selectedIndex = index;
+    selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    // Update custom dropdown display
+    selected.textContent = optionElement.textContent;
+    
+    // Update selected state
+    wrapper.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+        opt.classList.remove('selected');
+    });
+    optionElement.classList.add('selected');
+    
+    // Close dropdown
+    wrapper.classList.remove('open');
+}
+
+function updateCustomDropdown(selectElement, wrapper, selected, optionsContainer) {
+    // Clear existing options
+    optionsContainer.innerHTML = '';
+    
+    // Recreate options
+    Array.from(selectElement.options).forEach((option, index) => {
+        const optionElement = document.createElement('div');
+        optionElement.className = 'custom-dropdown-option';
+        optionElement.textContent = option.text;
+        optionElement.dataset.value = option.value;
+        optionElement.dataset.index = index;
+        
+        if (option.selected) {
+            optionElement.classList.add('selected');
+            selected.textContent = option.text;
+        }
+        
+        optionElement.addEventListener('click', () => {
+            selectOption(selectElement, wrapper, selected, optionElement, index);
+        });
+        
+        optionsContainer.appendChild(optionElement);
+    });
+}
+
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing PushNotifications interface...');
+    
+    // Initialize custom dropdowns on all pages
+    setTimeout(() => {
+        initializeCustomDropdowns();
+    }, 500);
     
     // Check if we're on the login page
     if (window.location.pathname.endsWith('index.html') || 
