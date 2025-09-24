@@ -4589,7 +4589,7 @@ class DatabaseOperations {
   // Password Management Methods
   async generateUserPassword(adminUserId, targetUserId, length = 16) {
     try {
-      const PasswordUtils = require('../utils/password-utils');
+      const PasswordUtils = require('../../../utils/password-utils');
       
       if (this.usesFallback) {
         return { success: false, message: 'Password management requires MongoDB connection' };
@@ -4657,7 +4657,7 @@ class DatabaseOperations {
 
   async setUserPassword(adminUserId, targetUserId, newPassword) {
     try {
-      const PasswordUtils = require('../utils/password-utils');
+      const PasswordUtils = require('../../../utils/password-utils');
       
       if (this.usesFallback) {
         return { success: false, message: 'Password management requires MongoDB connection' };
@@ -4722,7 +4722,7 @@ class DatabaseOperations {
 
   async resetOwnPassword(userId, currentPassword, newPassword) {
     try {
-      const PasswordUtils = require('../utils/password-utils');
+      const PasswordUtils = require('../../../utils/password-utils');
       
       if (this.usesFallback) {
         return { success: false, message: 'Password management requires MongoDB connection' };
@@ -4784,7 +4784,7 @@ class DatabaseOperations {
 
   async generatePasswordOptions(count = 3, length = 16) {
     try {
-      const PasswordUtils = require('../utils/password-utils');
+      const PasswordUtils = require('../../../utils/password-utils');
       const passwords = PasswordUtils.generatePasswordOptions(count, length);
       
       return {
