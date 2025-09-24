@@ -3944,7 +3944,26 @@ class DatabaseOperations {
   }
 
   // User Management Methods
-  async createUser(username, email, password, role = 'user', createdBy = null, firstName = '', lastName = '', phoneNumber = '', address = '') {
+  async createUser(
+    username, 
+    email, 
+    password, 
+    role = 'user', 
+    createdBy = null, 
+    firstName = '', 
+    lastName = '', 
+    phoneNumber = '', 
+    address = '',
+    streetNumber = '',
+    streetName = '',
+    apartmentSuite = '',
+    secondAddressLine = '',
+    city = '',
+    state = '',
+    zipCode = '',
+    numberOfUsers = null,
+    linkedUsernames = []
+  ) {
     try {
       if (this.usesFallback) {
         return { success: false, message: 'User management requires MongoDB connection' };
@@ -3971,6 +3990,11 @@ class DatabaseOperations {
       // Hash password (in production, use bcrypt)
       const hashedPassword = Buffer.from(password).toString('base64');
       
+      // Set default numberOfUsers based on role if not provided
+      if (numberOfUsers === null) {
+        numberOfUsers = (role === 'admin' || role === 'master_admin') ? 1 : 0;
+      }
+      
       // Prepare user data with sensitive information
       const userData = {
         username,
@@ -3981,12 +4005,26 @@ class DatabaseOperations {
         firstName: firstName ? CryptoUtils.encrypt(firstName) : '',
         lastName: lastName ? CryptoUtils.encrypt(lastName) : '',
         phoneNumber: phoneNumber ? CryptoUtils.encrypt(phoneNumber) : '',
-        address: address ? CryptoUtils.encrypt(address) : '',
+        address: address ? CryptoUtils.encrypt(address) : '', // Legacy field
+        // New structured address fields
+        streetNumber: streetNumber ? CryptoUtils.encrypt(streetNumber) : '',
+        streetName: streetName ? CryptoUtils.encrypt(streetName) : '',
+        apartmentSuite: apartmentSuite ? CryptoUtils.encrypt(apartmentSuite) : '',
+        secondAddressLine: secondAddressLine ? CryptoUtils.encrypt(secondAddressLine) : '',
+        city: city ? CryptoUtils.encrypt(city) : '',
+        state: state ? CryptoUtils.encrypt(state) : '',
+        zipCode: zipCode ? CryptoUtils.encrypt(zipCode) : '',
+        // User management fields
+        numberOfUsers: numberOfUsers,
+        linkedUsernames: Array.isArray(linkedUsernames) ? linkedUsernames : [],
         createdBy: createdBy, // ID of the user who created this account
         createdAt: new Date(),
         lastLogin: null,
         isActive: true,
-        _encrypted_fields: ['email', 'firstName', 'lastName', 'phoneNumber', 'address'],
+        _encrypted_fields: [
+          'email', 'firstName', 'lastName', 'phoneNumber', 'address',
+          'streetNumber', 'streetName', 'apartmentSuite', 'secondAddressLine', 'city', 'state', 'zipCode'
+        ],
         // Password management fields
         passwordGenerated: false,
         passwordNeedsReset: false,
@@ -4018,7 +4056,21 @@ class DatabaseOperations {
           firstName: firstName || '',
           lastName: lastName || '',
           phoneNumber: phoneNumber || '',
-          address: address || '',
+          address: address || '', // Legacy field
+          // New structured address fields
+          streetNumber: streetNumber || '',
+          streetName: streetName || '',
+          apartmentSuite: apartmentSuite || '',
+          secondAddressLine: secondAddressLine || '',
+          city: city || '',
+          state: state || '',
+          zipCode: zipCode || '',
+          // User management fields
+          numberOfUsers: numberOfUsers,
+          linkedUsernames: linkedUsernames,
+          createdAt: userData.createdAt,
+          lastLogin: null,
+          isActive: true,
           subscription: userData.subscription
         }
       };
@@ -6356,7 +6408,16 @@ module.exports = async function handler(req, res) {
           params.firstName || '',
           params.lastName || '',
           params.phoneNumber || '',
-          params.address || ''
+          params.address || '', // Legacy field
+          params.streetNumber || '',
+          params.streetName || '',
+          params.apartmentSuite || '',
+          params.secondAddressLine || '',
+          params.city || '',
+          params.state || '',
+          params.zipCode || '',
+          params.numberOfUsers || null,
+          params.linkedUsernames || []
         );
         break;
       }
