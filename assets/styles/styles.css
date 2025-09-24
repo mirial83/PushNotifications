@@ -543,12 +543,55 @@ body {
     transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
 }
 
+/* Enhanced dropdown/select styling */
+select, .form-group select, #targetClientSelect, #presetSelect {
+    width: 100% !important;
+    padding: 0.75rem !important;
+    border: 1px solid #ced4da !important;
+    border-radius: 5px !important;
+    font-size: 16pt !important;
+    font-family: Arial, sans-serif !important;
+    background-color: white !important;
+    color: #495057 !important;
+    background-image: url('data:image/svg+xml;charset=US-ASCII,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 5"><path fill="%23495057" d="M2 0L0 2h4zm0 5L0 3h4z"/></svg>') !important;
+    background-repeat: no-repeat !important;
+    background-position: right 0.75rem center !important;
+    background-size: 12px !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    cursor: pointer !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.15s ease-in-out !important;
+}
+
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
     outline: 0;
     border-color: #80bdff;
     box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+/* Enhanced focus and hover states for dropdowns */
+select:focus, .form-group select:focus, #targetClientSelect:focus, #presetSelect:focus {
+    outline: 0 !important;
+    border-color: #80bdff !important;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25) !important;
+}
+
+select:hover, .form-group select:hover, #targetClientSelect:hover, #presetSelect:hover {
+    border-color: #adb5bd !important;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Dropdown option styling */
+select option, .form-group select option {
+    font-family: Arial, sans-serif !important;
+    font-size: 16pt !important;
+    padding: 0.5rem !important;
+    color: #495057 !important;
+    background-color: white !important;
 }
 
 .form-group textarea {
