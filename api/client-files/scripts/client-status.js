@@ -1,6 +1,6 @@
 // Imports
-const { ipcRenderer } = require('electron');
-const { formatStatus } = require('./utils');
+// const { ipcRenderer } = require('electron');
+// const { formatStatus } = require('./utils');
 
 // Constants
 //const STATUS_CHECK_INTERVAL

@@ -1,8 +1,8 @@
 //Imports
-const { app } = require('electron');
-const path = require('path');
-const fs = require('fs').promises;
-const { encryptData, decryptData } = require('./crypto-utils');
+// const { app } = require('electron');
+// const path = require('path');
+// const fs = require('fs').promises;
+// const { encryptData, decryptData } = require('./crypto-utils');
 
 // Constants
 //const CONFIG_VERSION

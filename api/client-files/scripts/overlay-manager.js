@@ -1,6 +1,6 @@
 // Imports
-const { ipcRenderer } = require('electron');
-const { getScreenDimensions } = require('./utils');
+// const { ipcRenderer } = require('electron');
+// const { getScreenDimensions } = require('./utils');
 
 // Constants
 //const OVERLAY_TYPES

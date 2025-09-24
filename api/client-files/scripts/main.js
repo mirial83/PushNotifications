@@ -1,8 +1,8 @@
 // Imports
-const { app, BrowserWindow, ipcMain, Tray, screen } = require('electron');
-const path = require('path');
-const { setupTray } = require('./tray');
-const { initializeConfig } = require('./config');
+// const { app, BrowserWindow, ipcMain, Tray, screen } = require('electron');
+// const path = require('path');
+// const { setupTray } = require('./tray');
+// const { initializeConfig } = require('./config');
 
 // Constants
 //const WINDOW_DEFAULTS

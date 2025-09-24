@@ -1,9 +1,9 @@
 // Imports
-const { app, ipcMain } = require('electron');
-const fs = require('fs').promises;
-const path = require('path');
-const { downloadClientFiles } = require('./downloader');
-const { generateClientConfig } = require('./config');
+// const { app, ipcMain } = require('electron');
+// const fs = require('fs').promises;
+// const path = require('path');
+// const { downloadClientFiles } = require('./downloader');
+// const { generateClientConfig } = require('./config');
 
 // Constants
 //const INSTALL_PHASES

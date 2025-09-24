@@ -1,9 +1,9 @@
 // Imports
-const { app, BrowserWindow, ipcMain, Tray } = require('electron');
-const path = require('path');
-const fs = require('fs');
-const { loadConfig } = require('./config');
-const { encryptData } = require('./crypto-utils');
+// const { app, BrowserWindow, ipcMain, Tray } = require('electron');
+// const path = require('path');
+// const fs = require('fs');
+// const { loadConfig } = require('./config');
+// const { encryptData } = require('./crypto-utils');
 
 // Constants
 //const CHECK_INTERVAL

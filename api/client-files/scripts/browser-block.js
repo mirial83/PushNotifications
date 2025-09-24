@@ -1,7 +1,7 @@
 // Imports
-const { ipcRenderer } = require('electron');
-const { validateUrl } = require('./utils');
-const { getConfig } = require('./config');
+// const { ipcRenderer } = require('electron');
+// const { validateUrl } = require('./utils');
+// const { getConfig } = require('./config');
 
 // Constants
 //const BLOCK_TYPES

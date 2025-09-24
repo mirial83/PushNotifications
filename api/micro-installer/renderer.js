@@ -1,5 +1,5 @@
 // Imports
-const { ipcRenderer } = require('electron');
+// const { ipcRenderer } = require('electron');
 
 // Constants
 //const PROGRESS_UPDATE_INTERVAL

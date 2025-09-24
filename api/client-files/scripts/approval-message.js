@@ -1,7 +1,7 @@
 // Imports
-const { ipcRenderer } = require('electron');
-const path = require('path');
-const { formatTime, sanitizeHtml } = require('./utils');
+// const { ipcRenderer } = require('electron');
+// const path = require('path');
+// const { formatTime, sanitizeHtml } = require('./utils');
 
 //Constants
 //const APPROVAL_TYPES

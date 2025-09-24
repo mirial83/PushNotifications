@@ -1,8 +1,8 @@
 // Imports
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-const path = require('path');
-const { initializeInstallation } = require('./installer-logic');
-const { initializeConfig } = require('./config');
+// const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+// const path = require('path');
+// const { initializeInstallation } = require('./installer-logic');
+// const { initializeConfig } = require('./config');
 
 // Constants
 //const INSTALLER_WINDOW_CONFIG

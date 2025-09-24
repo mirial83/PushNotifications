@@ -1,6 +1,6 @@
 // Imports
-const { ipcRenderer } = require('electron');
-const { validateUrl, formatTime } = require('./utils');
+// const { ipcRenderer } = require('electron');
+// const { validateUrl, formatTime } = require('./utils');
 
 // Constants
 //const REQUEST_TYPES

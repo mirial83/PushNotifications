@@ -1,6 +1,6 @@
 // Imports
-const { ipcRenderer } = require('electron');
-const { formatTime } = require('./utils');
+// const { ipcRenderer } = require('electron');
+// const { formatTime } = require('./utils');
 
 // Constants
 //const WORK_MODE_STATES

@@ -1,7 +1,7 @@
 // Imports
-const { ipcRenderer } = require('electron');
-const { formatTime, formatStatus } = require('./utils');
-const { getSystemInfo } = require('./system-utils');
+// const { ipcRenderer } = require('electron');
+// const { formatTime, formatStatus } = require('./utils');
+// const { getSystemInfo } = require('./system-utils');
 
 // Constants
 //const UPDATE_INTERVAL

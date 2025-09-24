@@ -1,6 +1,6 @@
 // Imports
-const { Tray, Menu, app } = require('electron');
-const path = require('path');
+// const { Tray, Menu, app } = require('electron');
+// const path = require('path');
 
 // Constants
 //const TRAY_ICON_SIZE

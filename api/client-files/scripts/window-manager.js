@@ -1,6 +1,6 @@
 // Imports
-const { BrowserWindow, screen } = require('electron');
-const path = require('path');
+// const { BrowserWindow, screen } = require('electron');
+// const path = require('path');
 
 // Constants
 //const WINDOW_TYPES
