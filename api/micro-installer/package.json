@@ -1,0 +1,42 @@
+{
+  "name": "push-notifications-micro-installer",
+  "version": "1.0.0",
+  "description": "Micro installer for Push Notifications client",
+  "main": "main.js",
+  "author": "Lauren Streich",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build-mac": "electron-builder --mac",
+    "build-win": "electron-builder --win",
+    "build-linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "electron": "^latest"
+  },
+  "devDependencies": {
+    "electron-builder": "^latest"
+  },
+  "build": {
+    "appId": "com.pushnotifications.microinstaller",
+    "productName": "Push Notifications Setup",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!dist/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

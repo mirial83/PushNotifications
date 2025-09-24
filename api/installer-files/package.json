@@ -1,0 +1,30 @@
+{
+  "name": "push-notifications-installer",
+  "version": "1.0.0",
+  "description": "Full installer for Push Notifications client",
+  "main": "scripts/main.js",
+  "author": "Lauren Streich",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "dev": "electron . --dev"
+  },
+  "dependencies": {
+    "electron": "^latest"
+  },
+  "devDependencies": {
+    "electron-builder": "^latest"
+  },
+  "build": {
+    "appId": "com.pushnotifications.installer",
+    "productName": "Push Notifications Installer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!dist/**/*"
+    ]
+  }
+}

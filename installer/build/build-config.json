@@ -1,0 +1,25 @@
+{
+  "buildVersion": "1.0.0",
+  "platforms": ["darwin", "win32", "linux"],
+  "outputDirectory": "dist",
+  "sourceDirectory": "installer",
+  "clientSourceDirectory": "api/client-files",
+  "buildOptions": {
+    "minify": true,
+    "obfuscate": false,
+    "signing": {
+      "enabled": true,
+      "certificatePath": "certificates/"
+    }
+  },
+  "distribution": {
+    "microInstaller": {
+      "maxSize": "2MB",
+      "compressionLevel": 9
+    },
+    "fullInstaller": {
+      "includeDependencies": true,
+      "bundleClient": false
+    }
+  }
+}

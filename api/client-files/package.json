@@ -1,89 +1,22 @@
 {
-    "name": "pushnotifications-client",
-    "version": "0.0.0-placeholder",
-    "description": "Push Notifications Windows Client",
-    "main": "main.js",
-    "author": "Lauren Streich",
-    "license": "Proprietary", 
-    "private": true,
-    "engines": {
-        "node": "> 15.9.9"
-    },
-    "scripts": {
-        "start": "electron .",
-        "dev": "electron . --dev",
-        "build": "electron-builder",
-        "build-win": "electron-builder --win --portable",
-        "pack": "electron-builder --dir",
-        "clean": "rimraf dist/ build/"
-    },
-    "dependencies": {
-        "axios": "^1.6.0",
-        "node-fetch": "^3.3.2",
-        "uuid": "^9.0.1",
-        "semver": "^7.5.4"
-    },
-    "devDependencies": {
-        "electron": "^27.0.0",
-        "electron-builder": "^24.6.4",
-        "rimraf": "^5.0.5"
-    },
-    "build": {
-        "appID": "com.pushnotifications.client",
-        "productName": "Push Notifications Client",
-        "copyright": "© 2025 Lauren Streich",
-        "directories": {
-            "buildResources": "build",
-            "output": "dist"
-        },
-        "files": [
-            "main.js",
-            "background.js",
-            "tray.js",
-            "window-manager.js",
-            "config.json",
-            "assets/**/*",
-            "node_modules/**/*"
-        ],
-        "win": {
-            "target": [
-                {
-                    "target": "portable",
-                    "arch": ["x64"]
-                }
-            ],
-            "icon": "assets/pnicon.png",
-            "requestedExecutionLevel": "requireAdministrator"
-        },
-        "portable": {
-            "artifactName": "PushNotifications-Client-${version}.exe"
-        },
-        "nsis": {
-            "createDesktopShortcut": false,
-            "createStartMenuShortcut": false,
-            "oneClick": true,
-            "runAfterFinish": false
-        }
-    },
-    "config": {
-        "apiUrl": "https://push-notifications-phi.vercel.app",
-        "updateCheckInterval": 86400000,
-        "heatbeatInterval": 30000,
-        "maxRetries": 5,
-        "logLevel": "debug"
-    },
-    "clientFeatures": {
-        "systemTray": true,
-        "notifications": true,
-        "windowOverlays": true,
-        "websiteBlocking": true,
-        "snoozeFunction": true,
-        "uninstallRequest": true,
-        "autoUpdate": true
-    },
-    "versionManagement": {
-        "source": "server",
-        "updateMechanism": "installer-controlled",
-        "versionFile": "version.json"
+  "name": "push-notifications-client",
+  "version": "1.0.0",
+  "description": "Push Notifications client application",
+  "main": "scripts/main.js",
+  "author": "Lauren Streich",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "dependencies": {
+    "electron": "^latest"
+  },
+  "build": {
+    "appId": "com.pushnotifications.client",
+    "productName": "Push Notifications Client",
+    "directories": {
+      "output": "dist"
     }
+  }
 }
