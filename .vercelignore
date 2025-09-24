@@ -2,11 +2,8 @@
 node_modules/
 */node_modules/
 
-# Ignore HTML files (webform pages, not serverless functions)
-*.html
-
-# Ignore frontend assets (CSS, JS, icons - served statically)
-assets/
+# Allow HTML files to be served as static pages
+# Allow assets directory to be served as static files
 
 # Ignore Python files (client installer, not serverless functions)
 *.py
