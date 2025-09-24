@@ -13,10 +13,10 @@
     "build-linux": "electron-builder --linux"
   },
   "dependencies": {
-    "electron": "^latest"
+    "electron": "^38.1.2"
   },
   "devDependencies": {
-    "electron-builder": "^latest"
+    "electron-builder": "^26.0.12"
   },
   "build": {
     "appId": "com.pushnotifications.microinstaller",

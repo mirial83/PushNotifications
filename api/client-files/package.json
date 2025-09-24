@@ -10,7 +10,7 @@
     "dev": "electron . --dev"
   },
   "dependencies": {
-    "electron": "^latest"
+    "electron": "^38.1.2"
   },
   "build": {
     "appId": "com.pushnotifications.client",
