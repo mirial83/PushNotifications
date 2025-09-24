@@ -83,17 +83,75 @@
                         <h2>👥 Account Administration</h2>
                         
                         <div class="account-admin-actions">
-                            <div class="action-card">
-                                <h3>Reset Client Password</h3>
-                                <p>Generate a new password for an existing user</p>
+                            <div class="action-card password-management-card">
+                                <h3>🔒 Password Management</h3>
+                                <p>Generate secure passwords or set custom passwords for users</p>
+                                
                                 <div class="form-group">
-                                    <label for="resetPasswordUser">Select User:</label>
-                                    <select id="resetPasswordUser">
+                                    <label for="passwordUser">Select User:</label>
+                                    <select id="passwordUser">
                                         <option value="">Loading users...</option>
                                     </select>
                                 </div>
-                                <button type="button" id="resetUserPassword" class="btn-primary">Reset Password</button>
-                                <div id="resetPasswordResult" class="password-result"></div>
+                                
+                                <div class="password-options">
+                                    <div class="radio-group">
+                                        <input type="radio" id="generatePassword" name="passwordAction" value="generate" checked>
+                                        <label for="generatePassword">Generate Secure Password</label>
+                                        
+                                        <input type="radio" id="setCustomPassword" name="passwordAction" value="custom">
+                                        <label for="setCustomPassword">Set Custom Password</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Generate Password Options -->
+                                <div class="form-group" id="generatePasswordGroup">
+                                    <label for="passwordLength">Password Length:</label>
+                                    <div class="password-length-group">
+                                        <input type="range" id="passwordLength" min="12" max="32" value="16" step="1">
+                                        <span id="passwordLengthValue">16</span>
+                                        <small>characters</small>
+                                    </div>
+                                    <small class="password-info">
+                                        Generated passwords include uppercase, lowercase, numbers, symbols, and no repeated characters.
+                                    </small>
+                                </div>
+                                
+                                <!-- Custom Password Options -->
+                                <div class="form-group hidden" id="customPasswordGroup">
+                                    <label for="customPasswordInput">Custom Password:</label>
+                                    <div class="password-input-group">
+                                        <input type="password" id="customPasswordInput" placeholder="Enter custom password (min 12 characters)">
+                                        <button type="button" class="show-password-btn" onclick="togglePasswordVisibility('customPasswordInput')">👁️</button>
+                                    </div>
+                                    <div id="passwordStrength" class="password-strength"></div>
+                                    <div id="passwordRequirements" class="password-requirements">
+                                        <div class="requirement" data-requirement="length">✗ At least 12 characters</div>
+                                        <div class="requirement" data-requirement="uppercase">✗ At least one uppercase letter</div>
+                                        <div class="requirement" data-requirement="lowercase">✗ At least one lowercase letter</div>
+                                        <div class="requirement" data-requirement="number">✗ At least one number</div>
+                                        <div class="requirement" data-requirement="symbol">✗ At least one symbol</div>
+                                        <div class="requirement" data-requirement="unique">✗ No repeated characters</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Password Options Preview -->
+                                <div class="form-group" id="passwordOptionsGroup">
+                                    <label>Password Options Preview:</label>
+                                    <div class="password-options-list">
+                                        <div class="loading-passwords">Click "Generate Options" to see password choices</div>
+                                    </div>
+                                    <div class="button-group">
+                                        <button type="button" id="generatePasswordOptions" class="btn-secondary">Generate Options</button>
+                                        <button type="button" id="refreshPasswordOptions" class="btn-secondary" style="display:none;">Refresh Options</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="button-group">
+                                    <button type="button" id="manageUserPassword" class="btn-primary">Set Password</button>
+                                </div>
+                                
+                                <div id="passwordManagementResult" class="password-result"></div>
                             </div>
                             
                             <div class="action-card">

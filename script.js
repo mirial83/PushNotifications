@@ -210,10 +210,11 @@ function initializeAdmin() {
     
     // If this is the standalone account-admin page, load dropdowns directly
     if (window.location.pathname.endsWith('account-admin.html')) {
-        console.log('Standalone account-admin page detected, loading user dropdowns');
+        console.log('Standalone account-admin page detected, loading user dropdowns and password management');
         // Add a small delay to ensure DOM is fully loaded
         setTimeout(() => {
             loadUsersIntoDropdowns();
+            initializePasswordManagement();
         }, 500);
     }
     
@@ -273,7 +274,8 @@ async function validateAdminSession() {
     try {
         const result = await apiCall('validateSession');
         
-        if (!result || !result.success || result.user.role !== 'admin') {
+        if (!result || !result.success || 
+            (result.user.role !== 'admin' && result.user.role !== 'master_admin')) {
             window.location.href = 'index.html';
             return;
         }
@@ -303,8 +305,17 @@ async function handleLogin(event) {
         if (result && result.success) {
             setSessionToken(result.sessionToken);
             
+            // Check if password needs reset
+            if (result.passwordNeedsReset) {
+                showStatus('Password reset required. Redirecting...', 'info');
+                setTimeout(() => {
+                    window.location.href = 'password-reset.html';
+                }, 1000);
+                return;
+            }
+            
             // Redirect based on role
-            if (result.user.role === 'admin') {
+            if (result.user.role === 'admin' || result.user.role === 'master_admin') {
                 window.location.href = 'admin.html';
             } else {
                 window.location.href = 'user-download.html';
@@ -4441,6 +4452,335 @@ window.updateWebsiteCount = updateWebsiteCount;
 window.updateQuickAddButtons = updateQuickAddButtons;
 window.generateRandomPassword = generateRandomPassword;
 
+// Password Management Functions
+function togglePasswordVisibility(inputId) {
+    const input = document.getElementById(inputId);
+    const button = input?.nextElementSibling;
+    
+    if (!input) return;
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (button) button.textContent = '🙈';
+    } else {
+        input.type = 'password';
+        if (button) button.textContent = '👁️';
+    }
+}
+
+function validatePassword(password) {
+    const requirements = {
+        length: password.length >= 12,
+        uppercase: /[A-Z]/.test(password),
+        lowercase: /[a-z]/.test(password),
+        number: /[0-9]/.test(password),
+        symbol: /[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/.test(password),
+        unique: new Set(password.split('')).size === password.length
+    };
+    
+    return requirements;
+}
+
+function updatePasswordRequirements(password, containerId = 'passwordRequirements') {
+    const requirements = validatePassword(password);
+    const container = document.getElementById(containerId);
+    
+    if (!container) return Object.values(requirements).every(met => met);
+    
+    Object.keys(requirements).forEach(req => {
+        const element = container.querySelector(`[data-requirement="${req}"]`);
+        if (element) {
+            if (requirements[req]) {
+                element.classList.add('met');
+                element.textContent = element.textContent.replace('✗', '✓');
+            } else {
+                element.classList.remove('met');
+                element.textContent = element.textContent.replace('✓', '✗');
+            }
+        }
+    });
+    
+    return Object.values(requirements).every(met => met);
+}
+
+function updatePasswordStrength(password, strengthId = 'passwordStrength') {
+    const strengthEl = document.getElementById(strengthId);
+    if (!strengthEl) return false;
+    
+    const requirements = validatePassword(password);
+    const metCount = Object.values(requirements).filter(met => met).length;
+    
+    let strength = 'Very Weak';
+    let className = 'very-weak';
+    
+    if (metCount === 6) {
+        strength = 'Very Strong';
+        className = 'very-strong';
+    } else if (metCount >= 5) {
+        strength = 'Strong';
+        className = 'strong';
+    } else if (metCount >= 4) {
+        strength = 'Good';
+        className = 'good';
+    } else if (metCount >= 3) {
+        strength = 'Fair';
+        className = 'fair';
+    } else if (metCount >= 2) {
+        strength = 'Weak';
+        className = 'weak';
+    }
+    
+    strengthEl.innerHTML = `<span class="strength-indicator ${className}">Strength: ${strength}</span>`;
+    return metCount === 6;
+}
+
+async function generatePasswordOptions() {
+    try {
+        const lengthSlider = document.getElementById('passwordLength');
+        const length = lengthSlider ? parseInt(lengthSlider.value) : 16;
+        
+        const result = await apiCall('generatePasswordOptions', {
+            count: 3,
+            length: length
+        });
+        
+        if (result && result.success) {
+            displayPasswordOptions(result.passwords);
+        } else {
+            showPasswordError('Failed to generate password options: ' + (result?.message || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error generating password options:', error);
+        showPasswordError('Failed to generate password options. Please try again.');
+    }
+}
+
+function displayPasswordOptions(passwords) {
+    const container = document.querySelector('.password-options-list');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    passwords.forEach((pwdData, index) => {
+        const optionDiv = document.createElement('div');
+        optionDiv.className = 'password-option';
+        optionDiv.innerHTML = `
+            <div class="password-display">
+                <input type="text" readonly value="${escapeHtml(pwdData.password)}" class="password-readonly">
+                <button type="button" class="copy-password-btn" onclick="copyPasswordToClipboard('${escapeHtml(pwdData.password)}')">
+                    📋 Copy
+                </button>
+                <button type="button" class="select-password-btn" onclick="selectPassword('${escapeHtml(pwdData.password)}')">
+                    ✓ Select
+                </button>
+            </div>
+            <div class="password-strength-mini">
+                <span class="strength-indicator ${pwdData.strength.strength.toLowerCase().replace(' ', '-')}">
+                    ${pwdData.strength.strength}
+                </span>
+            </div>
+        `;
+        container.appendChild(optionDiv);
+    });
+    
+    // Show refresh button
+    document.getElementById('refreshPasswordOptions').style.display = 'inline-block';
+}
+
+function selectPassword(password) {
+    const customPasswordInput = document.getElementById('customPasswordInput');
+    if (customPasswordInput) {
+        customPasswordInput.value = password;
+        
+        // Switch to custom password mode
+        const setCustomRadio = document.getElementById('setCustomPassword');
+        if (setCustomRadio) {
+            setCustomRadio.checked = true;
+            togglePasswordAction();
+        }
+        
+        // Update password strength and requirements
+        updatePasswordStrength(password);
+        updatePasswordRequirements(password);
+        
+        showPasswordSuccess('Password selected! You can now set it for the user.');
+    }
+}
+
+async function copyPasswordToClipboard(password) {
+    try {
+        await navigator.clipboard.writeText(password);
+        showPasswordSuccess('Password copied to clipboard!');
+    } catch (error) {
+        console.error('Failed to copy password:', error);
+        showPasswordError('Failed to copy password to clipboard.');
+    }
+}
+
+function togglePasswordAction() {
+    const generateRadio = document.getElementById('generatePassword');
+    const customRadio = document.getElementById('setCustomPassword');
+    const generateGroup = document.getElementById('generatePasswordGroup');
+    const customGroup = document.getElementById('customPasswordGroup');
+    const optionsGroup = document.getElementById('passwordOptionsGroup');
+    
+    if (!generateRadio || !customRadio) return;
+    
+    if (generateRadio.checked) {
+        generateGroup?.classList.remove('hidden');
+        customGroup?.classList.add('hidden');
+        optionsGroup?.classList.remove('hidden');
+    } else {
+        generateGroup?.classList.add('hidden');
+        customGroup?.classList.remove('hidden');
+        optionsGroup?.classList.add('hidden');
+    }
+}
+
+async function manageUserPassword() {
+    const userSelect = document.getElementById('passwordUser');
+    const generateRadio = document.getElementById('generatePassword');
+    const customPasswordInput = document.getElementById('customPasswordInput');
+    const lengthSlider = document.getElementById('passwordLength');
+    
+    if (!userSelect?.value) {
+        showPasswordError('Please select a user');
+        return;
+    }
+    
+    const button = document.getElementById('manageUserPassword');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Setting Password...';
+    }
+    
+    try {
+        let result;
+        
+        if (generateRadio?.checked) {
+            // Generate password
+            const length = lengthSlider ? parseInt(lengthSlider.value) : 16;
+            result = await apiCall('generateUserPassword', {
+                targetUserId: userSelect.value,
+                length: length
+            });
+        } else {
+            // Set custom password
+            const password = customPasswordInput?.value;
+            if (!password) {
+                showPasswordError('Please enter a password');
+                return;
+            }
+            
+            result = await apiCall('setUserPassword', {
+                targetUserId: userSelect.value,
+                newPassword: password
+            });
+        }
+        
+        if (result && result.success) {
+            let message = result.message;
+            if (result.password) {
+                message += `\n\nGenerated Password: ${result.password}`;
+                
+                // Copy to clipboard
+                try {
+                    await navigator.clipboard.writeText(result.password);
+                    message += '\n\n✓ Password copied to clipboard!';
+                } catch (e) {
+                    message += '\n\n⚠️ Could not copy to clipboard.';
+                }
+            }
+            
+            showPasswordSuccess(message);
+            
+            // Clear forms
+            if (customPasswordInput) customPasswordInput.value = '';
+            updatePasswordStrength('');
+            updatePasswordRequirements('');
+        } else {
+            showPasswordError(result?.message || 'Failed to set password');
+        }
+    } catch (error) {
+        console.error('Error managing user password:', error);
+        showPasswordError('Network error. Please try again.');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Set Password';
+        }
+    }
+}
+
+function showPasswordError(message) {
+    const resultDiv = document.getElementById('passwordManagementResult');
+    if (resultDiv) {
+        resultDiv.innerHTML = `<div class="error-message">${escapeHtml(message)}</div>`;
+        resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+function showPasswordSuccess(message) {
+    const resultDiv = document.getElementById('passwordManagementResult');
+    if (resultDiv) {
+        resultDiv.innerHTML = `<div class="success-message">${escapeHtml(message.replace(/\n/g, '<br>'))}</div>`;
+        resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+// Initialize password management UI
+function initializePasswordManagement() {
+    // Password length slider
+    const lengthSlider = document.getElementById('passwordLength');
+    const lengthValue = document.getElementById('passwordLengthValue');
+    
+    if (lengthSlider && lengthValue) {
+        lengthSlider.addEventListener('input', function() {
+            lengthValue.textContent = this.value;
+        });
+    }
+    
+    // Password action radio buttons
+    const generateRadio = document.getElementById('generatePassword');
+    const customRadio = document.getElementById('setCustomPassword');
+    
+    if (generateRadio) {
+        generateRadio.addEventListener('change', togglePasswordAction);
+    }
+    if (customRadio) {
+        customRadio.addEventListener('change', togglePasswordAction);
+    }
+    
+    // Custom password input
+    const customPasswordInput = document.getElementById('customPasswordInput');
+    if (customPasswordInput) {
+        customPasswordInput.addEventListener('input', function() {
+            updatePasswordStrength(this.value);
+            updatePasswordRequirements(this.value);
+        });
+    }
+    
+    // Generate options buttons
+    const generateOptionsBtn = document.getElementById('generatePasswordOptions');
+    const refreshOptionsBtn = document.getElementById('refreshPasswordOptions');
+    
+    if (generateOptionsBtn) {
+        generateOptionsBtn.addEventListener('click', generatePasswordOptions);
+    }
+    if (refreshOptionsBtn) {
+        refreshOptionsBtn.addEventListener('click', generatePasswordOptions);
+    }
+    
+    // Manage password button
+    const manageBtn = document.getElementById('manageUserPassword');
+    if (manageBtn) {
+        manageBtn.addEventListener('click', manageUserPassword);
+    }
+    
+    // Initialize UI state
+    togglePasswordAction();
+}
+
 // Export administration functions for global access
 window.showCreateUserModal = showCreateUserModal;
 window.showResetPasswordModal = showResetPasswordModal;
@@ -4448,6 +4788,18 @@ window.handleCreateUser = handleCreateUser;
 window.handleResetUserPassword = handleResetUserPassword;
 window.handleRemoveUserAccount = handleRemoveUserAccount;
 window.loadUsersIntoDropdowns = loadUsersIntoDropdowns;
+
+// Export password management functions for global access
+window.togglePasswordVisibility = togglePasswordVisibility;
+window.validatePassword = validatePassword;
+window.updatePasswordRequirements = updatePasswordRequirements;
+window.updatePasswordStrength = updatePasswordStrength;
+window.generatePasswordOptions = generatePasswordOptions;
+window.selectPassword = selectPassword;
+window.copyPasswordToClipboard = copyPasswordToClipboard;
+window.togglePasswordAction = togglePasswordAction;
+window.manageUserPassword = manageUserPassword;
+window.initializePasswordManagement = initializePasswordManagement;
 window.loadVersionHistory = loadVersionHistory;
 window.initializeClientAdministration = initializeClientAdministration;
 window.displayVersionHistory = displayVersionHistory;

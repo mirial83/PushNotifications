@@ -3987,6 +3987,11 @@ class DatabaseOperations {
         lastLogin: null,
         isActive: true,
         _encrypted_fields: ['email', 'firstName', 'lastName', 'phoneNumber', 'address'],
+        // Password management fields
+        passwordGenerated: false,
+        passwordNeedsReset: false,
+        passwordGeneratedBy: null,
+        passwordGeneratedAt: null,
         subscription: {
           plan: role === 'admin' || role === 'master_admin' ? 'trial' : 'none',
           status: 'trial',
@@ -4080,7 +4085,9 @@ class DatabaseOperations {
           role: user.role
         },
         sessionToken,
-        role: user.role
+        role: user.role,
+        passwordNeedsReset: user.passwordNeedsReset || false,
+        passwordGenerated: user.passwordGenerated || false
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -4575,6 +4582,219 @@ class DatabaseOperations {
       };
     } catch (error) {
       console.error('Error cleaning expired uninstall commands:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Password Management Methods
+  async generateUserPassword(adminUserId, targetUserId, length = 16) {
+    try {
+      const PasswordUtils = require('../utils/password-utils');
+      
+      if (this.usesFallback) {
+        return { success: false, message: 'Password management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Verify admin permissions
+      const admin = await this.db.collection('users').findOne({ _id: new ObjectId(adminUserId) });
+      if (!admin || (admin.role !== 'admin' && admin.role !== 'master_admin')) {
+        return { success: false, message: 'Admin privileges required' };
+      }
+      
+      // Find target user
+      const targetUser = await this.db.collection('users').findOne({ _id: new ObjectId(targetUserId) });
+      if (!targetUser) {
+        return { success: false, message: 'Target user not found' };
+      }
+      
+      // Check if admin can manage this user
+      if (admin.role === 'admin' && targetUser.createdBy !== adminUserId) {
+        return { success: false, message: 'You can only manage users you created' };
+      }
+      
+      // Generate secure password
+      const newPassword = PasswordUtils.generateSecurePassword(length);
+      const validation = PasswordUtils.validatePassword(newPassword);
+      
+      if (!validation.isValid) {
+        return { success: false, message: 'Failed to generate valid password: ' + validation.errors.join(', ') };
+      }
+      
+      // Hash the new password
+      const hashedPassword = Buffer.from(newPassword).toString('base64');
+      
+      // Update user with new password and tracking fields
+      const result = await this.db.collection('users').updateOne(
+        { _id: new ObjectId(targetUserId) },
+        { 
+          $set: { 
+            password: hashedPassword,
+            passwordGenerated: true,
+            passwordNeedsReset: true,
+            passwordGeneratedBy: adminUserId,
+            passwordGeneratedAt: new Date(),
+            updatedAt: new Date()
+          }
+        }
+      );
+      
+      if (result.modifiedCount === 0) {
+        return { success: false, message: 'Failed to update password' };
+      }
+      
+      return {
+        success: true,
+        message: 'Password generated successfully',
+        password: newPassword,
+        strength: PasswordUtils.checkPasswordStrength(newPassword)
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async setUserPassword(adminUserId, targetUserId, newPassword) {
+    try {
+      const PasswordUtils = require('../utils/password-utils');
+      
+      if (this.usesFallback) {
+        return { success: false, message: 'Password management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Validate password first
+      const validation = PasswordUtils.validatePassword(newPassword);
+      if (!validation.isValid) {
+        return { success: false, message: 'Password requirements not met: ' + validation.errors.join(', ') };
+      }
+      
+      // Verify admin permissions
+      const admin = await this.db.collection('users').findOne({ _id: new ObjectId(adminUserId) });
+      if (!admin || (admin.role !== 'admin' && admin.role !== 'master_admin')) {
+        return { success: false, message: 'Admin privileges required' };
+      }
+      
+      // Find target user
+      const targetUser = await this.db.collection('users').findOne({ _id: new ObjectId(targetUserId) });
+      if (!targetUser) {
+        return { success: false, message: 'Target user not found' };
+      }
+      
+      // Check if admin can manage this user
+      if (admin.role === 'admin' && targetUser.createdBy !== adminUserId) {
+        return { success: false, message: 'You can only manage users you created' };
+      }
+      
+      // Hash the new password
+      const hashedPassword = Buffer.from(newPassword).toString('base64');
+      
+      // Update user with new password and tracking fields
+      const result = await this.db.collection('users').updateOne(
+        { _id: new ObjectId(targetUserId) },
+        { 
+          $set: { 
+            password: hashedPassword,
+            passwordGenerated: true,
+            passwordNeedsReset: false, // Admin-set passwords don't require reset
+            passwordGeneratedBy: adminUserId,
+            passwordGeneratedAt: new Date(),
+            updatedAt: new Date()
+          }
+        }
+      );
+      
+      if (result.modifiedCount === 0) {
+        return { success: false, message: 'Failed to update password' };
+      }
+      
+      return {
+        success: true,
+        message: 'Password set successfully',
+        strength: PasswordUtils.checkPasswordStrength(newPassword)
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async resetOwnPassword(userId, currentPassword, newPassword) {
+    try {
+      const PasswordUtils = require('../utils/password-utils');
+      
+      if (this.usesFallback) {
+        return { success: false, message: 'Password management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Validate new password first
+      const validation = PasswordUtils.validatePassword(newPassword);
+      if (!validation.isValid) {
+        return { success: false, message: 'Password requirements not met: ' + validation.errors.join(', ') };
+      }
+      
+      // Find user
+      const user = await this.db.collection('users').findOne({ _id: new ObjectId(userId) });
+      if (!user) {
+        return { success: false, message: 'User not found' };
+      }
+      
+      // Verify current password (unless it's a generated password that needs reset)
+      if (!user.passwordNeedsReset) {
+        const hashedCurrentPassword = Buffer.from(currentPassword).toString('base64');
+        if (hashedCurrentPassword !== user.password) {
+          return { success: false, message: 'Current password is incorrect' };
+        }
+      }
+      
+      // Hash the new password
+      const hashedPassword = Buffer.from(newPassword).toString('base64');
+      
+      // Update user with new password
+      const result = await this.db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
+        { 
+          $set: { 
+            password: hashedPassword,
+            passwordGenerated: false,
+            passwordNeedsReset: false,
+            passwordGeneratedBy: null,
+            passwordGeneratedAt: null,
+            updatedAt: new Date()
+          }
+        }
+      );
+      
+      if (result.modifiedCount === 0) {
+        return { success: false, message: 'Failed to update password' };
+      }
+      
+      return {
+        success: true,
+        message: 'Password updated successfully',
+        strength: PasswordUtils.checkPasswordStrength(newPassword)
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  async generatePasswordOptions(count = 3, length = 16) {
+    try {
+      const PasswordUtils = require('../utils/password-utils');
+      const passwords = PasswordUtils.generatePasswordOptions(count, length);
+      
+      return {
+        success: true,
+        passwords: passwords.map(pwd => ({
+          password: pwd,
+          strength: PasswordUtils.checkPasswordStrength(pwd)
+        }))
+      };
+    } catch (error) {
       return { success: false, message: error.message };
     }
   }
@@ -6233,6 +6453,105 @@ module.exports = async function handler(req, res) {
           break;
         }
         result = await db.deleteUser(params.userId || '');
+        break;
+      }
+
+      // Password Management Actions (Admin)
+      case 'generateUserPassword': {
+        const genAuthHeader = req.headers.authorization;
+        const genToken = genAuthHeader && genAuthHeader.startsWith('Bearer ')
+          ? genAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(genToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const userRole = validation.role || validation.user?.role;
+        const isAdmin = userRole === 'admin' || userRole === 'master_admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.generateUserPassword(
+          validation.user?.id,
+          params.targetUserId || '',
+          parseInt(params.length) || 16
+        );
+        break;
+      }
+
+      case 'setUserPassword': {
+        const setAuthHeader = req.headers.authorization;
+        const setToken = setAuthHeader && setAuthHeader.startsWith('Bearer ')
+          ? setAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(setToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const userRole = validation.role || validation.user?.role;
+        const isAdmin = userRole === 'admin' || userRole === 'master_admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.setUserPassword(
+          validation.user?.id,
+          params.targetUserId || '',
+          params.newPassword || ''
+        );
+        break;
+      }
+
+      case 'generatePasswordOptions': {
+        const optAuthHeader = req.headers.authorization;
+        const optToken = optAuthHeader && optAuthHeader.startsWith('Bearer ')
+          ? optAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(optToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        const userRole = validation.role || validation.user?.role;
+        const isAdmin = userRole === 'admin' || userRole === 'master_admin';
+        if (!isAdmin) {
+          result = { success: false, message: 'Admin privileges required' };
+          break;
+        }
+        
+        result = await db.generatePasswordOptions(
+          parseInt(params.count) || 3,
+          parseInt(params.length) || 16
+        );
+        break;
+      }
+
+      // Password Reset Actions (Self)
+      case 'resetOwnPassword': {
+        const resetOwnAuthHeader = req.headers.authorization;
+        const resetOwnToken = resetOwnAuthHeader && resetOwnAuthHeader.startsWith('Bearer ')
+          ? resetOwnAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(resetOwnToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        
+        result = await db.resetOwnPassword(
+          validation.user?.id,
+          params.currentPassword || '',
+          params.newPassword || ''
+        );
         break;
       }
 
