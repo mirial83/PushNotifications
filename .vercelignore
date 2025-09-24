@@ -1,0 +1,18 @@
+# Ignore node_modules
+node_modules/
+*/node_modules/
+
+# Ignore client-side files (these are Electron app files, not serverless functions)
+api/client-files/
+api/installer-files/
+api/micro-installer/
+
+# Ignore utility files that aren't serverless functions
+utils/
+script.js
+installer.py
+
+# Keep only the actual serverless functions:
+# api/index.js
+# api/config.js  
+# api/download.js
