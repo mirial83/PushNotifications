@@ -1043,33 +1043,133 @@ class DatabaseOperations {
     }
   }
 
-  async sendNotificationToAllClients(message, allowBrowserUsage = false, allowedWebsites = '') {
+  async sendNotificationToAllClients(message, allowBrowserUsage = false, allowedWebsites = '', sendingUserId = null, sendingUserRole = null, targetClientId = null) {
     try {
       const notification = {
         id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         message,
-        clientId: 'all',
+        clientId: targetClientId || 'all',
         status: 'Active',
         allowBrowserUsage,
         allowedWebsites,
-        created: new Date().toISOString()
+        created: new Date().toISOString(),
+        sentBy: sendingUserId,
+        senderRole: sendingUserRole
       };
 
+      // Apply role-based filtering for client targeting
+      let targetedClientCount = 0;
+      
       if (this.usesFallback) {
         fallbackStorage.notifications.push(notification);
+        targetedClientCount = fallbackStorage.clients.length;
       } else {
         await this.connect();
+        
+        // Count clients based on user role and hierarchy
+        if (sendingUserRole === 'admin') {
+          // Regular admins can only send to clients associated with users they created
+          const createdUsers = await this.db.collection('users')
+            .find({ createdBy: sendingUserId }, { projection: { _id: 1 } })
+            .toArray();
+          
+          const userIds = createdUsers.map(user => user._id);
+          userIds.push(new ObjectId(sendingUserId)); // Include the admin's own clients if any
+          
+          if (targetClientId && targetClientId !== 'all') {
+            // Check if the specific client belongs to the admin's users
+            const targetInstallation = await this.db.collection('installations').findOne({
+              clientId: targetClientId,
+              userId: { $in: userIds },
+              isActive: true
+            });
+            
+            if (!targetInstallation) {
+              return {
+                success: false,
+                message: 'You do not have permission to send notifications to this client'
+              };
+            }
+            
+            targetedClientCount = 1;
+          } else {
+            // Count all clients associated with the admin's users
+            targetedClientCount = await this.db.collection('installations')
+              .countDocuments({
+                userId: { $in: userIds },
+                isActive: true,
+                isCurrentForMac: true
+              });
+          }
+        } else if (sendingUserRole === 'master_admin') {
+          // Master admins can send to all clients
+          if (targetClientId && targetClientId !== 'all') {
+            const targetInstallation = await this.db.collection('installations').findOne({
+              clientId: targetClientId,
+              isActive: true
+            });
+            
+            if (!targetInstallation) {
+              return {
+                success: false,
+                message: 'Target client not found or inactive'
+              };
+            }
+            
+            targetedClientCount = 1;
+          } else {
+            targetedClientCount = await this.db.collection('installations')
+              .countDocuments({
+                isActive: true,
+                isCurrentForMac: true
+              });
+          }
+        } else if (sendingUserRole === 'user') {
+          // Regular users can only send to their own clients
+          const userObjectId = new ObjectId(sendingUserId);
+          
+          if (targetClientId && targetClientId !== 'all') {
+            // Check if the specific client belongs to the user
+            const targetInstallation = await this.db.collection('installations').findOne({
+              clientId: targetClientId,
+              userId: userObjectId,
+              isActive: true
+            });
+            
+            if (!targetInstallation) {
+              return {
+                success: false,
+                message: 'You do not have permission to send notifications to this client'
+              };
+            }
+            
+            targetedClientCount = 1;
+          } else {
+            // Set clientId to user-specific targeting
+            notification.clientId = `user_${sendingUserId}`;
+            targetedClientCount = await this.db.collection('installations')
+              .countDocuments({
+                userId: userObjectId,
+                isActive: true,
+                isCurrentForMac: true
+              });
+          }
+        } else {
+          return {
+            success: false,
+            message: 'Invalid user role for sending notifications'
+          };
+        }
+        
         await this.db.collection('notifications').insertOne(notification);
       }
 
-      const clientCount = this.usesFallback 
-        ? fallbackStorage.clients.length 
-        : await this.db.collection('clients').countDocuments();
-
       return {
         success: true,
-        message: 'Notification sent to all clients',
-        clientCount
+        message: `Notification sent to ${targetedClientCount} client(s)`,
+        clientCount: targetedClientCount,
+        targetedClients: targetedClientCount,
+        notificationId: notification.id
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -2952,7 +3052,7 @@ class DatabaseOperations {
     }
   }
 
-  async getAllMacClients() {
+  async getAllMacClients(requestingUserId = null, requestingUserRole = null) {
     try {
       if (this.usesFallback) {
         return { success: true, data: fallbackStorage.clients };
@@ -2960,9 +3060,33 @@ class DatabaseOperations {
 
       await this.connect();
       
+      // Build query based on user role and hierarchy
+      let installationQuery = {};
+      
+      if (requestingUserRole === 'admin') {
+        // Regular admins can only see clients associated with users they created
+        const createdUsers = await this.db.collection('users')
+          .find({ createdBy: requestingUserId }, { projection: { _id: 1 } })
+          .toArray();
+        
+        const userIds = createdUsers.map(user => user._id);
+        userIds.push(new ObjectId(requestingUserId)); // Include the admin's own clients if any
+        
+        installationQuery = { userId: { $in: userIds } };
+      } else if (requestingUserRole === 'master_admin') {
+        // Master admins can see all clients
+        installationQuery = {};
+      } else if (requestingUserRole === 'user') {
+        // Regular users can only see their own clients
+        installationQuery = { userId: new ObjectId(requestingUserId) };
+      } else {
+        // No role or invalid role - return empty result
+        return { success: true, data: [] };
+      }
+      
       // Get all installations from the unified collection, grouped by MAC address
       const installations = await this.db.collection('installations')
-        .find({})
+        .find(installationQuery)
         .sort({ macAddress: 1, createdAt: -1 }) // Sort by MAC address, then by creation date (newest first)
         .toArray();
 
@@ -3442,13 +3566,19 @@ class DatabaseOperations {
   }
 
   // User Management Methods
-  async createUser(username, email, password, role = 'user') {
+  async createUser(username, email, password, role = 'user', createdBy = null, firstName = '', lastName = '', phoneNumber = '', address = '') {
     try {
       if (this.usesFallback) {
         return { success: false, message: 'User management requires MongoDB connection' };
       }
 
       await this.connect();
+      
+      // Validate role
+      const validRoles = ['user', 'admin', 'master_admin'];
+      if (!validRoles.includes(role)) {
+        return { success: false, message: 'Invalid role specified' };
+      }
       
       // Check if user already exists
       const existingUser = await this.db.collection('users').findOne({
@@ -3467,9 +3597,24 @@ class DatabaseOperations {
         email,
         password: hashedPassword,
         role,
+        firstName: firstName || '',
+        lastName: lastName || '',
+        phoneNumber: phoneNumber || '',
+        address: address || '',
+        createdBy: createdBy, // ID of the user who created this account
         createdAt: new Date(),
         lastLogin: null,
-        isActive: true
+        isActive: true,
+        subscription: {
+          plan: role === 'admin' || role === 'master_admin' ? 'trial' : 'none',
+          status: 'trial',
+          userLimit: role === 'admin' || role === 'master_admin' ? 1 : 0,
+          stripeCustomerId: null,
+          stripeSubscriptionId: null,
+          nextBillingDate: null,
+          trialEndsAt: role === 'admin' || role === 'master_admin' ? 
+            new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null // 30-day trial
+        }
       };
 
       const result = await this.db.collection('users').insertOne(userData);
@@ -3477,7 +3622,16 @@ class DatabaseOperations {
       return {
         success: true,
         message: 'User created successfully',
-        userId: result.insertedId.toString()
+        userId: result.insertedId.toString(),
+        user: {
+          id: result.insertedId.toString(),
+          username,
+          email,
+          role,
+          firstName,
+          lastName,
+          subscription: userData.subscription
+        }
       };
     } catch (error) {
       return { success: false, message: error.message };
@@ -3897,7 +4051,7 @@ class DatabaseOperations {
     }
   }
 
-  async getAllUsers() {
+  async getAllUsers(requestingUserId = null, requestingUserRole = null) {
     try {
       if (this.usesFallback) {
         return { success: false, message: 'User management requires MongoDB connection' };
@@ -3905,8 +4059,22 @@ class DatabaseOperations {
 
       await this.connect();
       
+      let userQuery = {};
+      
+      // Apply role-based filtering
+      if (requestingUserRole === 'admin') {
+        // Regular admins can only see users they created
+        userQuery = { createdBy: requestingUserId };
+      } else if (requestingUserRole === 'master_admin') {
+        // Master admins can see all users
+        userQuery = {};
+      } else {
+        // Regular users cannot access this function
+        return { success: false, message: 'Insufficient permissions' };
+      }
+      
       const users = await this.db.collection('users')
-        .find({}, { projection: { password: 0 } })
+        .find(userQuery, { projection: { password: 0 } })
         .sort({ createdAt: -1 })
         .toArray();
 
@@ -3915,10 +4083,16 @@ class DatabaseOperations {
         username: user.username,
         email: user.email,
         role: user.role,
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        phoneNumber: user.phoneNumber || '',
+        address: user.address || '',
+        createdBy: user.createdBy,
         installationKey: user.installationKey,
         createdAt: user.createdAt,
         lastLogin: user.lastLogin,
-        isActive: user.isActive
+        isActive: user.isActive,
+        subscription: user.subscription || {}
       }));
 
       return { success: true, data: processedUsers };
@@ -4015,6 +4189,72 @@ class DatabaseOperations {
       };
     } catch (error) {
       console.error('Error cleaning expired uninstall commands:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  async updateAccountInfo(userId, updateData) {
+    try {
+      if (this.usesFallback) {
+        return { success: false, message: 'Account management requires MongoDB connection' };
+      }
+
+      await this.connect();
+      
+      // Build update object with only allowed fields
+      const allowedFields = ['firstName', 'lastName', 'email', 'phoneNumber', 'address'];
+      const updateFields = {};
+      
+      for (const field of allowedFields) {
+        if (updateData.hasOwnProperty(field)) {
+          updateFields[field] = updateData[field];
+        }
+      }
+      
+      // Handle subscription updates separately
+      if (updateData.subscription) {
+        if (updateData.subscription.userLimit && typeof updateData.subscription.userLimit === 'number') {
+          updateFields['subscription.userLimit'] = updateData.subscription.userLimit;
+        }
+      }
+      
+      if (Object.keys(updateFields).length === 0) {
+        return { success: false, message: 'No valid fields to update' };
+      }
+      
+      updateFields.updatedAt = new Date();
+      
+      const result = await this.db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
+        { $set: updateFields }
+      );
+      
+      if (result.modifiedCount === 0) {
+        return { success: false, message: 'User not found or no changes made' };
+      }
+      
+      // Return updated user info (excluding password)
+      const updatedUser = await this.db.collection('users').findOne(
+        { _id: new ObjectId(userId) },
+        { projection: { password: 0 } }
+      );
+      
+      return {
+        success: true,
+        message: 'Account information updated successfully',
+        user: {
+          id: updatedUser._id.toString(),
+          username: updatedUser.username,
+          email: updatedUser.email,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          phoneNumber: updatedUser.phoneNumber,
+          address: updatedUser.address,
+          role: updatedUser.role,
+          subscription: updatedUser.subscription
+        }
+      };
+    } catch (error) {
       return { success: false, message: error.message };
     }
   }
@@ -5151,18 +5391,46 @@ module.exports = async function handler(req, res) {
         break;
 
       case 'sendNotificationToAllClients':
-      case 'sendNotification':
+      case 'sendNotification': {
+        // Get user context for role-based targeting
+        const notificationAuthHeader = req.headers.authorization;
+        const notificationToken = notificationAuthHeader && notificationAuthHeader.startsWith('Bearer ')
+          ? notificationAuthHeader.substring(7)
+          : (params.token || '');
+        
+        let sendingUserId = null;
+        let sendingUserRole = null;
+        
+        if (notificationToken) {
+          const validation = await db.validateSession(notificationToken);
+          if (validation.success) {
+            sendingUserId = validation.user?.id;
+            sendingUserRole = validation.role || validation.user?.role;
+          } else {
+            result = { success: false, message: 'Authentication required to send notifications' };
+            break;
+          }
+        } else {
+          result = { success: false, message: 'Authentication token required' };
+          break;
+        }
+        
         const allowBrowserUsage = params.allowBrowserUsage === 'true' || params.allowBrowserUsage === true;
         let allowedWebsites = params.allowedWebsites || '';
         if (Array.isArray(allowedWebsites)) {
           allowedWebsites = allowedWebsites.filter(Boolean).join(',');
         }
+        
         result = await db.sendNotificationToAllClients(
           params.message || '',
           allowBrowserUsage,
-          allowedWebsites
+          allowedWebsites,
+          sendingUserId,
+          sendingUserRole,
+          params.targetClientId || null
         );
         break;
+      }
 
       case 'getActiveNotifications':
       case 'getNotifications':
@@ -5305,9 +5573,27 @@ module.exports = async function handler(req, res) {
         result = await db.getClientByMac(params.macAddress || '');
         break;
 
-      case 'getAllMacClients':
-        result = await db.getAllMacClients();
+      case 'getAllMacClients': {
+        // Get user context for role-based filtering
+        const macClientsAuthHeader = req.headers.authorization;
+        const macClientsToken = macClientsAuthHeader && macClientsAuthHeader.startsWith('Bearer ')
+          ? macClientsAuthHeader.substring(7)
+          : (params.token || '');
+        
+        let requestingUserId = null;
+        let requestingUserRole = null;
+        
+        if (macClientsToken) {
+          const validation = await db.validateSession(macClientsToken);
+          if (validation.success) {
+            requestingUserId = validation.user?.id;
+            requestingUserRole = validation.role || validation.user?.role;
+          }
+        }
+        
+        result = await db.getAllMacClients(requestingUserId, requestingUserRole);
         break;
+      }
 
       case 'getClientHistory':
         result = await db.getClientHistory(params.macAddress || null);
@@ -5433,14 +5719,41 @@ module.exports = async function handler(req, res) {
         break;
 
       case 'createUser':
-      case 'registerUser':
+      case 'registerUser': {
+        // For user registration, validate session if createdBy should be set
+        let createdBy = null;
+        
+        if (params.requireAuth !== false) { // Allow bypassing auth for initial registration
+          const createAuthHeader = req.headers.authorization;
+          const createToken = createAuthHeader && createAuthHeader.startsWith('Bearer ')
+            ? createAuthHeader.substring(7)
+            : (params.token || '');
+          
+          if (createToken) {
+            const validation = await db.validateSession(createToken);
+            if (validation.success) {
+              const userRole = validation.role || validation.user?.role;
+              // Only admins and master_admins can create users
+              if (userRole === 'admin' || userRole === 'master_admin') {
+                createdBy = validation.user?.id;
+              }
+            }
+          }
+        }
+        
         result = await db.createUser(
           params.username || '',
           params.email || '',
           params.password || '',
-          params.role || 'user'
+          params.role || 'user',
+          createdBy,
+          params.firstName || '',
+          params.lastName || '',
+          params.phoneNumber || '',
+          params.address || ''
         );
         break;
+      }
 
       // Installation Key Management Actions
       case 'validateInstallationKey':
@@ -5492,12 +5805,13 @@ module.exports = async function handler(req, res) {
           result = { success: false, message: 'Authentication required' };
           break;
         }
-        const isAdmin = validation.role === 'admin' || validation.user?.role === 'admin';
+        const userRole = validation.role || validation.user?.role;
+        const isAdmin = userRole === 'admin' || userRole === 'master_admin';
         if (!isAdmin) {
           result = { success: false, message: 'Admin privileges required' };
           break;
         }
-        result = await db.getAllUsers();
+        result = await db.getAllUsers(validation.user?.id, userRole);
         break;
       }
 
@@ -5556,6 +5870,90 @@ module.exports = async function handler(req, res) {
           params.userId || '',
           params.newPassword || ''
         );
+        break;
+      }
+
+      // Account Settings Actions (Self-update)
+      case 'updateAccountInfo': {
+        const updateAuthHeader = req.headers.authorization;
+        const updateToken = updateAuthHeader && updateAuthHeader.startsWith('Bearer ')
+          ? updateAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(updateToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        
+        // Users can only update their own account info
+        const userId = validation.user?.id;
+        if (!userId) {
+          result = { success: false, message: 'User ID not found in session' };
+          break;
+        }
+        
+        result = await db.updateAccountInfo(userId, {
+          firstName: params.firstName,
+          lastName: params.lastName,
+          email: params.email,
+          phoneNumber: params.phoneNumber,
+          address: params.address,
+          subscription: params.subscription
+        });
+        break;
+      }
+
+      case 'getAccountInfo': {
+        const accountAuthHeader = req.headers.authorization;
+        const accountToken = accountAuthHeader && accountAuthHeader.startsWith('Bearer ')
+          ? accountAuthHeader.substring(7)
+          : (params.token || '');
+
+        const validation = await db.validateSession(accountToken);
+        if (!validation.success) {
+          result = { success: false, message: 'Authentication required' };
+          break;
+        }
+        
+        // Return user's own account information
+        const userId = validation.user?.id;
+        if (!userId) {
+          result = { success: false, message: 'User ID not found in session' };
+          break;
+        }
+        
+        try {
+          await db.connect();
+          const user = await db.db.collection('users').findOne(
+            { _id: new ObjectId(userId) },
+            { projection: { password: 0 } }
+          );
+          
+          if (!user) {
+            result = { success: false, message: 'User not found' };
+            break;
+          }
+          
+          result = {
+            success: true,
+            user: {
+              id: user._id.toString(),
+              username: user.username,
+              email: user.email,
+              firstName: user.firstName || '',
+              lastName: user.lastName || '',
+              phoneNumber: user.phoneNumber || '',
+              address: user.address || '',
+              role: user.role,
+              subscription: user.subscription || {},
+              createdAt: user.createdAt,
+              lastLogin: user.lastLogin
+            }
+          };
+        } catch (error) {
+          result = { success: false, message: error.message };
+        }
         break;
       }
 
