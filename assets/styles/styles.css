@@ -585,13 +585,66 @@ select:hover, .form-group select:hover, #targetClientSelect:hover, #presetSelect
     box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25) !important;
 }
 
-/* Dropdown option styling */
+/* Dropdown option styling with theme colors */
 select option, .form-group select option {
     font-family: Arial, sans-serif !important;
     font-size: 16pt !important;
     padding: 0.5rem !important;
     color: #495057 !important;
     background-color: white !important;
+}
+
+/* Dropdown option hover and selected states - theme colors */
+select option:hover, .form-group select option:hover {
+    background-color: #1e6b7a !important; /* Teal background */
+    color: white !important;
+}
+
+select option:checked, .form-group select option:checked,
+select option[selected], .form-group select option[selected] {
+    background-color: #4a1a4a !important; /* Dark purple background */
+    color: white !important;
+}
+
+/* Firefox-specific dropdown option styling */
+@-moz-document url-prefix() {
+    select option:hover {
+        background-color: #1e6b7a !important;
+        color: white !important;
+    }
+    
+    select option:checked {
+        background-color: #4a1a4a !important;
+        color: white !important;
+    }
+}
+
+/* WebKit-specific dropdown styling */
+select::-webkit-dropdown {
+    background-color: white !important;
+}
+
+select::-webkit-dropdown-menu {
+    background-color: white !important;
+    border: 1px solid #ced4da !important;
+    border-radius: 5px !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+select::-webkit-dropdown-item {
+    font-family: Arial, sans-serif !important;
+    font-size: 16pt !important;
+    color: #495057 !important;
+}
+
+select::-webkit-dropdown-item:hover {
+    background-color: #1e6b7a !important;
+    color: white !important;
+}
+
+select::-webkit-dropdown-item:checked {
+    background-color: #4a1a4a !important;
+    color: white !important;
 }
 
 .form-group textarea {
