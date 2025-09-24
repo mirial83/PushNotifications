@@ -1,0 +1,347 @@
+/* Work Mode Container */
+.work-mode-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.work-mode-container.active {
+    opacity: 1;
+}
+
+/* Content Panel */
+.work-mode-panel {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    animation: slideIn 0.3s ease-out;
+}
+
+/* Header Section */
+.work-mode-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 25px;
+}
+
+.work-mode-icon {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 20px;
+}
+
+.work-mode-title {
+    font-size: 24pt;
+    color: #333;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* Timer Display */
+.timer-section {
+    margin: 25px 0;
+}
+
+.time-remaining {
+    font-size: 48pt;
+    font-weight: bold;
+    color: #1e6b7a;
+    font-family: monospace;
+    margin: 15px 0;
+}
+
+/* Progress Bar */
+.progress-container {
+    margin: 20px 0;
+    background: #f0f0f0;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    transition: width 1s linear;
+}
+
+/* Message Display */
+.work-mode-message {
+    font-size: 18pt;
+    color: #333;
+    margin: 20px 0;
+    line-height: 1.4;
+}
+
+.status-message {
+    color: #666;
+    font-size: 14pt;
+    margin: 10px 0;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 25px;
+}
+
+.btn {
+    padding: 12px 24px;
+    border-radius: 6px;
+    border: none;
+    font-size: 16pt;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #1e6b7a 0%, #4a1a4a 100%);
+    color: white;
+    flex: 1;
+    max-width: 200px;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-secondary {
+    background: #e9ecef;
+    color: #333;
+    flex: 1;
+    max-width: 200px;
+}
+
+.btn-secondary:hover {
+    background: #dee2e6;
+    transform: translateY(-2px);
+}
+
+/* Extension Options */
+.extension-options {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-top: 20px;
+    display: none;
+}
+
+.extension-options.show {
+    display: block;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.option-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.option-btn {
+    padding: 10px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    background: white;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.option-btn:hover {
+    border-color: #1e6b7a;
+    background: #f0f9fb;
+}
+
+/* Status Indicators */
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 15px;
+    font-size: 14pt;
+    margin-top: 15px;
+}
+
+.status-active {
+    background: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+}
+
+.status-paused {
+    background: rgba(255, 193, 7, 0.1);
+    color: #ffc107;
+}
+
+/* Animations */
+@keyframes slideIn {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Notification Counter */
+.notification-counter {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 14pt;
+    margin-top: 15px;
+}
+
+/* Focus Mode Indicator */
+.focus-indicator {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 14pt;
+    pointer-events: none;
+}
+
+/* Responsive Design */
+@media (max-width: 480px) {
+    .work-mode-panel {
+        padding: 20px;
+    }
+
+    .time-remaining {
+        font-size: 36pt;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .btn {
+        max-width: none;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .work-mode-panel {
+        background: #2c2c2c;
+    }
+
+    .work-mode-title {
+        color: #fff;
+    }
+
+    .work-mode-message {
+        color: #fff;
+    }
+
+    .status-message {
+        color: #bbb;
+    }
+
+    .btn-secondary {
+        background: #444;
+        color: #fff;
+    }
+
+    .btn-secondary:hover {
+        background: #555;
+    }
+
+    .extension-options {
+        background: #333;
+    }
+
+    .option-btn {
+        background: #2c2c2c;
+        border-color: #444;
+        color: #fff;
+    }
+
+    .option-btn:hover {
+        background: #3a3a3a;
+        border-color: #1e6b7a;
+    }
+
+    .progress-container {
+        background: #444;
+    }
+}
+
+/* Accessibility */
+.btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(30, 107, 122, 0.5);
+}
+
+.option-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(30, 107, 122, 0.5);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* High Contrast Mode */
+@media (forced-colors: active) {
+    .work-mode-panel {
+        border: 2px solid CanvasText;
+    }
+
+    .btn {
+        border: 2px solid CanvasText;
+    }
+
+    .progress-bar {
+        background: CanvasText;
+    }
+
+    .option-btn {
+        border: 2px solid CanvasText;
+    }
+}

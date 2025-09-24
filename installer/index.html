@@ -1,13 +1,125 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
     <head>
-        <meta charset="UTF-8" viewport="device-width" description="Approval messages" author="Lauren Streich">
-        <link rel="stylesheet" href="styles/installer.css">
-        <link rel="stylesheet" href="styles/progress.css">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="Push Notifications Client Installer">
+        <meta name="author" content="Lauren Streich">
+        
+        <!-- CSS Stylesheets -->
+        <link rel="stylesheet" href="assets/css/installer.css">
+        <link rel="stylesheet" href="assets/css/progress.css">
+        
+        <!-- Favicon -->
         <link rel="icon" type="image/png" href="assets/icons/pnicon.png">
-        <link rel="scripts" href="">
-        <title></title>
+        
+        <!-- Electron Security -->
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+        
+        <title>Push Notifications Installer</title>
     </head>
     <body>
+        <!-- Installation Container -->
+        <div class="installer-container">
+            <!-- Header -->
+            <div class="installer-header">
+                <img src="assets/icons/pnicon.png" alt="Push Notifications" class="installer-logo">
+                <h1>Push Notifications Client</h1>
+                <div class="version-info">
+                    <span class="version-number">Version: <span id="version-display">1.0.0</span></span>
+                </div>
+            </div>
+
+            <!-- Installation Steps -->
+            <div class="installation-steps">
+                <!-- Welcome Screen -->
+                <div id="welcome-screen" class="install-step active">
+                    <h2>Welcome to Push Notifications</h2>
+                    <p class="welcome-text">
+                        This installer will set up the Push Notifications client on your system.
+                    </p>
+                    <div class="system-requirements">
+                        <h3>System Requirements</h3>
+                        <ul id="requirements-list">
+                            <li class="requirement" id="os-check">Operating System Check</li>
+                            <li class="requirement" id="memory-check">Available Memory Check</li>
+                            <li class="requirement" id="disk-check">Disk Space Check</li>
+                            <li class="requirement" id="permissions-check">Admin Permissions Check</li>
+                        </ul>
+                    </div>
+                    <div class="action-buttons">
+                        <button id="start-install" class="btn-primary">Install</button>
+                    </div>
+                </div>
+
+                <!-- License Agreement -->
+                <div id="license-screen" class="install-step hidden">
+                    <h2>License Agreement</h2>
+                    <div class="license-container">
+                        <div id="license-text" class="license-content"></div>
+                    </div>
+                    <div class="agreement-check">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="accept-license">
+                            <span class="checkbox-label">I accept the terms of the License Agreement</span>
+                        </label>
+                    </div>
+                    <div class="action-buttons">
+                        <button id="continue-install" class="btn-primary" disabled>Continue</button>
+                    </div>
+                </div>
+
+                <!-- Installation Progress -->
+                <div id="progress-screen" class="install-step hidden">
+                    <h2>Installing Push Notifications</h2>
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div id="progress-fill" class="progress-fill"></div>
+                        </div>
+                        <div id="progress-text" class="progress-text">Installing...</div>
+                    </div>
+                    <div class="install-details">
+                        <div id="current-operation" class="operation-text">Setting up client...</div>
+                        <div id="operation-details" class="detail-text"></div>
+                    </div>
+                </div>
+
+                <!-- Installation Complete -->
+                <div id="complete-screen" class="install-step hidden">
+                    <h2>Installation Complete</h2>
+                    <div class="completion-message">
+                        <img src="assets/icons/success.png" alt="Success" class="success-icon">
+                        <p>Push Notifications has been successfully installed and started on your system.</p>
+                    </div>
+                    <div class="action-buttons">
+                        <button id="finish-install" class="btn-primary">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="installer-footer">
+                <div class="company-info">
+                    <span>© 2025 Push Notifications</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Dialog -->
+        <div id="error-dialog" class="dialog hidden">
+            <div class="dialog-content">
+                <h3>Installation Error</h3>
+                <p id="error-message"></p>
+                <div class="dialog-buttons">
+                    <button id="retry-operation" class="btn-secondary">Retry</button>
+                    <button id="close-error" class="btn-primary">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scripts -->
+        <script src="scripts/renderer.js"></script>
+        <script src="scripts/requirements-check.js"></script>
+        <script src="scripts/install-progress.js"></script>
     </body>
 </html>

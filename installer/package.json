@@ -1,0 +1,12 @@
+{
+  "name": "push-notifications-installer",
+  "version": "1.0.0",
+  "main": "scripts/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "node scripts/build-installer.js"
+  },
+  "dependencies": {
+    "electron": "^latest"
+  }
+}
