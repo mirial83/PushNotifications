@@ -4259,8 +4259,14 @@ async function handleAdminDownloadClient() {
 function closeModal() {
     const modal = document.getElementById('clientSelectionModal');
     if (modal) {
-        modal.style.display = 'none !important';
-        modal.style.visibility = 'hidden';
+        // Hide modal using new class system
+        modal.classList.remove('modal-show');
+        modal.classList.add('force-hidden');
+        modal.style.setProperty('display', 'none', 'important');
+        modal.style.setProperty('visibility', 'hidden', 'important');
+        modal.style.setProperty('opacity', '0', 'important');
+        modal.style.setProperty('pointer-events', 'none', 'important');
+        modal.style.setProperty('z-index', '-1', 'important');
         
         // Clear modal content
         const modalResult = document.getElementById('modalResult');
@@ -4285,9 +4291,32 @@ function closeModal() {
 function hideModalOnLoad() {
     const modal = document.getElementById('clientSelectionModal');
     if (modal) {
-        modal.style.display = 'none !important';
-        modal.style.visibility = 'hidden';
+        // Aggressively hide the modal with multiple CSS properties
+        modal.style.setProperty('display', 'none', 'important');
+        modal.style.setProperty('visibility', 'hidden', 'important');
+        modal.style.setProperty('opacity', '0', 'important');
+        modal.style.setProperty('pointer-events', 'none', 'important');
+        modal.style.setProperty('z-index', '-1', 'important');
+        modal.classList.add('force-hidden');
+        
+        // Also clear any modal content to prevent cached states
+        const modalResult = document.getElementById('modalResult');
+        if (modalResult) {
+            modalResult.innerHTML = '';
+        }
+        
+        const clientSelect = document.getElementById('modalClientSelect');
+        if (clientSelect) {
+            clientSelect.innerHTML = '<option value="">Loading clients...</option>';
+        }
     }
+    
+    // Hide any other potential modal overlays
+    document.querySelectorAll('.modal, .modal-overlay').forEach(modalEl => {
+        modalEl.style.setProperty('display', 'none', 'important');
+        modalEl.style.setProperty('visibility', 'hidden', 'important');
+        modalEl.classList.add('force-hidden');
+    });
 }
 
 function showClientSelectionModal(title, actionType, callback) {
@@ -4321,9 +4350,14 @@ function showClientSelectionModal(title, actionType, callback) {
         }
     };
     
-    // Show modal - override CSS with important
-    modal.style.display = 'flex !important';
-    modal.style.visibility = 'visible';
+    // Show modal using new class system
+    modal.classList.remove('force-hidden');
+    modal.classList.add('modal-show');
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
+    modal.style.setProperty('opacity', '1', 'important');
+    modal.style.setProperty('pointer-events', 'all', 'important');
+    modal.style.setProperty('z-index', '1000', 'important');
     
     // Add event listeners for closing
     modal.addEventListener('click', (e) => {

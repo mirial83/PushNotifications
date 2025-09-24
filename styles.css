@@ -2075,11 +2075,32 @@ input[type="radio"]:focus, input[type="checkbox"]:focus {
     right: 0 !important;
     bottom: 0 !important;
     background: rgba(0, 0, 0, 0.5) !important;
-    display: flex !important;
+    display: none !important; /* Hidden by default */
     align-items: center !important;
     justify-content: center !important;
     z-index: 1000 !important;
     font-family: Arial, sans-serif !important;
+    visibility: hidden !important; /* Extra safety */
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Modal is only shown when explicitly activated */
+.modal.modal-show {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: all !important;
+}
+
+/* Force hidden class to aggressively hide modal */
+.modal.force-hidden,
+.modal-overlay.force-hidden {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    z-index: -1 !important;
 }
 
 .modal .modal-content {
