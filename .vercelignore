@@ -23,8 +23,11 @@ api/assets/scripts/index-page.js
 api/assets/scripts/login.js
 api/assets/scripts/script.js
 
-# Exclude the entire assets directory (frontend files, not serverless functions)
+# Exclude api/assets directory (duplicate frontend files)
 api/assets/
+
+# Allow root-level assets directory (accessible to HTML files)
+# assets/ - Contains CSS, JS, and icons needed by webform
 
 # Keep only the actual serverless functions in api/ root:
 # api/config.js - Database configuration API
